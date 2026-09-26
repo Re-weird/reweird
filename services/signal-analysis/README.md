@@ -1,5 +1,11 @@
-# Signal analysis service
+# Signal analysis service boundary
 
-This boundary turns bounded raw sample windows into deterministic facts such as
-frequency, duty cycle, jitter, dropouts, voltage stability, and simultaneous
-failures. Only summarized evidence proceeds to PROBE.
+The first implementation lives in `apps/api/internal/signalanalysis` so the
+hackathon deployment remains simple. It converts validated, bounded telemetry
+windows into voltage statistics, transitions, pulse count, frequency, duty cycle,
+jitter, dropout events, missing activity, stability, simultaneous failures, and
+trusted-baseline deviation.
+
+Only these structured facts proceed to deterministic rules or the future PROBE
+adapter. This directory remains the extraction point if analysis later becomes a
+separate service.

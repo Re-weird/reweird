@@ -3,9 +3,14 @@
 ## Current controls
 
 - PATCH output is disabled in the MVP.
+- ESP32 firmware configures PATCH as an input and contains no output action path.
 - The UI labels the AI-style interpretation as mocked and keeps it separate from
   measured values.
-- The simulator and future hardware implement the same narrow telemetry contract.
+- The simulator and firmware implement the same versioned telemetry contract.
+- Serial JSON rejects unknown fields, unsupported schema versions, duplicate or
+  unknown probes, invalid states, non-finite/out-of-range values, oversized
+  arrays, mismatched modes, and unconfirmed profiles.
+- The API body limit is 256 KiB and telemetry arrays have smaller field limits.
 - SQLite receives normalized diagnostic snapshots, not arbitrary device commands.
 - CORS allows only local development origins.
 - Git synchronization is off by default.
@@ -13,7 +18,8 @@
 ## Required before real hardware
 
 - Authenticate every device and rotate device credentials.
-- Reject unknown probe identifiers and malformed or out-of-range telemetry.
+- Add cryptographic device identity; USB serial currently identifies but does not
+  authenticate the board.
 - Apply rate limits, replay protection, monotonic timestamps, and payload limits.
 - Define per-project safe voltage, waveform, frequency, duration, and pin policies.
 - Require a user-visible approval step before any PATCH action that can energize a

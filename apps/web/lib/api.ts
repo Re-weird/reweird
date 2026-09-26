@@ -22,7 +22,7 @@ async function request(path: string, init?: RequestInit): Promise<DemoSession | 
 }
 
 export const demoApi = {
-  load: () => request("/api/v1/demo/session"),
+  load: () => request("/api/v1/session"),
   wiggle: () => request("/api/v1/demo/wiggle", { method: "POST" }),
   repair: () => request("/api/v1/demo/repair", { method: "POST" }),
   reset: () => request("/api/v1/demo/reset", { method: "POST" }),

@@ -20,7 +20,14 @@ signal returns to its healthy baseline.
 
 - A polished Next.js + TypeScript diagnostic dashboard
 - A Go + Fiber API with SQLite diagnostic snapshots
-- A replaceable telemetry source interface and deterministic ESP32 simulator
+- A replaceable telemetry source interface with simulator and USB-serial ESP32 implementations
+- Compilable ESP32 firmware for passive P1-P6 ADC, digital, edge, pulse-period,
+  pulse-width, and activity-window measurements
+- A versioned, strictly validated telemetry v1 contract
+- Generic signal analysis for voltage statistics, transitions, frequency, duty
+  cycle, jitter, missing activity, dropouts, simultaneous failures, and trusted
+  baseline deviation
+- Persistent, user-confirmable Project Profiles in SQLite
 - Project Profile, Live Diagnostics, Diagnosis, Verify, and Reports views
 - Deterministic checks for stable power, expected activity, dropouts, and
   movement correlation
@@ -41,7 +48,7 @@ reweird/
 │   ├── probe/               # AI reasoning interface boundary
 │   ├── signal-analysis/     # Raw telemetry → structured facts boundary
 │   └── vision/              # Image analysis interface boundary
-├── firmware/esp32/          # Future device protocol notes
+├── firmware/esp32/          # Passive probe firmware and PlatformIO project
 ├── packages/
 │   ├── shared-types/        # Frontend contracts
 │   └── component-catalog/   # Initial HC-SR04 specification
@@ -55,7 +62,8 @@ reweird/
 
 - Node.js 20.9 or newer
 - npm 10 or newer
-- Go 1.23 or newer (optional for the browser-only demo)
+- Go 1.25 or newer (optional for the browser-only demo)
+- PlatformIO 6 or newer (only for building/flashing ESP32 firmware)
 
 ### Fastest path: frontend with built-in simulator
 
@@ -88,6 +96,34 @@ The web app automatically detects the API at `http://localhost:8080`. The header
 will show **API simulator**. Configure a different URL with
 `NEXT_PUBLIC_API_URL`.
 
+### Real ESP32 over USB serial
+
+The firmware is a PlatformIO project under `firmware/esp32`. Read its safety
+notes before attaching a target circuit.
+
+```bash
+cd firmware/esp32
+pio run
+pio run --target upload
+pio device list
+```
+
+Start the backend with the board's port. PowerShell example:
+
+```powershell
+cd apps/api
+$env:TELEMETRY_MODE = "serial"
+$env:SERIAL_PORT = "COM5"
+$env:SERIAL_BAUD = "115200"
+$env:PROJECT_PROFILE_ID = "ultrasonic-demo"
+go run ./cmd/server
+```
+
+The active Project Profile must be user-confirmed and its probe modes must match
+the firmware configuration. `GET /api/v1/telemetry/status` reports whether a
+valid frame has arrived. See [firmware/esp32/README.md](firmware/esp32/README.md)
+for the wiring assumptions and exact connection procedure.
+
 ### Docker Compose
 
 ```bash
@@ -114,11 +150,15 @@ Then open [http://localhost:3000](http://localhost:3000).
 ## How the system works
 
 ```text
-TelemetrySource (simulator today, ESP32 later)
+TelemetrySource (simulator or ESP32 USB serial)
         ↓
-Normalized probe readings
+Validated telemetry v1 window
         ↓
-Deterministic diagnostic rules
+Signal analysis (voltage, edges, frequency, duty, jitter, dropouts)
+        ↓
+Project Profile + specifications + trusted baseline
+        ↓
+Generic deterministic diagnostic rules
         ↓
 Structured evidence
         ↓
@@ -137,11 +177,17 @@ without a UI rewrite.
 | Method | Endpoint | Purpose |
 |---|---|---|
 | `GET` | `/health` | Service health |
-| `GET` | `/api/v1/projects` | Project list |
+| `GET` | `/api/v1/session` | Current session from the selected telemetry source |
+| `GET` | `/api/v1/telemetry/status` | Device/frame connection state |
+| `GET` | `/api/v1/profiles` | Persistent Project Profiles |
+| `GET` | `/api/v1/profiles/:id` | One Project Profile |
+| `POST` | `/api/v1/profiles` | Validate and create a Project Profile |
+| `PUT` | `/api/v1/profiles/:id` | Validate and update a Project Profile |
 | `GET` | `/api/v1/demo/session` | Current structured demo state |
 | `POST` | `/api/v1/demo/wiggle` | Run the simulated wiggle test |
 | `POST` | `/api/v1/demo/repair` | Simulate repair and re-measurement |
 | `POST` | `/api/v1/demo/reset` | Reset the scenario |
+| `POST` | `/api/v1/patch` | Always returns `423 PATCH_LOCKED` |
 
 State-changing demo transitions are written to SQLite as immutable diagnostic
 snapshots.
@@ -149,7 +195,12 @@ snapshots.
 ## Safety model
 
 - The LLM never receives or controls raw GPIO directly.
-- The MVP performs input-only simulated tests; PATCH output is locked.
+- Firmware and backend perform input-only sensing; PATCH output is locked.
+- ESP32 frames are schema-versioned and bounded. The backend rejects unknown
+  fields, duplicate probes, invalid states, unsafe ADC values, mismatched probe
+  modes, oversized arrays, and unconfirmed profiles.
+- ESP32 pins must never see more than 3.3 V. Higher low-voltage signals require a
+  verified divider or level shifter recorded in the Project Profile.
 - Measurements, rule results, baselines, and AI interpretation have distinct
   fields and UI treatment.
 - An inference cannot overwrite measured evidence.
@@ -164,11 +215,14 @@ See [docs/security.md](docs/security.md) for the full trust-boundary checklist.
 
 ## Current limitations
 
-- Telemetry is simulated; no serial or Wi-Fi ESP32 adapter is included yet.
+- Firmware and serial ingestion are implemented and compile, but were not flashed
+  or electrically bench-tested because no physical board was available.
+- USB serial is the only real transport; Wi-Fi, WebSocket, and MQTT adapters are
+  not implemented.
 - PROBE interpretation is a deterministic mock. Gemini is not connected.
 - Vision and code parsing are interface placeholders only.
-- SQLite stores session snapshots but project creation is currently a UI-only
-  prototype.
+- Project Profiles persist through the API, but the existing creation modal has
+  not yet been wired to those endpoints.
 - Authentication, device identity, multi-user access, and production upload
   scanning are not implemented.
 - The chart uses summarized samples rather than a high-frequency time-series
@@ -176,7 +230,8 @@ See [docs/security.md](docs/security.md) for the full trust-boundary checklist.
 
 ## Future integrations
 
-- **ESP32:** implement `domain.TelemetrySource` with an authenticated transport.
+- **ESP32:** bench-test and calibrate the passive front end, then add device
+  authentication and an optional network transport.
 - **Gemini:** implement the PROBE and vision interfaces. Gemini must consume
   structured evidence and its response remains interpretation, never measured
   truth.
@@ -195,4 +250,7 @@ npm run build
 
 cd apps/api
 go test ./...
+
+cd ../../firmware/esp32
+pio run
 ```

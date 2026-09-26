@@ -3,22 +3,27 @@
 The MVP orders reasoning from strongest deterministic evidence to weaker
 interpretation.
 
-1. **Dead signal:** no activity within an expected measurement window.
-2. **Zero voltage:** measured rail or signal is effectively 0 V when nonzero is
-   expected.
-3. **Missing activity:** expected pulses, frequency, or output transitions are
-   absent.
-4. **Specification violation:** voltage falls outside a catalog range.
-5. **Unexpected dropouts:** signal activity exists but falls below its expected
-   continuity or baseline.
-6. **Rail comparison:** simultaneous signal and rail failure suggests a shared
-   power issue; isolated signal failure does not.
-7. **Movement correlation:** a repeatable dropout increase during a guided wiggle
+1. **Missing signal:** a profile requires activity but the window contains no
+   pulse or transition evidence.
+2. **Voltage outside specification:** an average measured voltage falls outside a
+   trusted minimum/maximum from the confirmed profile.
+3. **Unexpected dropout:** observed pulses fall below the expected rate or a
+   required activity bucket is empty.
+4. **Power rail instability:** configured rail variation exceeds tolerance or its
+   voltage leaves the trusted range.
+5. **Simultaneous dropout:** two or more probes fail in the same analysis bucket,
+   suggesting a shared power, ground, or harness cause.
+6. **Baseline deviation:** a derived value differs from an explicitly trusted
+   healthy baseline. UNKNOWN baselines never influence a conclusion.
+7. **Movement correlation:** dropout count increases by a meaningful amount and
+   ratio relative to the saved pre-test window. This
    test strengthens—but does not mathematically prove—the intermittent-connection
    hypothesis.
 
 The demo begins at rule 5, clears the shared-rail hypothesis with rule 6, gathers
 movement evidence with rule 7, then verifies the repair against the baseline.
 
-Raw sample streams should not be sent directly to an LLM. Summaries and rule
-results form the structured evidence packet.
+Raw high-frequency streams are bounded at the transport and converted into
+`AnalysisResult`. Any future PROBE model receives structured measurements,
+derived facts, specification results, baseline comparisons, deterministic rule
+results, and unresolved questions—not the raw stream.

@@ -38,6 +38,15 @@ func (store *SQLiteStore) migrate() error {
 		);
 		CREATE INDEX IF NOT EXISTS idx_sessions_created_at
 			ON diagnostic_sessions(created_at DESC);
+		CREATE TABLE IF NOT EXISTS project_profiles (
+			id TEXT PRIMARY KEY,
+			payload TEXT NOT NULL,
+			confirmed INTEGER NOT NULL,
+			created_at DATETIME NOT NULL,
+			updated_at DATETIME NOT NULL
+		);
+		CREATE INDEX IF NOT EXISTS idx_profiles_updated_at
+			ON project_profiles(updated_at DESC);
 	`)
 	return err
 }
@@ -71,6 +80,72 @@ func (store *SQLiteStore) LatestSession() (*domain.Session, error) {
 		return nil, err
 	}
 	return &session, nil
+}
+
+func (store *SQLiteStore) SaveProfile(profile domain.ProjectProfile) error {
+	now := time.Now().UTC()
+	if profile.CreatedAtMS == 0 {
+		profile.CreatedAtMS = now.UnixMilli()
+	}
+	profile.UpdatedAtMS = now.UnixMilli()
+	payload, err := json.Marshal(profile)
+	if err != nil {
+		return err
+	}
+	confirmed := 0
+	if profile.Confirmed {
+		confirmed = 1
+	}
+	_, err = store.db.Exec(`
+		INSERT INTO project_profiles (id, payload, confirmed, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?)
+		ON CONFLICT(id) DO UPDATE SET
+			payload = excluded.payload,
+			confirmed = excluded.confirmed,
+			updated_at = excluded.updated_at
+	`, profile.ID, string(payload), confirmed, time.UnixMilli(profile.CreatedAtMS).UTC(), now)
+	return err
+}
+
+func (store *SQLiteStore) GetProfile(id string) (*domain.ProjectProfile, error) {
+	var payload string
+	err := store.db.QueryRow("SELECT payload FROM project_profiles WHERE id = ?", id).Scan(&payload)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	var profile domain.ProjectProfile
+	if err := json.Unmarshal([]byte(payload), &profile); err != nil {
+		return nil, err
+	}
+	return &profile, nil
+}
+
+func (store *SQLiteStore) ListProfiles() ([]domain.ProjectProfile, error) {
+	rows, err := store.db.Query("SELECT payload FROM project_profiles ORDER BY updated_at DESC")
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	profiles := make([]domain.ProjectProfile, 0)
+	for rows.Next() {
+		var payload string
+		if err := rows.Scan(&payload); err != nil {
+			return nil, err
+		}
+		var profile domain.ProjectProfile
+		if err := json.Unmarshal([]byte(payload), &profile); err != nil {
+			return nil, err
+		}
+		profiles = append(profiles, profile)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return profiles, nil
 }
 
 func (store *SQLiteStore) Close() error { return store.db.Close() }

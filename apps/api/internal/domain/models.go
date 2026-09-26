@@ -456,6 +456,7 @@ type Repository interface {
 	SaveSession(session Session) error
 	LatestSession() (*Session, error)
 	SaveProfile(profile ProjectProfile) error
+	SaveProjectProfile(project Project, profile ProjectProfile) error
 	GetProfile(id string) (*ProjectProfile, error)
 	ListProfiles() ([]ProjectProfile, error)
 	SaveProject(project Project) error

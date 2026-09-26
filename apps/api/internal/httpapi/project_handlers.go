@@ -3,6 +3,7 @@ package httpapi
 import (
 	"errors"
 	"fmt"
+	"reflect"
 	"strconv"
 	"strings"
 	"time"
@@ -181,10 +182,7 @@ func (controller *Controller) analyzeProject(ctx *fiber.Ctx) error {
 		_ = controller.repository.SaveProject(*project)
 		return apiError(ctx, fiber.StatusUnprocessableEntity, "DRAFT_PROFILE_INVALID", err.Error())
 	}
-	if err := controller.repository.SaveProfile(profile); err != nil {
-		return internalError(ctx, err)
-	}
-	if err := controller.repository.SaveProject(*project); err != nil {
+	if err := controller.repository.SaveProjectProfile(*project, profile); err != nil {
 		return internalError(ctx, err)
 	}
 	stored, err := controller.repository.GetProject(project.ID)
@@ -239,9 +237,13 @@ func (controller *Controller) updateProjectProfile(ctx *fiber.Ctx) error {
 	submitted.ConfirmedAtMS = 0
 	submitted.ConfirmedBy = ""
 	submitted.CreatedAtMS = existing.CreatedAtMS
-	submitted.UpdatedAtMS = time.Now().UTC().UnixMilli()
+	submitted.UpdatedAtMS = existing.UpdatedAtMS
 	submitted.Probes = nil
 	markUserCorrections(&submitted, *existing)
+	if profileDraftChanged(submitted, *existing) {
+		submitted.Version++
+	}
+	submitted.UpdatedAtMS = time.Now().UTC().UnixMilli()
 	if err := profiles.Validate(submitted); err != nil {
 		return apiError(ctx, fiber.StatusUnprocessableEntity, "INVALID_PROFILE", err.Error())
 	}
@@ -300,10 +302,7 @@ func (controller *Controller) confirmProjectProfile(ctx *fiber.Ctx) error {
 	}
 	project.ProbePlan = &plan
 	project.AnalysisStatus = domain.AnalysisConfirmed
-	if err := controller.repository.SaveProfile(*profile); err != nil {
-		return internalError(ctx, err)
-	}
-	if err := controller.repository.SaveProject(*project); err != nil {
+	if err := controller.repository.SaveProjectProfile(*project, *profile); err != nil {
 		return internalError(ctx, err)
 	}
 	return ctx.JSON(fiber.Map{"profile": profile, "probe_plan": plan})
@@ -340,7 +339,12 @@ func (controller *Controller) confirmProbePlan(ctx *fiber.Ctx) error {
 		return internalError(ctx, err)
 	}
 	controller.mu.Lock()
-	controller.profileID = project.ID
+	// The built-in simulator emits only the ultrasonic-demo frame shape. Keep it
+	// isolated from real projects so demo samples can never masquerade as their
+	// measurements. A serial source is activated after the user connects probes.
+	if controller.source.Name() != "simulator" {
+		controller.profileID = project.ID
+	}
 	controller.stage = domain.StageDiagnose
 	controller.reference = nil
 	controller.mu.Unlock()
@@ -365,29 +369,12 @@ func resetProjectAnalysis(project *domain.Project) {
 }
 
 func markUserCorrections(profile *domain.ProjectProfile, existing domain.ProjectProfile) {
-	componentSources := make(map[string][]domain.ProjectFactSource)
-	for _, component := range existing.Components {
-		componentSources[component.ID] = component.Sources
-	}
-	for index := range profile.Components {
-		profile.Components[index].Sources = appendSource(componentSources[profile.Components[index].ID], domain.SourceUser)
-		profile.Components[index].Confirmed = false
-	}
-	connectionSources := make(map[string][]domain.ProjectFactSource)
-	connectionEvidence := make(map[string][]domain.ProfileEvidence)
-	for _, connection := range existing.Connections {
-		connectionSources[connection.ID] = connection.Sources
-		connectionEvidence[connection.ID] = connection.Evidence
-	}
-	for index := range profile.Connections {
-		profile.Connections[index].Sources = appendSource(connectionSources[profile.Connections[index].ID], domain.SourceUser)
-		profile.Connections[index].Evidence = append(connectionEvidence[profile.Connections[index].ID], domain.ProfileEvidence{Value: userConnectionValue(profile.Connections[index]), Source: domain.SourceUser, Confidence: 1})
-		profile.Connections[index].Confirmed = false
-	}
 	resolutionByID := make(map[string]string)
+	resolvedConnections := make(map[string]bool)
 	for _, conflict := range profile.Conflicts {
 		if conflict.Resolved {
 			resolutionByID[conflict.ID] = conflict.Resolution
+			resolvedConnections[conflict.ConnectionID] = true
 		}
 	}
 	profile.Conflicts = existing.Conflicts
@@ -403,6 +390,45 @@ func markUserCorrections(profile *domain.ProjectProfile, existing domain.Project
 		profile.Conflicts[index].Resolved = true
 		applyResolution(profile, profile.Conflicts[index])
 	}
+
+	existingComponents := make(map[string]domain.ComponentSpecification)
+	for _, component := range existing.Components {
+		existingComponents[component.ID] = component
+	}
+	for index := range profile.Components {
+		current := &profile.Components[index]
+		previous, found := existingComponents[current.ID]
+		current.Confirmed = false
+		if !found {
+			current.Sources = []domain.ProjectFactSource{domain.SourceUser}
+			continue
+		}
+		current.Sources = append([]domain.ProjectFactSource(nil), previous.Sources...)
+		if componentFactsChanged(*current, previous) {
+			current.Sources = appendSource(current.Sources, domain.SourceUser)
+		}
+	}
+
+	existingConnections := make(map[string]domain.ProfileConnection)
+	for _, connection := range existing.Connections {
+		existingConnections[connection.ID] = connection
+	}
+	for index := range profile.Connections {
+		current := &profile.Connections[index]
+		previous, found := existingConnections[current.ID]
+		current.Confirmed = false
+		if !found {
+			current.Sources = []domain.ProjectFactSource{domain.SourceUser}
+			current.Evidence = []domain.ProfileEvidence{{Value: userConnectionValue(*current), Source: domain.SourceUser, Confidence: 1}}
+			continue
+		}
+		current.Sources = append([]domain.ProjectFactSource(nil), previous.Sources...)
+		current.Evidence = append([]domain.ProfileEvidence(nil), previous.Evidence...)
+		if connectionFactsChanged(*current, previous) || resolvedConnections[current.ID] {
+			current.Sources = appendSource(current.Sources, domain.SourceUser)
+			current.Evidence = appendUserEvidence(current.Evidence, userConnectionValue(*current))
+		}
+	}
 	questions := make([]string, 0, len(profile.UnresolvedQuestions))
 	for _, question := range profile.UnresolvedQuestions {
 		if strings.HasPrefix(question, "Resolve ") && allConflictsResolved(profile.Conflicts) {
@@ -411,6 +437,45 @@ func markUserCorrections(profile *domain.ProjectProfile, existing domain.Project
 		questions = append(questions, question)
 	}
 	profile.UnresolvedQuestions = questions
+}
+
+func appendUserEvidence(values []domain.ProfileEvidence, value string) []domain.ProfileEvidence {
+	for _, existing := range values {
+		if existing.Source == domain.SourceUser && existing.Value == value {
+			return values
+		}
+	}
+	return append(values, domain.ProfileEvidence{Value: value, Source: domain.SourceUser, Confidence: 1})
+}
+
+func componentFactsChanged(current, previous domain.ComponentSpecification) bool {
+	current.Sources, previous.Sources = nil, nil
+	current.Confirmed, previous.Confirmed = false, false
+	return !reflect.DeepEqual(current, previous)
+}
+
+func connectionFactsChanged(current, previous domain.ProfileConnection) bool {
+	current.Sources, previous.Sources = nil, nil
+	current.Evidence, previous.Evidence = nil, nil
+	current.Confirmed, previous.Confirmed = false, false
+	return !reflect.DeepEqual(current, previous)
+}
+
+func profileDraftChanged(current, previous domain.ProjectProfile) bool {
+	current.Version = previous.Version
+	current.CreatedAtMS = previous.CreatedAtMS
+	current.UpdatedAtMS = previous.UpdatedAtMS
+	current.Confirmed = previous.Confirmed
+	current.ConfirmedAtMS = previous.ConfirmedAtMS
+	current.ConfirmedBy = previous.ConfirmedBy
+	current.Probes, previous.Probes = nil, nil
+	if len(current.UnresolvedQuestions) == 0 {
+		current.UnresolvedQuestions = nil
+	}
+	if len(previous.UnresolvedQuestions) == 0 {
+		previous.UnresolvedQuestions = nil
+	}
+	return !reflect.DeepEqual(current, previous)
 }
 
 func applyResolution(profile *domain.ProjectProfile, conflict domain.ProfileConflict) {

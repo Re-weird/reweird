@@ -114,7 +114,7 @@ server-side:
 
 ```powershell
 $env:GEMINI_API_KEY = "your-key"
-$env:GEMINI_MODEL = "gemini-2.5-flash" # optional
+$env:GEMINI_MODEL = "gemini-3.5-flash-lite" # optional
 go run ./cmd/server
 ```
 
@@ -164,6 +164,11 @@ The active Project Profile must be user-confirmed and its probe modes must match
 the firmware configuration. `GET /api/v1/telemetry/status` reports whether a
 valid frame has arrived. See [firmware/esp32/README.md](firmware/esp32/README.md)
 for the wiring assumptions and exact connection procedure.
+
+The ultrasonic simulator always remains bound to `ultrasonic-demo`. Confirming
+probes for another project opens Live Diagnostics in a waiting state until a
+matching serial telemetry source is available; demo samples are never relabeled
+as measurements from the uploaded project.
 
 ### Docker Compose
 

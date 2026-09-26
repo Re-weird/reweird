@@ -116,6 +116,56 @@ func (store *SQLiteStore) SaveProfile(profile domain.ProjectProfile) error {
 	return err
 }
 
+func (store *SQLiteStore) SaveProjectProfile(project domain.Project, profile domain.ProjectProfile) error {
+	now := time.Now().UTC()
+	if project.CreatedAtMS == 0 {
+		project.CreatedAtMS = now.UnixMilli()
+	}
+	project.UpdatedAtMS = now.UnixMilli()
+	if profile.CreatedAtMS == 0 {
+		profile.CreatedAtMS = now.UnixMilli()
+	}
+	profile.UpdatedAtMS = now.UnixMilli()
+	projectPayload, err := json.Marshal(project)
+	if err != nil {
+		return err
+	}
+	profilePayload, err := json.Marshal(profile)
+	if err != nil {
+		return err
+	}
+	confirmed := 0
+	if profile.Confirmed {
+		confirmed = 1
+	}
+	tx, err := store.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+	if _, err = tx.Exec(`
+		INSERT INTO project_profiles (id, payload, confirmed, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?)
+		ON CONFLICT(id) DO UPDATE SET
+			payload = excluded.payload,
+			confirmed = excluded.confirmed,
+			updated_at = excluded.updated_at
+	`, profile.ID, string(profilePayload), confirmed, time.UnixMilli(profile.CreatedAtMS).UTC(), now); err != nil {
+		return err
+	}
+	if _, err = tx.Exec(`
+		INSERT INTO projects (id, payload, analysis_status, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?)
+		ON CONFLICT(id) DO UPDATE SET
+			payload = excluded.payload,
+			analysis_status = excluded.analysis_status,
+			updated_at = excluded.updated_at
+	`, project.ID, string(projectPayload), project.AnalysisStatus, time.UnixMilli(project.CreatedAtMS).UTC(), now); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
 func (store *SQLiteStore) GetProfile(id string) (*domain.ProjectProfile, error) {
 	var payload string
 	err := store.db.QueryRow("SELECT payload FROM project_profiles WHERE id = ?", id).Scan(&payload)

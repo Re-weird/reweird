@@ -45,7 +45,7 @@ func NewGemini(apiKey, model string) Analyzer {
 		return SkippedAnalyzer{}
 	}
 	if model == "" {
-		model = "gemini-2.5-flash"
+		model = "gemini-3.5-flash-lite"
 	}
 	return &GeminiAnalyzer{
 		apiKey:   apiKey,

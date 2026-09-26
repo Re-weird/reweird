@@ -66,7 +66,7 @@ func main() {
 	}
 	understanding := projectunderstanding.New(
 		codeanalysis.New(),
-		vision.NewGemini(os.Getenv("GEMINI_API_KEY"), environment("GEMINI_MODEL", "gemini-2.5-flash")),
+		vision.NewGemini(os.Getenv("GEMINI_API_KEY"), environment("GEMINI_MODEL", "gemini-3.5-flash-lite")),
 		catalog,
 	)
 	app := httpapi.NewApp(engine, repository, source, profileID, httpapi.ProjectServices{Understanding: understanding, UploadRoot: uploadRoot})

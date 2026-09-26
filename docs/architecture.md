@@ -62,6 +62,10 @@ generates probe configurations and a placement plan; it never upgrades AI output
 into measured or specification evidence. The engine has no built-in meaning for
 P1, P2, P3, ECHO, TRIG, 5.01 V, or 40 kHz.
 
+Draft analysis and profile confirmation write the project and profile together
+in one SQLite transaction. The built-in ultrasonic simulator remains isolated to
+its demo profile; a non-demo profile waits for matching real telemetry.
+
 ## Trust boundaries
 
 Device telemetry is untrusted until validated against both the telemetry schema

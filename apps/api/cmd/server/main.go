@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/clerk/clerk-sdk-go/v2"
 	"github.com/re-weird/reweird/apps/api/internal/codeanalysis"
 	"github.com/re-weird/reweird/apps/api/internal/diagnostics"
 	"github.com/re-weird/reweird/apps/api/internal/domain"
@@ -60,6 +61,11 @@ func main() {
 		defer closer.Close()
 	}
 
+	clerkSecretKey := os.Getenv("CLERK_SECRET_KEY")
+	if clerkSecretKey != "" {
+		clerk.SetKey(clerkSecretKey)
+	}
+
 	geminiAPIKey := os.Getenv("GEMINI_API_KEY")
 	geminiModel := environment("GEMINI_MODEL", "gemini-3.5-flash-lite")
 	engine := diagnostics.NewEngineWithProbe(signalanalysis.New(), probe.NewService(os.Getenv("PROBE_SERVICE_URL")))
@@ -72,9 +78,9 @@ func main() {
 		vision.NewGemini(geminiAPIKey, geminiModel),
 		catalog,
 	)
-	app := httpapi.NewApp(engine, repository, source, profileID, httpapi.ProjectServices{Understanding: understanding, UploadRoot: uploadRoot})
+	app := httpapi.NewApp(engine, repository, source, profileID, httpapi.ProjectServices{Understanding: understanding, UploadRoot: uploadRoot}, clerkSecretKey != "")
 
-	log.Printf("ReWeird API listening on http://localhost:%s (telemetry=%s, profile=%s, PATCH=locked)", port, source.Name(), profileID)
+	log.Printf("ReWeird API listening on http://localhost:%s (telemetry=%s, profile=%s, auth=%s, PATCH=locked)", port, source.Name(), profileID, authStatus(clerkSecretKey != ""))
 	if err := app.Listen(":" + port); err != nil {
 		log.Fatal(err)
 	}
@@ -117,6 +123,13 @@ func seedDemoProfile(repository domain.Repository) error {
 		return err
 	}
 	return repository.SaveProfile(profile)
+}
+
+func authStatus(configured bool) string {
+	if configured {
+		return "clerk"
+	}
+	return "anonymous-only"
 }
 
 func environment(key, fallback string) string {

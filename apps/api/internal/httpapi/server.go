@@ -36,7 +36,15 @@ type ProjectServices struct {
 	UploadRoot    string
 }
 
-func NewApp(engine *diagnostics.Engine, repository domain.Repository, source domain.TelemetrySource, profileID string, projectServices ProjectServices) *fiber.App {
+func NewApp(engine *diagnostics.Engine, repository domain.Repository, source domain.TelemetrySource, profileID string, projectServices ProjectServices, clerkConfigured bool) *fiber.App {
+	return newApp(engine, repository, source, profileID, projectServices, ownerContext(clerkConfigured))
+}
+
+// newApp takes the owner-identity middleware as a parameter so tests can
+// substitute a fake verifier (simulating specific signed-in owners) without
+// making real Clerk network calls. Production always goes through NewApp,
+// which wires up the real ownerContext(clerkConfigured) middleware above.
+func newApp(engine *diagnostics.Engine, repository domain.Repository, source domain.TelemetrySource, profileID string, projectServices ProjectServices, ownerMiddleware fiber.Handler) *fiber.App {
 	app := fiber.New(fiber.Config{
 		AppName:               "ReWeird API",
 		DisableStartupMessage: true,
@@ -45,9 +53,10 @@ func NewApp(engine *diagnostics.Engine, repository domain.Repository, source dom
 	app.Use(logger.New())
 	app.Use(cors.New(cors.Config{
 		AllowOrigins: "http://localhost:3000,http://127.0.0.1:3000",
-		AllowHeaders: "Origin, Content-Type, Accept",
+		AllowHeaders: "Origin, Content-Type, Accept, Authorization",
 		AllowMethods: "GET,POST,PUT,OPTIONS",
 	}))
+	app.Use(ownerMiddleware)
 
 	controller := &Controller{
 		stage:         domain.StageDiagnose,

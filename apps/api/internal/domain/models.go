@@ -111,6 +111,10 @@ type ProbePlan struct {
 
 type Project struct {
 	ID             string           `json:"id"`
+	// OwnerID is the verified Clerk subject that created this project, or
+	// empty for anonymous/Demo Mode projects. Never trust a client-supplied
+	// value for this — it is only ever set server-side from a verified token.
+	OwnerID        string           `json:"owner_id,omitempty"`
 	Name           string           `json:"name"`
 	Description    string           `json:"description,omitempty"`
 	Controller     string           `json:"controller"`

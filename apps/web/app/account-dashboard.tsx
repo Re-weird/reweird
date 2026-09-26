@@ -39,13 +39,10 @@ function useCalendar() {
   }, []);
 }
 
-function SectionHead({ index, title, meta }: { index: string; title: string; meta?: string }) {
+function SectionHead({ title, meta }: { title: string; meta?: string }) {
   return (
     <div className="mb-5 flex items-baseline justify-between gap-4">
-      <div className="flex items-baseline gap-3">
-        <span className="font-mono text-[10px] tracking-[0.12em] text-subtle">{index}</span>
-        <h2 className="text-[13px] font-semibold tracking-tight text-foreground">{title}</h2>
-      </div>
+      <h2 className="text-[13px] font-semibold tracking-tight text-foreground">{title}</h2>
       {meta && <span className="font-mono text-[11px] text-subtle">{meta}</span>}
     </div>
   );
@@ -162,16 +159,16 @@ export function AccountDashboardView() {
             aria-hidden="true"
           />
           <div className="relative">
-            <SectionHead index="01" title="0 diagnostic sessions in the last year" meta="All projects" />
+            <SectionHead title="0 diagnostic sessions in the last year" meta="All projects" />
             <div className="mx-auto w-full overflow-x-auto pb-1 lg:w-[70%]">
               <ActivityHeatmap />
             </div>
           </div>
         </motion.section>
 
-        <div className="mt-12 grid grid-cols-1 gap-12 border-t border-line-soft pt-10 xl:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)] xl:gap-16">
-          <motion.section variants={rise}>
-            <SectionHead index="02" title="Activity overview" meta="All projects" />
+        <div className="mt-12 grid grid-cols-1 gap-12 border-t border-line-soft pt-10 xl:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)] xl:gap-0">
+          <motion.section variants={rise} className="xl:pr-12">
+            <SectionHead title="Activity overview" meta="All projects" />
             <div className="grid grid-cols-1 items-center gap-6 sm:grid-cols-[minmax(0,0.8fr)_minmax(0,1.2fr)]">
               <p className="max-w-[34ch] text-sm leading-relaxed text-muted-foreground">
                 Nothing to break down yet. Diagnoses, guided tests, computer checks, and git syncs will shape this once sessions exist.
@@ -180,8 +177,8 @@ export function AccountDashboardView() {
             </div>
           </motion.section>
 
-          <motion.section variants={rise}>
-            <SectionHead index="03" title="Session outcomes" meta="0 total · all time" />
+          <motion.section variants={rise} className="border-t border-line-soft pt-12 xl:border-t-0 xl:border-l xl:pt-0 xl:pl-12">
+            <SectionHead title="Session outcomes" meta="0 total · all time" />
             <div className="h-1.5 w-full overflow-hidden rounded-full bg-line-soft" role="img" aria-label="No session outcomes yet" />
             <ul className="mt-6 divide-y divide-line-soft">
               {outcomes.map((outcome) => (
@@ -197,7 +194,7 @@ export function AccountDashboardView() {
         </div>
 
         <motion.section variants={rise} className="mt-12 border-t border-line-soft pt-10">
-          <SectionHead index="04" title="Recent projects" />
+          <SectionHead title="Recent projects" />
           <div className="grid grid-cols-1 items-center gap-8 md:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)]">
             <div className="flex flex-col gap-2" aria-hidden="true">
               {[1, 0.55, 0.25].map((opacity) => (

@@ -171,6 +171,53 @@ export interface MeasurementWindow {
   analysis: SignalAnalysis;
 }
 
+export type BaselineSource = "PHYSICAL" | "SIMULATED";
+export type PassportStatus = "NO_PHYSICAL_BASELINE" | "NEEDS_VERIFICATION" | "HEALTHY" | "DEVIATION_DETECTED" | "SIMULATED_BASELINE" | "SIMULATED_MATCH" | "SIMULATED_DEVIATION";
+
+export interface KnownGoodBaseline {
+  id: number;
+  profile_id: string;
+  profile_version: number;
+  measurement_id: number;
+  source: BaselineSource;
+  device_id: string;
+  captured_at_ms: number;
+  ingested_at_ms: number;
+  saved_at_ms: number;
+  confirmed_by: "local_user_reported";
+  note?: string;
+  probes: Array<{
+    probe: string;
+    role: string;
+    facts: DerivedSignalFacts;
+    trusted: Record<string, unknown>;
+  }>;
+}
+
+export interface PassportCapture {
+  measurement_id: number;
+  source: BaselineSource;
+  device_id: string;
+  captured_at_ms: number;
+  ingested_at_ms: number;
+  window_ms: number;
+  probes: DerivedSignalFacts[];
+}
+
+export interface DevicePassport {
+  profile: ProjectProfile;
+  project?: Project;
+  probe_plan?: ProbePlan;
+  known_good: KnownGoodBaseline[];
+  physical_baseline?: KnownGoodBaseline;
+  simulated_baseline?: KnownGoodBaseline;
+  recent_captures: PassportCapture[];
+  history: HistorySummary[];
+  verified_repairs: Array<{ workflow_id: string; source: BaselineSource; device_id: string; verified_at_ms: number; summary: string; user_reported_actions: string[] }>;
+  status: PassportStatus;
+  status_detail: string;
+}
+
 export interface ProjectProfile {
   id: string;
   project_id?: string;

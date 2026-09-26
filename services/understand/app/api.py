@@ -1,10 +1,12 @@
 import base64
+import binascii
 from contextlib import asynccontextmanager
 from functools import lru_cache
-from typing import Protocol
+from typing import Literal, Protocol
 
 from fastapi import Depends, FastAPI
-from pydantic import BaseModel
+from fastapi.responses import JSONResponse
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 from app.catalog import CatalogEntry, get_default_catalog
 from app.code_analysis.extractor import analyze_files
@@ -31,19 +33,51 @@ class VisionProvider(Protocol):
     ) -> VisionAnalysisResult: ...
 
 
+MAX_REQUEST_BYTES = 8 * 1024 * 1024
+MAX_SOURCE_FILES = 8
+MAX_SOURCE_FILE_BYTES = 512 * 1024
+MAX_SOURCE_TOTAL_BYTES = 1024 * 1024
+MAX_IMAGE_BYTES = 5 * 1024 * 1024
+MAX_IMAGE_BASE64_CHARS = 4 * ((MAX_IMAGE_BYTES + 2) // 3)
+
+
 class SourceFile(BaseModel):
-    path: str
-    content: str
+    path: str = Field(max_length=240)
+    content: str = Field(max_length=MAX_SOURCE_FILE_BYTES)
+
+    @field_validator("content")
+    @classmethod
+    def bound_encoded_content(cls, value: str) -> str:
+        if len(value.encode("utf-8")) > MAX_SOURCE_FILE_BYTES:
+            raise ValueError("source file exceeds the 512 KiB limit")
+        return value
 
 
 class ImageInput(BaseModel):
-    mime_type: str
-    data_base64: str
+    mime_type: Literal["image/png", "image/jpeg"]
+    data_base64: str = Field(max_length=MAX_IMAGE_BASE64_CHARS)
+
+    @field_validator("data_base64")
+    @classmethod
+    def validate_image_payload(cls, value: str) -> str:
+        try:
+            decoded = base64.b64decode(value, validate=True)
+        except (binascii.Error, ValueError) as error:
+            raise ValueError("image must be valid base64") from error
+        if len(decoded) > MAX_IMAGE_BYTES:
+            raise ValueError("image exceeds the 5 MiB limit")
+        return value
 
 
 class UnderstandRequest(BaseModel):
-    files: list[SourceFile]
+    files: list[SourceFile] = Field(max_length=MAX_SOURCE_FILES)
     image: ImageInput | None = None
+
+    @model_validator(mode="after")
+    def bound_total_code(self) -> "UnderstandRequest":
+        if sum(len(source.content.encode("utf-8")) for source in self.files) > MAX_SOURCE_TOTAL_BYTES:
+            raise ValueError("source files exceed the 1 MiB aggregate limit")
+        return self
 
 
 @lru_cache
@@ -70,6 +104,45 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="reweird-understand", version="0.1.0", lifespan=lifespan)
+
+
+class RequestBodyLimitMiddleware:
+    def __init__(self, downstream):
+        self.downstream = downstream
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] != "http" or scope.get("path") != "/understand":
+            return await self.downstream(scope, receive, send)
+        for name, value in scope.get("headers", []):
+            if name.lower() == b"content-length" and value.isdigit() and int(value) > MAX_REQUEST_BYTES:
+                return await JSONResponse(status_code=413, content={"detail": "Request exceeds the 8 MiB limit."})(scope, receive, send)
+        body = bytearray()
+        while True:
+            message = await receive()
+            if message["type"] == "http.disconnect":
+                return
+            if message["type"] != "http.request":
+                continue
+            chunk = message.get("body", b"")
+            if len(body) + len(chunk) > MAX_REQUEST_BYTES:
+                return await JSONResponse(status_code=413, content={"detail": "Request exceeds the 8 MiB limit."})(scope, receive, send)
+            body.extend(chunk)
+            if not message.get("more_body", False):
+                break
+
+        sent = False
+
+        async def replay():
+            nonlocal sent
+            if not sent:
+                sent = True
+                return {"type": "http.request", "body": bytes(body), "more_body": False}
+            return {"type": "http.disconnect"}
+
+        return await self.downstream(scope, replay, send)
+
+
+app.add_middleware(RequestBodyLimitMiddleware)
 
 
 @app.post("/understand", response_model=ProjectProfileProposal)

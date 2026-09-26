@@ -8,6 +8,7 @@ import { AppChrome } from "./app-chrome";
 export const metadata: Metadata = {
   title: "ReWeird — Hardware Diagnostics",
   description: "Evidence-first diagnostics for physical electronics projects.",
+  icons: { icon: "/images/reweird-logo.png" },
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {

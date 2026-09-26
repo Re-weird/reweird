@@ -49,12 +49,15 @@ which point on the target board is a decision only a human makes, later,
 with the device in hand. No amount of code or image analysis can determine
 it. So `ProjectProfileProposal` deliberately has no `probe` field anywhere;
 `ProposedRole.target_pin` names the *project's own* pin (e.g. `"GPIO25"`)
-instead. Turning an accepted proposal into a real, submittable
-`ProjectProfile` needs exactly one more piece of information a human
-supplies - the `target_pin -> P1..P6` mapping - after which the existing
-`POST/PUT /api/v1/profiles` (Go API, unchanged) is used as-is, with
-`confirmed: true` set by whoever is doing the confirming. This service never
-calls that endpoint and never sets `confirmed: true` anywhere.
+instead. The Go API's project-specific correction and confirmation workflow
+turns a reviewed draft into a confirmed profile and generates its probe plan.
+The generic `POST/PUT /api/v1/profiles` routes accept drafts only; callers
+cannot set `confirmed: true` or provide trusted probe mappings. This service
+never confirms a profile directly.
+
+`POST /understand` accepts at most an 8 MiB body, eight source files (512 KiB
+each, 1 MiB total source text), and a 5 MiB decoded image. Oversized bodies
+return 413; invalid or oversized fields return 422.
 
 ## Configuration
 

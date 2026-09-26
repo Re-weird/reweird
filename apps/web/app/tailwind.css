@@ -14,6 +14,8 @@
  */
 @import "./globals.css" layer(legacy);
 @import "./workbench.css" layer(legacy);
+@import "./circuit-map.css" layer(legacy);
+@import "./device-passport.css" layer(legacy);
 @import "tailwindcss/theme.css" layer(theme);
 @import "tailwindcss/utilities.css" layer(utilities);
 

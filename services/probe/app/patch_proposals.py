@@ -12,6 +12,7 @@ from app.providers.base import AIProvider
 from app.schemas import (
     DiagnosticSession,
     DiagnosticStep,
+    PatchActionRecord,
     PatchProposal,
     PatchProposalRequest,
     RecordExternalResultRequest,
@@ -134,16 +135,37 @@ _ALLOWED_TRANSITIONS: dict[str, set[str]] = {
     "APPROVED_EXTERNALLY": {"EXECUTED_EXTERNALLY", "REJECTED"},
 }
 
+_REPORTED_LABELS = {
+    "APPROVED_EXTERNALLY": "User reported approval",
+    "REJECTED": "User reported rejection",
+    "EXECUTED_EXTERNALLY": "User reported action completed",
+}
 
-def record_external_result(proposal: PatchProposal, request: RecordExternalResultRequest) -> PatchProposal:
+
+def record_external_result(
+    proposal: PatchProposal,
+    request: RecordExternalResultRequest,
+    actor_id: str = "offline-demo",
+    record_source: str = "OFFLINE_SIMULATION",
+) -> PatchProposal:
     allowed = _ALLOWED_TRANSITIONS.get(proposal.status, set())
     if request.external_status not in allowed:
         raise InvalidProposalTransitionError(proposal.status, request.external_status)
+    recorded_at_ms = _now_ms()
+    action = PatchActionRecord(
+        reported_status=request.external_status,
+        display_label=_REPORTED_LABELS[request.external_status],
+        actor_id=actor_id,
+        record_source=record_source,
+        recorded_at_ms=recorded_at_ms,
+        reason=request.reason,
+    )
     return proposal.model_copy(
         update={
             "status": request.external_status,
             "external_reason": request.reason,
-            "updated_at_ms": _now_ms(),
+            "action_history": [*proposal.action_history, action],
+            "updated_at_ms": recorded_at_ms,
         }
     )
 

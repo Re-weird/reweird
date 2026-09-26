@@ -1,10 +1,11 @@
 # Guided tests and generic VERIFY
 
-This layer consumes a `TestRecommendation` from any provider. The current API
-provides a deterministic adapter over the existing structured signal analysis;
-Layer 5/PROBE may submit the same contract later. No AI output controls an
-electrical pin. A recommendation sets `test_type`, `target_probes`, `reason`,
-`instructions`, `duration_seconds`, `requires_user_action`, and
+This layer consumes a `TestRecommendation`. The current API generates it
+deterministically from structured signal analysis; optional PROBE interpretation
+may explain a next test in the diagnosis but does not bypass the planner. No AI
+output controls an electrical pin. A recommendation sets `test_type`,
+`target_probes`, `reason`, `instructions`, `duration_seconds`,
+`requires_user_action`, and
 `requires_patch`. The planner validates every target against the confirmed,
 active Project Profile. Tests are pinned to its profile ID and version.
 

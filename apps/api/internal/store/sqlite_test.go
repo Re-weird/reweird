@@ -86,6 +86,22 @@ func TestRawAndDerivedMeasurementWindowPersists(t *testing.T) {
 	if err != nil || stored.ID == 0 {
 		t.Fatalf("SaveMeasurement() = %#v, %v", stored, err)
 	}
+	duplicate, err := repository.SaveMeasurement(window)
+	if err != nil || duplicate.ID != stored.ID {
+		t.Fatalf("same raw frame should reuse immutable window: %#v, %v", duplicate, err)
+	}
+	collision := window
+	collision.Raw.Samples = append([]domain.TelemetrySample(nil), window.Raw.Samples...)
+	collision.Raw.Samples[0].AnalogMV = []float64{1000, 1200}
+	if _, err := repository.SaveMeasurement(collision); err == nil {
+		t.Fatal("different raw frame reused existing source/device/sequence/time identity")
+	}
+	derivedCollision := window
+	derivedCollision.Analysis.Probes = append([]domain.DerivedFacts(nil), window.Analysis.Probes...)
+	derivedCollision.Analysis.Probes[0].Stable = false
+	if _, err := repository.SaveMeasurement(derivedCollision); err == nil {
+		t.Fatal("different derived evidence reused existing source/device/sequence/time identity")
+	}
 	if err := repository.Close(); err != nil {
 		t.Fatal(err)
 	}

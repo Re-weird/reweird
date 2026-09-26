@@ -4,7 +4,9 @@ import (
 	"context"
 	"errors"
 	"log"
+	"os"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -13,6 +15,7 @@ import (
 	"github.com/gofiber/fiber/v2/middleware/logger"
 	"github.com/re-weird/reweird/apps/api/internal/diagnostics"
 	"github.com/re-weird/reweird/apps/api/internal/domain"
+	"github.com/re-weird/reweird/apps/api/internal/passport"
 	"github.com/re-weird/reweird/apps/api/internal/profiles"
 	"github.com/re-weird/reweird/apps/api/internal/projectunderstanding"
 	"github.com/re-weird/reweird/apps/api/internal/reports"
@@ -21,6 +24,7 @@ import (
 type Controller struct {
 	mu            sync.RWMutex
 	testMu        sync.Mutex
+	profileMu     sync.Mutex
 	stage         domain.Stage
 	reference     *domain.AnalysisResult
 	engine        *diagnostics.Engine
@@ -45,7 +49,7 @@ func NewApp(engine *diagnostics.Engine, repository domain.Repository, source dom
 	app.Use(logger.New())
 	app.Use(cors.New(cors.Config{
 		AllowOrigins: "http://localhost:3000,http://127.0.0.1:3000",
-		AllowHeaders: "Origin, Content-Type, Accept",
+		AllowHeaders: "Origin, Content-Type, Accept, Authorization",
 		AllowMethods: "GET,POST,PUT,OPTIONS",
 	}))
 
@@ -66,7 +70,7 @@ func NewApp(engine *diagnostics.Engine, repository domain.Repository, source dom
 		return controller.systemStatus(ctx)
 	})
 
-	api := app.Group("/api/v1")
+	api := app.Group("/api/v1", apiAccessControl(os.Getenv("REWEIRD_API_TOKEN")))
 	api.Get("/ws/telemetry", telemetryWebSocketUpgrade, controller.telemetryWebSocket())
 	api.Get("/session", controller.current)
 	api.Get("/status", controller.systemStatus)
@@ -110,6 +114,8 @@ func NewApp(engine *diagnostics.Engine, repository domain.Repository, source dom
 	api.Put("/projects/:id/visibility", controller.updateProjectVisibility)
 	api.Get("/projects/:id/probe-plan", controller.getProbePlan)
 	api.Post("/projects/:id/probe-plan/confirm", controller.confirmProbePlan)
+	api.Get("/profiles/:id/passport", controller.devicePassport)
+	api.Post("/profiles/:id/known-good", controller.saveKnownGood)
 
 	// Compatibility routes preserve the original dashboard and hackathon demo.
 	api.Get("/demo/session", controller.current)
@@ -233,7 +239,11 @@ func (controller *Controller) analyzeAt(ctx context.Context, stage domain.Stage,
 	if err != nil {
 		return domain.Session{}, err
 	}
-	session, err := controller.engine.AnalyzeEnvelope(ctx, *profile, stage, controller.source.Name(), envelope, reference)
+	currentProfile, err := controller.profileWithKnownGood(*profile, envelope)
+	if err != nil {
+		return domain.Session{}, err
+	}
+	session, err := controller.engine.AnalyzeEnvelope(ctx, currentProfile, stage, controller.source.Name(), envelope, reference)
 	if err != nil {
 		return domain.Session{}, err
 	}
@@ -252,6 +262,22 @@ func (controller *Controller) analyzeAt(ctx context.Context, stage domain.Stage,
 		session.MeasurementID = stored.ID
 	}
 	return session, nil
+}
+
+func (controller *Controller) profileWithKnownGood(profile domain.ProjectProfile, envelope domain.TelemetryEnvelope) (domain.ProjectProfile, error) {
+	source, ok := passport.SourceKind(controller.source.Name())
+	if !ok {
+		return profile, nil
+	}
+	var baseline *domain.KnownGoodBaseline
+	if repository, ok := controller.repository.(domain.PassportRepository); ok && envelope.ProfileID == profile.ID {
+		stored, err := repository.LatestKnownGood(profile.ID, source, envelope.DeviceID)
+		if err != nil {
+			return domain.ProjectProfile{}, err
+		}
+		baseline = stored
+	}
+	return passport.ApplyKnownGood(profile, source, baseline), nil
 }
 
 func (controller *Controller) telemetryStatus(ctx *fiber.Ctx) error {
@@ -352,6 +378,8 @@ func (controller *Controller) getProfile(ctx *fiber.Ctx) error {
 }
 
 func (controller *Controller) saveProfile(ctx *fiber.Ctx) error {
+	controller.profileMu.Lock()
+	defer controller.profileMu.Unlock()
 	var profile domain.ProjectProfile
 	if err := ctx.BodyParser(&profile); err != nil {
 		return ctx.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "INVALID_JSON", "detail": err.Error()})
@@ -359,6 +387,51 @@ func (controller *Controller) saveProfile(ctx *fiber.Ctx) error {
 	if routeID := ctx.Params("id"); routeID != "" && routeID != profile.ID {
 		return ctx.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "PROFILE_ID_MISMATCH"})
 	}
+	// This legacy endpoint is draft-only. Project profiles must use the
+	// project-specific correction and confirmation workflow so clients cannot
+	// bypass conflict resolution or manufacture trusted probe mappings.
+	if profile.Confirmed || profile.ConfirmedAtMS != 0 || profile.ConfirmedBy != "" ||
+		strings.EqualFold(profile.AnalysisStatus, "CONFIRMED") || len(profile.Probes) != 0 {
+		return apiError(ctx, fiber.StatusConflict, "CONFIRMATION_REQUIRED", "Confirmation and probe configuration are server-controlled; use the project confirmation workflow.")
+	}
+	for _, component := range profile.Components {
+		if component.Confirmed {
+			return apiError(ctx, fiber.StatusConflict, "CONFIRMATION_REQUIRED", "Component confirmation is server-controlled.")
+		}
+	}
+	for _, connection := range profile.Connections {
+		if connection.Confirmed {
+			return apiError(ctx, fiber.StatusConflict, "CONFIRMATION_REQUIRED", "Connection confirmation is server-controlled.")
+		}
+	}
+	existing, err := controller.repository.GetProfile(profile.ID)
+	if err != nil {
+		return internalError(ctx, err)
+	}
+	if existing != nil && existing.Confirmed {
+		return apiError(ctx, fiber.StatusConflict, "PROFILE_CONFIRMED", "Confirmed profiles cannot be changed through draft routes.")
+	}
+	project, err := controller.repository.GetProject(profile.ID)
+	if err != nil {
+		return internalError(ctx, err)
+	}
+	if project != nil || profile.ProjectID != "" && profile.ProjectID != profile.ID {
+		return apiError(ctx, fiber.StatusConflict, "PROJECT_PROFILE_WORKFLOW_REQUIRED", "Use the project profile correction workflow for project-backed profiles.")
+	}
+	profile.Confirmed = false
+	profile.ConfirmedBy = ""
+	profile.ConfirmedAtMS = 0
+	profile.Probes = nil
+	profile.AnalysisStatus = "DRAFT"
+	profile.ProjectID = ""
+	if existing != nil {
+		profile.CreatedAtMS = existing.CreatedAtMS
+		profile.Version = existing.Version + 1
+	} else {
+		profile.CreatedAtMS = 0
+		profile.Version = 1
+	}
+	profile.UpdatedAtMS = 0
 	if err := profiles.Validate(profile); err != nil {
 		return ctx.Status(fiber.StatusUnprocessableEntity).JSON(fiber.Map{"error": "INVALID_PROFILE", "detail": err.Error()})
 	}

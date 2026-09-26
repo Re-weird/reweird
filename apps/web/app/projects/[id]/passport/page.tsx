@@ -1,21 +1,20 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { ProjectProfileView } from "../../../project-workflow";
+import { DevicePassportView } from "../../../device-passport";
 import { useAppState } from "@/lib/app-state";
 import { legacyViewPath } from "@/lib/project-routes";
 
-export default function ProjectOverviewPage() {
+export default function DevicePassportPage() {
   const router = useRouter();
-  const { project, profile, probePlan, session, saveProfile, confirmProfile, currentProjectID } = useAppState();
+  const { profile, project, probePlan, session, currentProjectID } = useAppState();
   return (
-    <ProjectProfileView
-      project={project}
+    <DevicePassportView
+      key={profile?.id ?? "none"}
       profile={profile}
+      project={project}
       plan={probePlan ?? project?.probe_plan ?? null}
       session={session}
-      onSave={saveProfile}
-      onConfirm={confirmProfile}
       onNavigate={(view) => router.push(legacyViewPath(currentProjectID, view))}
     />
   );

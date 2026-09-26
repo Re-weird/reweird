@@ -78,6 +78,35 @@ P1, P2, P3, ECHO, TRIG, 5.01 V, or 40 kHz.
 Draft analysis and profile confirmation write the project and profile together
 in one SQLite transaction. The built-in ultrasonic simulator remains isolated to
 its demo profile; a non-demo profile waits for matching real telemetry.
+Generic profile writes are draft-only and cannot modify a project-backed or
+confirmed profile. Confirmation metadata and probe assignments are created by
+the project confirmation endpoint after conflict checks; confirmed profiles
+cannot be silently replaced by a new upload or analysis.
+
+The browser circuit map is a projection of profile components/connections and
+the generated probe plan. It never infers a physical wire from a profile edge.
+Probe status is overlaid only from a stored capture whose profile, raw frame,
+and analysis IDs match the displayed confirmed profile (and whose non-demo
+project probe plan has been marked connected). This is an observation, not
+visual wiring verification or a component-health verdict.
+
+Known Good records are immutable references to persisted measurement windows.
+The server derives PHYSICAL versus SIMULATED from the stored telemetry source,
+checks profile/device/raw/analysis identity and required probe stability, and
+requires an explicit local user healthy report. It never accepts a client-
+claimed source or converts simulator evidence into a physical baseline. Physical
+records additionally require a confirmed project probe plan. Baselines are
+applied to a copy of the confirmed profile only for the same source and device
+at analysis time, preserving the confirmed profile. The Device Passport joins
+this record with the profile/map, recent captures, guided diagnostic history,
+and source-labeled resolved VERIFY outcomes following user-reported actions. Its status uses
+measured deviation/verification labels, not a fabricated health percentage.
+Because ESP32 frames currently have no trusted wall clock, measurement order
+and display time use the backend's persisted ingestion time where needed.
+Repeated identical frames reuse their immutable measurement row; a reused
+source/device/sequence/time identity with different raw or derived evidence is rejected
+instead of mutating baseline evidence. Device boot identity remains a hardware
+validation task.
 
 ## Trust boundaries
 

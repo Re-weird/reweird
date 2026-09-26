@@ -1,10 +1,17 @@
 # ReWeird
 
+![ReWeird logo](apps/web/public/images/reweird-logo.png)
+
 **Evidence-first diagnostics for physical electronics projects.**
 
 ReWeird combines real measurements, project context, deterministic engineering
 rules, guided follow-up tests, and repair verification. It is deliberately not a
 chatbot that guesses at hardware failures.
+
+> **Local/trusted demo only.** Do not expose the web app, Go API, PROBE, or
+> optional understanding service directly to an untrusted or public network.
+> The optional shared `REWEIRD_API_TOKEN` does not provide browser user
+> authentication. See [the security model](docs/security.md).
 
 The included hackathon MVP demonstrates the complete loop:
 
@@ -45,6 +52,11 @@ signal returns to its healthy baseline.
 - Generic probe placement generated only after user confirmation, followed by a
   persisted "probes connected" gate
 - Project Profile, Live Diagnostics, Diagnosis, Verify, and Reports views
+- An interactive circuit map derived from each profile's components and
+  connections; matching probe captures may overlay activity and per-probe checks
+- User-confirmed Known Good captures linked to persisted measurement windows,
+  and a Device Passport combining profile, map, source-labeled baselines,
+  diagnostic history, verified outcomes, and concrete current status
 - Deterministic checks for stable power, expected activity, dropouts, and
   movement correlation
 - Structured evidence that keeps measured values, rules, and interpretation
@@ -67,9 +79,9 @@ signal returns to its healthy baseline.
 
 | Category | Current state |
 | --- | --- |
-| Working now | Project input/confirmation, static code analysis, SQLite storage, generic signal analysis, guided tests, VERIFY, history, deterministic reports |
+| Working now | Project input and server-controlled confirmation, static code analysis, SQLite storage, generic signal analysis, user-confirmed source-labeled baselines, Device Passport, guided tests, VERIFY, history, deterministic reports |
 | Simulated | Raw P1–P6 electrical scenarios, repair/verification demonstration, eight computer fault scenarios |
-| Optional | Gemini **Vision** for project photos when configured; read-only Windows computer snapshot after opt-in; explicitly approved report Git commit/push after opt-in |
+| Optional | Gemini **Vision** for project photos and Gemini PROBE interpretation when configured; read-only Windows computer snapshot after opt-in; explicitly approved report Git commit/push after opt-in |
 | Not yet hardware-validated | ESP32 firmware and USB serial ingestion compile but need electrical calibration and bench testing |
 | Locked for safety | PATCH active electrical output, autonomous computer repair, unattended Git push |
 
@@ -87,6 +99,7 @@ reweird/
 │   └── api/                 # Go/Fiber API and SQLite persistence
 ├── services/
 │   ├── probe/               # AI reasoning interface boundary
+│   ├── understand/          # Optional code + vision proposal service
 │   ├── signal-analysis/     # Raw telemetry → structured facts boundary
 │   └── vision/              # Image analysis interface boundary
 ├── firmware/esp32/          # Passive probe firmware and PlatformIO project
@@ -97,7 +110,39 @@ reweird/
 └── docs/                    # Architecture, diagnostics, and security notes
 ```
 
-## Run the demo
+## Run locally
+
+The [GitHub `main` branch](https://github.com/Re-weird/reweird) is the shared
+source of truth. It includes the current logo, circuit map, Known Good capture,
+and Device Passport. Feature branches are visible to the team but are not part
+of the shared app until merged. The repository is public to read; contributing
+or changing organization access requires the appropriate GitHub permissions.
+
+`http://localhost:3000` is **only the app running on your own computer**. It
+does not update when someone pushes to GitHub, and it is not a link teammates
+can open on their own devices. To refresh a local copy, stop its old web/API
+processes, run these commands in the checkout you intend to serve, then start
+the stack below:
+
+```bash
+git fetch origin
+git switch main
+git pull --ff-only origin main
+npm install
+```
+
+If `git switch` or `git pull --ff-only` refuses to proceed, preserve your local
+changes and coordinate the merge; do not reset or force-push. If port 3000 is
+already occupied, stop the old Next.js process before starting this checkout.
+On Windows, `Get-NetTCPConnection -LocalPort 3000 -State Listen` identifies its
+PID; inspect that process before stopping it. A hard refresh can clear cached
+browser assets, but it cannot replace a server still running an old checkout.
+
+There is **no public hosted ReWeird app** in this repository. Share the GitHub
+link for code and documentation; each team member can run their own local copy.
+Do not expose the current web/API stack through a public tunnel or host merely
+to share `localhost`: browser user authentication and production upload safety
+are not complete. See [security](docs/security.md).
 
 ### Prerequisites
 
@@ -114,7 +159,9 @@ npm run dev
 ```
 
 Open [http://localhost:3000](http://localhost:3000). If the API is unavailable,
-the header shows **Browser simulator** and every demo action still works.
+the header shows **Browser simulator** and every demo action still works. The
+`npm run dev` script binds the web server to `127.0.0.1` by default so the
+unfinished remote-access boundary is not exposed on a LAN.
 
 ### Full stack
 
@@ -145,22 +192,29 @@ different server-side target with `API_INTERNAL_URL`; `NEXT_PUBLIC_API_URL`
 remains available for deployments that intentionally expose a separate API
 origin.
 
+Security boundary: the standalone API binds to `127.0.0.1` by default.
+Compose publishes ports 3000/8080/8091 on host loopback only. Do not publish
+this stack to an untrusted network: the UI does not yet have user accounts.
+For direct API clients, setting a 32+ character `REWEIRD_API_TOKEN` requires
+`Authorization: Bearer <token>` on `/api/v1` routes; this credential must stay
+server-side. See [security model](docs/security.md) before changing bind or
+port settings.
+
 Uploads default to `apps/api/data/uploads` when the API is started from that
-directory. Override this with `UPLOAD_DIR`. To enable Gemini Vision and the
-Gemini PROBE adapter (they share the same key and model), keep the key
-server-side:
+directory. Override this with `UPLOAD_DIR`. To enable Gemini Vision, set the
+key in the Go API process environment:
 
 ```powershell
 $env:GEMINI_API_KEY = "your-key"
-$env:GEMINI_MODEL = "gemini-3.5-flash-lite" # optional
 go run ./cmd/server
 ```
 
-Without a key, Python PROBE uses its offline deterministic provider and image
-analysis reports `VISION_SKIPPED`; code analysis, catalog enrichment, profile
-review/confirmation, and probe planning continue normally. Set
-`PROBE_AI_PROVIDER=gemini` only in the PROBE service environment to enable
-Gemini reasoning.
+To enable Gemini PROBE reasoning, set `PROBE_AI_PROVIDER=gemini` and
+`GEMINI_API_KEY` in the **Python PROBE process** as well. `GEMINI_MODEL` can be
+configured per process; their defaults differ. Without a key, Python PROBE
+uses its offline deterministic provider and image analysis reports
+`VISION_SKIPPED`; code analysis, catalog enrichment, profile review,
+confirmation, and probe planning continue normally.
 
 ## Real Project Understanding flow
 
@@ -171,12 +225,36 @@ Gemini reasoning.
    Gemini Vision for suggestions, and generates a draft Project Profile.
 4. Review provenance, edit components and connections, and resolve any code vs.
    vision conflict.
-5. Confirm the profile. Only this user action makes the model authoritative.
+5. Confirm the profile. The backend checks conflicts and creates trusted probe
+   assignments; this local action is not proof of a specific human identity.
 6. Follow the generated GND/P1-P6 placement plan and confirm physical
    connections before opening Live Diagnostics.
 
+The generic `/api/v1/profiles` write routes accept drafts only. Confirmation,
+confirmation metadata, and probe assignments are server-controlled through the
+project-specific workflow. A confirmed profile cannot be overwritten or
+silently re-analyzed; a future revision workflow is required to change it.
+
 The profile screen contains no universal HC-SR04 mapping. The built-in demo is a
-normal seeded profile rendered by the same component.
+normal seeded profile rendered by the same component. Its circuit map shows
+intended connections and exact generated probe assignments; it only shows
+measurement status for a matching, stored capture. It does not establish that
+the physical wiring matches the profile.
+
+The **Device Passport** lets a local operator select a stored healthy capture
+and explicitly save it as Known Good. The backend checks the confirmed profile,
+probe assignment, raw/derived capture identity, and required signal stability.
+Serial captures become physical baselines only after the project's probe plan
+was confirmed; simulator captures remain labeled simulated and are never used
+for physical comparison. The confirmed profile is unchanged: baseline records
+are separate, immutable SQLite records linked to measurement windows. A later
+matching capture can show **Healthy**, **Deviation detected**, or **Needs
+verification**; simulated comparisons use explicitly simulated labels. These
+labels are comparisons, not physical certification or a numerical health score.
+The ESP32 currently has no wall clock; the Passport uses backend ingestion time
+when the device capture timestamp is unknown.
+The API currently records `local_user_reported`, not an authenticated human
+identity, so keep the stack local/trusted-network only.
 
 ### Real ESP32 over USB serial
 
@@ -219,21 +297,6 @@ docker compose up --build
 
 Then open [http://localhost:3000](http://localhost:3000).
 
-## Demo script
-
-1. Start on **Overview** and note that P1 power and P2 TRIG are healthy while P3
-   ECHO has 12 dropouts per minute.
-2. Open **Diagnosis**. Compare expected, observed, and baseline evidence. The
-   system describes plausible causes but does not claim a loose wire.
-3. Select **Start wiggle test**. The simulator raises the P3 dropout rate to 27
-   while P1 and P2 remain stable.
-4. Review the stronger movement-correlation evidence and select **Simulate
-   repair**.
-5. The app opens **Verify**. P3 now has 0 dropouts per minute and matches the
-   stored healthy baseline.
-6. Open **Reports** to download the structured session snapshot.
-7. Select **Reset demo** on the Verify screen to repeat the flow.
-
 ## How the system works
 
 ```text
@@ -251,17 +314,17 @@ Generic deterministic diagnostic rules
         ↓
 Structured evidence
         ↓
-Python PROBE grounding + hypotheses + deterministic Test Planner
+Go deterministic diagnosis → optional Python PROBE interpretation
         ↓
-Main-compatible Diagnosis (fail-closed to Go deterministic diagnosis)
+Go deterministic Test Planner (PROBE cannot bypass its safety checks)
         ↓
 Guided test → re-measurement → verification
 ```
 
 The frontend consumes only normalized JSON contracts. It does not know whether
-telemetry came from a browser fixture, the Go simulator, serial transport, or a
-real authenticated ESP32. That boundary lets real hardware replace simulation
-without a UI rewrite.
+telemetry came from a browser fixture, the Go simulator, or serial transport.
+Device authentication is not implemented yet. That boundary lets real hardware
+replace simulation without a UI rewrite.
 
 ## API
 
@@ -276,8 +339,10 @@ without a UI rewrite.
 | `POST` | `/api/v1/simulator/scenario` | Select and analyze a simulator scenario |
 | `GET` | `/api/v1/profiles` | Persistent Project Profiles |
 | `GET` | `/api/v1/profiles/:id` | One Project Profile |
-| `POST` | `/api/v1/profiles` | Validate and create a Project Profile |
-| `PUT` | `/api/v1/profiles/:id` | Validate and update a Project Profile |
+| `POST` | `/api/v1/profiles` | Validate and create a standalone draft profile only |
+| `PUT` | `/api/v1/profiles/:id` | Update a standalone draft; cannot change project-backed or confirmed profiles |
+| `GET` | `/api/v1/profiles/:id/passport` | Read the aggregated Device Passport and concrete status |
+| `POST` | `/api/v1/profiles/:id/known-good` | Save one stored, user-confirmed healthy capture as a source-labeled baseline |
 | `POST` | `/api/v1/projects` | Create a persisted project shell |
 | `GET` | `/api/v1/projects` | List persisted projects |
 | `GET` | `/api/v1/projects/:id` | Read a project and its input/analysis metadata |
@@ -295,7 +360,7 @@ without a UI rewrite.
 | `POST` | `/api/v1/demo/reset` | Reset the scenario |
 | `POST` | `/api/v1/patch` | Always returns `423 PATCH_LOCKED` |
 
-State-changing demo transitions are written to SQLite as immutable diagnostic
+Go API demo transitions are written to SQLite as immutable diagnostic
 snapshots.
 
 Open **Fault simulator** to select any scenario and inspect the complete software
@@ -321,6 +386,11 @@ derived from the raw electrical values and the confirmed profile.
   imported, or evaluated. Secret-like filenames and binary content are rejected.
 - Images are content-sniffed as PNG/JPEG, stored under generated names inside a
   dedicated root, and bounded before Gemini input.
+- Project images are limited to 5 MiB each; one current image is retained, with
+  at most two files and 11 MiB image-plus-code storage during replacement.
+  Obsolete images are removed after the new reference is persisted. The optional
+  understanding service also bounds its request body, source-file list, total
+  source text, and decoded image size.
 - Gemini can only suggest `VISION_AI` facts. Conflicts are preserved, and only a
   user can confirm a Project Profile.
 - An inference cannot overwrite measured evidence.
@@ -338,6 +408,10 @@ See [docs/security.md](docs/security.md) for the full trust-boundary checklist.
 
 - Firmware and serial ingestion are implemented and compile, but were not flashed
   or electrically bench-tested because no physical board was available.
+- Passport status describes the **last stored capture**, not continuously
+  certified device health. ESP32 reboot identity and clock synchronization
+  still need bench validation; a conflicting reused telemetry identity is
+  rejected rather than overwriting an existing measurement.
 - USB serial is the only real transport; Wi-Fi, WebSocket, and MQTT adapters are
   not implemented.
 - PROBE diagnostic interpretation runs in `services/probe` when
@@ -356,8 +430,9 @@ See [docs/security.md](docs/security.md) for the full trust-boundary checklist.
 - A real Gemini request requires the operator's API key and network access. The
   adapter and structured-response parser are tested with a local fake endpoint,
   not a live paid key in this repository.
-- Authentication, device identity, multi-user access, and production upload
-  scanning are not implemented.
+- Browser user authentication, device identity, multi-user access, and
+  production upload scanning are not implemented. A shared API token is not a
+  browser login; do not expose the stack publicly.
 - The chart uses summarized samples rather than a high-frequency time-series
   store.
 
@@ -382,9 +457,18 @@ See [docs/security.md](docs/security.md) for the full trust-boundary checklist.
 ```bash
 npm run typecheck
 npm run build
+npm audit
 
 cd apps/api
 go test ./...
+go vet ./...
+govulncheck ./...
+
+cd ../../services/probe
+uv run pytest
+
+cd ../understand
+uv run pytest
 
 cd ../../firmware/esp32
 pio run

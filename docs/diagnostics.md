@@ -20,10 +20,7 @@ interpretation.
    test strengthens—but does not mathematically prove—the intermittent-connection
    hypothesis.
 
-The demo begins at rule 5, clears the shared-rail hypothesis with rule 6, gathers
-movement evidence with rule 7, then verifies the repair against the baseline.
-
 Raw high-frequency streams are bounded at the transport and converted into
-`AnalysisResult`. Any future PROBE model receives structured measurements,
+`AnalysisResult`. The optional PROBE service receives structured measurements,
 derived facts, specification results, baseline comparisons, deterministic rule
 results, and unresolved questions—not the raw stream.

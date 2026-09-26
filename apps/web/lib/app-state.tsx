@@ -82,6 +82,15 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
     testApi.recommendation().then(setRecommendation).catch(() => undefined);
   }, []);
 
+  // From main: with no real project open, show the demo's probe plan (used by
+  // the circuit map and device passport).
+  useEffect(() => {
+    if (project) return;
+    let cancelled = false;
+    demoApi.probePlan().then((plan) => { if (!cancelled) setProbePlan(plan); }).catch(() => undefined);
+    return () => { cancelled = true; };
+  }, [project]);
+
   useEffect(() => {
     if (!toast) return;
     const timer = setTimeout(() => setToast(null), 2800);

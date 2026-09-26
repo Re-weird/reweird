@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import Image from "next/image";
 import Link from "next/link";
 import { useParams, usePathname } from "next/navigation";
 import { AnimatePresence, motion } from "framer-motion";
@@ -104,8 +105,9 @@ export function GlobalNav() {
   return (
     <header data-tw className="sticky top-0 z-40 border-b border-border bg-chrome/95 backdrop-blur supports-[backdrop-filter]:bg-chrome/80">
       <div className="flex h-14 items-center gap-3 px-4 md:px-6">
-        <Link href="/" aria-label="ReWeird dashboard" className="grid size-9 place-items-center rounded-lg text-signal transition-colors hover:bg-accent">
-          <Waves className="size-[22px]" strokeWidth={1.75} />
+        {/* Logo from main; crop and dark-mode lift match main's .brand-logo-image. */}
+        <Link href="/" aria-label="ReWeird dashboard" className="relative block h-[34px] w-[66px] shrink-0 overflow-hidden rounded-md transition-opacity hover:opacity-85">
+          <Image src="/images/reweird-logo.png" alt="" width={72} height={72} priority className="absolute top-[-22px] left-[-3px] size-[72px] max-w-none dark:[filter:contrast(.55)_brightness(1.3)]" />
         </Link>
 
         <nav aria-label="Breadcrumb" className="flex min-w-0 flex-1 items-center gap-2 text-sm">

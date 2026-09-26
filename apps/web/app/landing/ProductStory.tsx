@@ -81,7 +81,7 @@ export function ProductStory() {
       <section ref={hero} id="hardware" data-chapter="0" className={`${s.hero} ${reduced ? s.reducedHero : ""}`}>
         <div className={s.heroStage}>
           <div className={s.stageGrid} aria-hidden="true" />
-          <div className={s.heroCopy}><p className={s.eyebrow}><span /> HARDWARE INTELLIGENCE, MADE TANGIBLE</p><h1>Hardware speaks.<br /><em>Understand it.</em></h1><p className={s.lead}>Your code. Your circuit. The missing connection.<br />Follow the evidence from the first signal to the fix.</p><Link href="/projects/demo" className={s.primary}>Enter the workspace <ArrowUpRight size={17} /></Link><small>Explore with simulated hardware. No setup needed.</small></div>
+          <div className={s.heroCopy}><p className={s.eyebrow}><span /> HARDWARE INTELLIGENCE, MADE TANGIBLE</p><h1>Hardware speaks.<br /><em>Understand it.</em></h1><p className={s.lead}>Your code. Your circuit. The missing connection.<br />Follow the evidence from the first signal to the fix.</p><Link href="/dashboard" className={s.primary}>Enter the workspace <ArrowUpRight size={17} /></Link><small>Explore with simulated hardware. No setup needed.</small></div>
           <div className={s.heroModel}><Hardware progress={progress} reduced={reduced} light={theme === "light"} /></div>
           <div className={s.hardwareLabel}><span>01 / THE STARTING POINT</span><strong>ESP32</strong><p>A whole system.<br />Waiting to be understood.</p><div className={s.labelLine} /><small>DRAG TO EXPLORE ↔</small></div>
           <div className={s.portCopy}><span className={s.eyebrow}>LOOK A LITTLE CLOSER</span><h2>Every connection<br />has a story.</h2><p>Let’s follow one.</p></div>

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"net"
 	"os"
 	"strconv"
 	"strings"
@@ -26,6 +27,17 @@ import (
 func main() {
 	databasePath := environment("DATABASE_PATH", "./reweird.db")
 	port := environment("API_PORT", "8080")
+	host := environment("API_HOST", "127.0.0.1")
+	address := net.ParseIP(host)
+	if address == nil {
+		log.Fatalf("API_HOST must be an IP address, got %q", host)
+	}
+	if !address.IsLoopback() && os.Getenv("REWEIRD_API_TOKEN") == "" && os.Getenv("API_TRUSTED_NETWORK") != "true" {
+		log.Fatal("non-loopback API_HOST requires REWEIRD_API_TOKEN or explicit API_TRUSTED_NETWORK=true")
+	}
+	if token := os.Getenv("REWEIRD_API_TOKEN"); token != "" && len(token) < 32 {
+		log.Fatal("REWEIRD_API_TOKEN must contain at least 32 characters")
+	}
 	telemetryMode := strings.ToLower(environment("TELEMETRY_MODE", "simulator"))
 	profileID := environment("PROJECT_PROFILE_ID", "ultrasonic-demo")
 	uploadRoot := environment("UPLOAD_DIR", "./data/uploads")
@@ -76,8 +88,8 @@ func main() {
 	)
 	app := httpapi.NewApp(engine, repository, source, profileID, httpapi.ProjectServices{Understanding: understanding, UploadRoot: uploadRoot}, authTokenSecret != "")
 
-	log.Printf("ReWeird API listening on http://localhost:%s (telemetry=%s, profile=%s, auth=%s, PATCH=locked)", port, source.Name(), profileID, authStatus(authTokenSecret != ""))
-	if err := app.Listen(":" + port); err != nil {
+	log.Printf("ReWeird API listening on %s (telemetry=%s, profile=%s, auth=%s, PATCH=locked)", net.JoinHostPort(host, port), source.Name(), profileID, authStatus(authTokenSecret != ""))
+	if err := app.Listen(net.JoinHostPort(host, port)); err != nil {
 		log.Fatal(err)
 	}
 }

@@ -109,6 +109,13 @@ type ProbePlan struct {
 	GeneratedAtMS int64              `json:"generated_at_ms"`
 }
 
+type ProjectVisibility string
+
+const (
+	VisibilityPrivate ProjectVisibility = "private"
+	VisibilityPublic  ProjectVisibility = "public"
+)
+
 type Project struct {
 	ID             string           `json:"id"`
 	// OwnerID is the verified Google account id that created this project,
@@ -125,8 +132,11 @@ type Project struct {
 	AnalysisStatus AnalysisStatus   `json:"analysis_status"`
 	AnalysisError  string           `json:"analysis_error,omitempty"`
 	ProbePlan      *ProbePlan       `json:"probe_plan,omitempty"`
-	CreatedAtMS    int64            `json:"created_at_ms"`
-	UpdatedAtMS    int64            `json:"updated_at_ms"`
+	// Visibility is stored and displayed but not enforced yet: there is no
+	// user auth, so every project is reachable by anyone who can reach the API.
+	Visibility  ProjectVisibility `json:"visibility"`
+	CreatedAtMS int64             `json:"created_at_ms"`
+	UpdatedAtMS int64             `json:"updated_at_ms"`
 }
 
 type Stage string
@@ -512,6 +522,9 @@ type Repository interface {
 	GetProfile(id string) (*ProjectProfile, error)
 	ListProfiles() ([]ProjectProfile, error)
 	SaveProject(project Project) error
+	// SetProjectVisibility changes only visibility; it is not a content
+	// update, so it leaves updated_at alone.
+	SetProjectVisibility(id string, visibility ProjectVisibility) error
 	GetProject(id string) (*Project, error)
 	ListProjects() ([]Project, error)
 }

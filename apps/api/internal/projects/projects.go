@@ -20,9 +20,14 @@ import (
 )
 
 const (
-	MaxImageBytes = 5 * 1024 * 1024
-	MaxCodeBytes  = 512 * 1024
+	MaxImageBytes         = 5 * 1024 * 1024
+	MaxCodeBytes          = 512 * 1024
+	MaxProjectImages      = 2 // Current image plus one replacement until metadata is saved.
+	MaxProjectStoredBytes = 11 * 1024 * 1024
 )
+
+var ErrStorageLimit = errors.New("project upload storage limit exceeded")
+var ErrPayloadTooLarge = errors.New("uploaded payload exceeds the size limit")
 
 var safeIDPattern = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{2,63}$`)
 
@@ -60,7 +65,7 @@ func Validate(project domain.Project) error {
 	return nil
 }
 
-func SaveImage(uploadRoot, projectID, filename string, reader io.Reader) (*domain.ProjectMedia, error) {
+func SaveImage(uploadRoot, projectID, filename string, codeBytes int64, reader io.Reader) (*domain.ProjectMedia, error) {
 	if !safeIDPattern.MatchString(projectID) {
 		return nil, errors.New("invalid project id")
 	}
@@ -97,6 +102,29 @@ func SaveImage(uploadRoot, projectID, filename string, reader io.Reader) (*domai
 	if err := ensureWithin(root, target); err != nil {
 		return nil, err
 	}
+	entries, err := os.ReadDir(directory)
+	if err != nil {
+		return nil, fmt.Errorf("inspect project uploads: %w", err)
+	}
+	imageCount, storedBytes, alreadyStored := 0, codeBytes, false
+	for _, entry := range entries {
+		if !isStoredImageName(entry.Name()) {
+			continue
+		}
+		info, infoErr := entry.Info()
+		if infoErr != nil {
+			return nil, fmt.Errorf("inspect project image: %w", infoErr)
+		}
+		if !info.Mode().IsRegular() {
+			return nil, errors.New("project image storage contains a non-regular file")
+		}
+		imageCount++
+		storedBytes += info.Size()
+		alreadyStored = alreadyStored || entry.Name() == storedName
+	}
+	if !alreadyStored && (imageCount >= MaxProjectImages || storedBytes+int64(len(payload)) > MaxProjectStoredBytes) {
+		return nil, fmt.Errorf("%w: at most %d images and %d bytes per project during replacement", ErrStorageLimit, MaxProjectImages, MaxProjectStoredBytes)
+	}
 	file, err := os.OpenFile(target, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
 	if err != nil && !errors.Is(err, os.ErrExist) {
 		return nil, fmt.Errorf("store project image: %w", err)
@@ -115,6 +143,44 @@ func SaveImage(uploadRoot, projectID, filename string, reader io.Reader) (*domai
 		return nil, err
 	}
 	return &domain.ProjectMedia{StorageRef: filepath.ToSlash(reference), OriginalFilename: original, ContentType: contentType, SizeBytes: int64(len(payload)), SHA256: hashText}, nil
+}
+
+// PruneObsoleteImages runs only after the replacement image reference has been
+// persisted. Diagnostic history does not reference previous project images.
+func PruneObsoleteImages(uploadRoot, projectID, keepReference string) error {
+	if !safeIDPattern.MatchString(projectID) || filepath.ToSlash(filepath.Dir(filepath.FromSlash(keepReference))) != projectID {
+		return errors.New("invalid project image reference")
+	}
+	keepName := filepath.Base(filepath.FromSlash(keepReference))
+	if !isStoredImageName(keepName) {
+		return errors.New("invalid project image name")
+	}
+	root, err := filepath.Abs(uploadRoot)
+	if err != nil {
+		return err
+	}
+	directory := filepath.Join(root, projectID)
+	entries, err := os.ReadDir(directory)
+	if err != nil {
+		return err
+	}
+	for _, entry := range entries {
+		if !isStoredImageName(entry.Name()) || entry.Name() == keepName {
+			continue
+		}
+		target := filepath.Join(directory, entry.Name())
+		if err := ensureWithin(root, target); err != nil {
+			return err
+		}
+		if err := os.Remove(target); err != nil {
+			return fmt.Errorf("remove obsolete project image: %w", err)
+		}
+	}
+	return nil
+}
+
+func isStoredImageName(name string) bool {
+	return strings.HasPrefix(name, "hardware-") && (strings.HasSuffix(name, ".png") || strings.HasSuffix(name, ".jpg"))
 }
 
 func ResolveImage(uploadRoot, reference string) (string, error) {
@@ -181,7 +247,7 @@ func readLimited(reader io.Reader, maximum int64) ([]byte, error) {
 		return nil, errors.New("uploaded file is empty")
 	}
 	if int64(len(payload)) > maximum {
-		return nil, fmt.Errorf("uploaded file exceeds the %d byte limit", maximum)
+		return nil, fmt.Errorf("%w: uploaded file exceeds the %d byte limit", ErrPayloadTooLarge, maximum)
 	}
 	return payload, nil
 }

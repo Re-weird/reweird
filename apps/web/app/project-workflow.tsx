@@ -22,6 +22,7 @@ import {
 } from "lucide-react";
 import type {
   AnalyzeProjectResponse,
+  DemoSession,
   ProbePlan,
   ProfileComponent,
   ProfileConnection,
@@ -31,6 +32,7 @@ import type {
   ProjectProfile,
 } from "@reweird/shared-types";
 import { ApiError, projectApi } from "@/lib/api";
+import { CircuitMap } from "./circuit-map";
 
 const sourceLabels: Record<ProjectFactSource, string> = {
   CODE_STATIC_ANALYSIS: "CODE",
@@ -175,13 +177,19 @@ function blankExpected(behavior = "digital"): ProfileConnection["expected"] {
 export function ProjectProfileView({
   project,
   profile,
+  plan,
+  session,
   onSave,
   onConfirm,
+  onNavigate,
 }: {
   project: Project | null;
   profile: ProjectProfile | null;
+  plan: ProbePlan | null;
+  session: DemoSession | null;
   onSave: (profile: ProjectProfile) => Promise<ProjectProfile>;
   onConfirm: (profile: ProjectProfile) => Promise<void>;
+  onNavigate: (destination: "connect" | "live" | "diagnosis" | "guided" | "history") => void;
 }) {
   const [draft, setDraft] = useState<ProjectProfile | null>(profile ? cloneProfile(profile) : null);
   const [editing, setEditing] = useState(Boolean(profile && !profile.confirmed));
@@ -260,6 +268,8 @@ export function ProjectProfileView({
           {editing && <label className="inline-field">Logic voltage<input type="number" min="0.1" max="5.5" step="0.1" value={draft.logic_voltage} onChange={(event) => setDraft({ ...draft, logic_voltage: Number(event.target.value) })} /></label>}
         </div>
       </section>
+
+      <CircuitMap profile={draft} plan={plan} session={session} demoMode={!project} onNavigate={onNavigate} />
 
       {(draft.conflicts?.length ?? 0) > 0 && <section className="panel conflict-panel"><div className="panel-heading"><div><span className="eyebrow">Evidence disagreements</span><h2>{unresolved.length ? `${unresolved.length} conflict${unresolved.length === 1 ? "" : "s"} need confirmation` : "Conflicts resolved"}</h2></div></div>{draft.conflicts?.map((conflict) => <div className={`conflict-card ${conflict.resolved ? "resolved" : ""}`} key={conflict.id}><div><strong>{conflict.field}</strong><span>{conflict.resolved ? `Resolved as ${conflict.resolution}` : "Code and vision proposed different values."}</span></div><div className="conflict-options">{conflict.options.map((option) => <button type="button" className={conflict.resolution === option.value ? "selected" : ""} key={`${option.source}-${option.value}`} disabled={!editing} onClick={() => resolveConflict(conflict, option.value)}><b>{option.value}</b><small>{sourceLabels[option.source]} · {Math.round(option.confidence * 100)}%</small></button>)}{editing && <input aria-label={`Manual resolution for ${conflict.field}`} placeholder="GPIO number" onBlur={(event) => event.target.value && resolveConflict(conflict, `GPIO${event.target.value}`)} />}</div></div>)}</section>}
 

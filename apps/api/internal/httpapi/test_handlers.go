@@ -40,8 +40,24 @@ func (controller *Controller) activeTestProfile() (*domain.ProjectProfile, error
 	return profile, nil
 }
 
-func (controller *Controller) recommendTest(ctx *fiber.Ctx) error {
+func (controller *Controller) activeTestProfileWithKnownGood() (*domain.ProjectProfile, error) {
 	profile, err := controller.activeTestProfile()
+	if err != nil {
+		return nil, err
+	}
+	envelope, err := controller.source.Latest(context.Background())
+	if err != nil {
+		return profile, nil
+	}
+	current, err := controller.profileWithKnownGood(*profile, envelope)
+	if err != nil {
+		return nil, err
+	}
+	return &current, nil
+}
+
+func (controller *Controller) recommendTest(ctx *fiber.Ctx) error {
+	profile, err := controller.activeTestProfileWithKnownGood()
 	if err != nil {
 		return serviceUnavailable(ctx, err)
 	}
@@ -96,7 +112,7 @@ func (controller *Controller) createTest(ctx *fiber.Ctx) error {
 	if err != nil {
 		return err
 	}
-	profile, err := controller.activeTestProfile()
+	profile, err := controller.activeTestProfileWithKnownGood()
 	if err != nil {
 		return internalError(ctx, err)
 	}
@@ -160,7 +176,7 @@ func (controller *Controller) advanceTest(ctx *fiber.Ctx, action string) error {
 	if workflow == nil {
 		return ctx.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "TEST_NOT_FOUND"})
 	}
-	profile, err := controller.activeTestProfile()
+	profile, err := controller.activeTestProfileWithKnownGood()
 	if err != nil {
 		return internalError(ctx, err)
 	}

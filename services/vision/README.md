@@ -3,7 +3,7 @@
 The implemented Gemini adapter lives behind `internal/vision.Analyzer`. It sends
 only a validated, bounded project image and a constrained extraction prompt to
 Gemini when `GEMINI_API_KEY` is configured. The model name is configurable with
-`GEMINI_MODEL`; the default is the stable multimodal `gemini-3.5-flash-lite`.
+`GEMINI_MODEL`; check `apps/api/cmd/server/main.go` for the current default.
 
 The response is parsed as structured JSON, validated, and assigned `VISION_AI`
 provenance by server code. Candidate components, readable labels, and possible

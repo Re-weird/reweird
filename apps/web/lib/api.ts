@@ -4,9 +4,11 @@ import type {
   DemoSession,
   DiagnosticWorkflow,
   DetailedReport,
+  DevicePassport,
   HistoryDetail,
   HistoryStatus,
   HistorySummary,
+  KnownGoodBaseline,
   MeasurementWindow,
   ProbePlan,
   Project,
@@ -92,6 +94,14 @@ export const demoApi = {
   },
 };
 
+export const passportApi = {
+  get: (profileID: string) => requestJSON<DevicePassport>(`/api/v1/profiles/${encodeURIComponent(profileID)}/passport`),
+  saveKnownGood: (profileID: string, measurementID: number, note: string) => requestJSON<KnownGoodBaseline>(
+    `/api/v1/profiles/${encodeURIComponent(profileID)}/known-good`,
+    { method: "POST", body: JSON.stringify({ measurement_id: measurementID, confirm_healthy: true, note }) },
+  ),
+};
+
 export interface CreateProjectInput {
   name: string;
   description?: string;
@@ -108,6 +118,7 @@ function uploadFile(path: string, file: File): Promise<Project> {
 export const projectApi = {
   createProject: (input: CreateProjectInput) =>
     requestJSON<Project>("/api/v1/projects", { method: "POST", body: JSON.stringify(input) }),
+  listProjects: () => requestJSON<Project[]>("/api/v1/projects"),
   uploadProjectImage: (projectID: string, file: File) => uploadFile(`/api/v1/projects/${projectID}/media`, file),
   uploadProjectCode: (projectID: string, file: File) => uploadFile(`/api/v1/projects/${projectID}/code`, file),
   submitPastedCode: (projectID: string, codeText: string, filename = "pasted-code.ino") =>
@@ -118,6 +129,8 @@ export const projectApi = {
   analyzeProject: (projectID: string) =>
     requestJSON<AnalyzeProjectResponse>(`/api/v1/projects/${projectID}/analyze`, { method: "POST" }, 35_000),
   getProject: (projectID: string) => requestJSON<Project>(`/api/v1/projects/${projectID}`),
+  setVisibility: (projectID: string, visibility: Project["visibility"]) =>
+    requestJSON<Project>(`/api/v1/projects/${projectID}/visibility`, { method: "PUT", body: JSON.stringify({ visibility }) }),
   getDraftProfile: (projectID: string) => requestJSON<ProjectProfile>(`/api/v1/projects/${projectID}/profile`),
   saveProfileCorrections: (projectID: string, profile: ProjectProfile) =>
     requestJSON<ProjectProfile>(`/api/v1/projects/${projectID}/profile`, { method: "PUT", body: JSON.stringify(profile) }),

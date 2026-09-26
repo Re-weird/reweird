@@ -1,6 +1,6 @@
 /* A quiet instrument panel: neutral materials and color reserved for information. */
 :root {
-  --sidebar: 218px;
+  --sidebar: 0px;
   --bg: #101214;
   --sidebar-bg: #0c0e10;
   --surface: #171a1d;
@@ -25,32 +25,34 @@
   --hover-bg: #20252a;
   --shadow: 0 2px 4px #00000008;
   --scope-bg: #121518;
+  --graph: #4fd18b;
 }
 :root[data-theme="light"] {
-  --bg: #f1f2f3;
-  --sidebar-bg: #fafbfc;
-  --surface: #ffffff;
-  --surface-2: #f6f7f8;
-  --surface-3: #e9edf1;
-  --card-bg: #fff;
-  --field-bg: #fafbfc;
-  --line: #dcdfe3;
-  --line-soft: #e9ebee;
+  --bg: #e3e5e8;
+  --sidebar-bg: #eaecef;
+  --surface: #eef0f2;
+  --surface-2: #e6e8eb;
+  --surface-3: #d9dde2;
+  --card-bg: #eef0f2;
+  --field-bg: #eaecef;
+  --line: #c8cdd3;
+  --line-soft: #d8dce0;
   --text: #22282e;
-  --muted: #616b76;
-  --subtle-text: #69747f;
-  --cyan: #335f9b;
-  --cyan-soft: #eaf0f9;
+  --muted: #545d68;
+  --subtle-text: #5a6470;
+  --cyan: #2f5890;
+  --cyan-soft: #d9e3f0;
   --red: #a94e48;
   --green: #437361;
   --violet: #616b76;
   --amber: #886327;
   --action: #365f9d;
-  --topbar-bg: #f1f2f3ef;
-  --panel-bg: #ffffff;
-  --hover-bg: #edf0f3;
+  --topbar-bg: #e3e5e8ef;
+  --panel-bg: #eef0f2;
+  --hover-bg: #dcdfe3;
   --shadow: 0 2px 4px #26364b04;
-  --scope-bg: #f8fafb;
+  --scope-bg: #e9ebee;
+  --graph: #16803f;
 }
 body { background: var(--bg); font-family: "Manrope", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; -webkit-font-smoothing: antialiased; }
 button, a, input, textarea, select { -webkit-tap-highlight-color: transparent; }
@@ -60,7 +62,9 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--cyan); outline-
 .sidebar { padding: 25px 14px 20px; }
 .brand { padding: 0 7px 24px; font-size: 21px; font-weight: 700; }
 .brand > span:last-child > span { color: var(--text); }
-.brand-mark { background: var(--surface-2); color: var(--cyan); width: 31px; height: 31px; border-radius: 8px; }
+.brand-mark { position: relative; overflow: hidden; flex: none; background: transparent; border: 0; width: 66px; height: 34px; border-radius: 0; }
+.brand-logo-image { position: absolute; left: -3px; top: -22px; width: 72px; height: 72px; max-width: none; filter: contrast(.55) brightness(1.3); }
+:root[data-theme="light"] .brand-logo-image { filter: none; }
 .project-switcher { width: 100%; cursor: pointer; text-align: left; border-radius: 8px; padding: 10px 7px; gap: 6px; margin-bottom: 25px; }
 .project-switcher small { text-transform: none; letter-spacing: 0; font-size: 10px; }
 .project-switcher strong { font-size: 11px; }
@@ -160,15 +164,6 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--cyan); outline-
 .bench-stats small { display: block; font: 10px/1.5 "Manrope", sans-serif; color: var(--muted); letter-spacing: 0; margin-top: 6px; }
 .bench-stats > div:last-child strong { font-family: inherit; font-size: 16px; letter-spacing: -.3px; }
 .bench-stats .stat-attention svg { color: var(--red); }
-.bench-upload { display: flex; align-items: center; gap: 20px; background: var(--surface); border: 1px solid var(--line); border-radius: 9px; padding: 24px; }
-.upload-symbol { display: grid; place-items: center; width: 54px; height: 65px; border: 1px solid var(--line); border-radius: 8px; color: var(--cyan); background: var(--surface-2); flex-shrink: 0; }
-.upload-copy { flex: 1; }
-.upload-copy h2 { font-size: 17px; font-weight: 600; letter-spacing: -.4px; margin: 0; }
-.upload-copy p { font-size: 11px; color: var(--muted); line-height: 1.65; margin: 7px 0 13px; }
-.upload-copy .primary { font-size: 11px; min-height: 32px; padding: 7px 11px; }
-.upload-formats { display: flex; flex-direction: column; gap: 11px; border-left: 1px solid var(--line); padding-left: 21px; }
-.upload-formats > span:not(.bench-label) { display: flex; gap: 7px; align-items: center; font-size: 10px; color: var(--muted); }
-.upload-formats small { font-size: 9px; color: var(--subtle-text); max-width: 150px; line-height: 1.6; }
 .bench-panel { background: var(--surface); border: 1px solid var(--line); border-radius: 9px; overflow: hidden; }
 .bench-panel-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 20px 22px 17px; }
 .bench-panel-head h2 { margin: 4px 0 0; font-weight: 600; font-size: 14px; letter-spacing: -.2px; }
@@ -248,11 +243,12 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--cyan); outline-
 .bench-empty h3 { font-size: 15px; font-weight: 500; color: var(--text); }
 .bench-empty p { font-size: 12px; line-height: 1.7; }
 
+
+
 @media (min-width: 1500px) { .workbench-content { padding: 30px 35px 50px; } .bench-welcome { min-height: 260px; } .welcome-copy { padding: 32px; } }
 @media (max-width: 1250px) {
   .workbench { grid-template-columns: minmax(0, 1.65fr) minmax(285px, 1fr); gap: 14px; }
   .content { padding-left: 20px; padding-right: 20px; }
-  .upload-formats { display: none; }
   .bench-stats > div { padding: 0 11px; gap: 8px; }
   .bench-stats svg { display: none; }
   .welcome-caption { display: none; }
@@ -263,7 +259,6 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--cyan); outline-
   .workbench-rail { display: grid; grid-template-columns: 1fr 1fr; }
   .bench-analysis { grid-row: span 2; }
   .bench-safety { grid-column: 1 / -1; }
-  .upload-formats { display: flex; }
   .diagnosis-layout, .profile-grid, .guided-grid, .history-layout, .computer-columns { grid-template-columns: 1fr; }
 }
 @media (max-width: 800px) {
@@ -284,10 +279,6 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--cyan); outline-
   .welcome-copy h1 { font-size: 32px; }
   .welcome-photo { opacity: .65; background-position: center, 65% center; }
   .welcome-foot { font-size: 8px; }
-  .upload-formats { display: none; }
-  .bench-upload { padding: 21px; gap: 16px; }
-  .upload-symbol { width: 42px; height: 54px; }
-  .upload-copy h2 { font-size: 15px; }
   .bench-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); padding: 4px 15px; }
   .bench-stats > div { padding: 14px 8px; }
   .bench-stats > div:nth-child(2) { border-right: 0; }

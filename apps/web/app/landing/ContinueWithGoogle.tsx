@@ -14,13 +14,13 @@ export function ContinueWithGoogle({ className }: { className?: string }) {
 
   if (!AUTH_ENABLED) {
     return (
-      <Link href="/app" className={className} title="Google sign-in isn't configured on this deployment yet — see design/design.md for setup.">
+      <Link href="/dashboard" className={className} title="Google sign-in isn't configured on this deployment yet — see design/design.md for setup.">
         {content}
       </Link>
     );
   }
 
   return (
-    <button className={className} type="button" onClick={() => signIn("google", { callbackUrl: "/app" })}>{content}</button>
+    <button className={className} type="button" onClick={() => signIn("google", { callbackUrl: "/dashboard" })}>{content}</button>
   );
 }

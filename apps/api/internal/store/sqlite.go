@@ -91,6 +91,20 @@ func (store *SQLiteStore) migrate() error {
 		);
 		CREATE INDEX IF NOT EXISTS idx_measurements_profile_captured
 			ON measurement_windows(profile_id, captured_at_ms DESC, id DESC);
+		CREATE INDEX IF NOT EXISTS idx_measurements_profile_ingested
+			ON measurement_windows(profile_id, ingested_at_ms DESC, id DESC);
+		CREATE TABLE IF NOT EXISTS known_good_baselines (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			profile_id TEXT NOT NULL,
+			measurement_id INTEGER NOT NULL UNIQUE,
+			source_kind TEXT NOT NULL,
+			device_id TEXT NOT NULL,
+			payload TEXT NOT NULL,
+			saved_at_ms INTEGER NOT NULL,
+			FOREIGN KEY(measurement_id) REFERENCES measurement_windows(id)
+		);
+		CREATE INDEX IF NOT EXISTS idx_known_good_profile_source
+			ON known_good_baselines(profile_id, source_kind, device_id, saved_at_ms DESC, id DESC);
 		CREATE TABLE IF NOT EXISTS test_workflows (
 			id TEXT PRIMARY KEY,
 			profile_id TEXT NOT NULL,
@@ -168,24 +182,46 @@ func (store *SQLiteStore) SaveMeasurement(window domain.MeasurementWindow) (doma
 		INSERT INTO measurement_windows
 			(profile_id, source, device_id, sequence, captured_at_ms, ingested_at_ms, raw_payload, analysis_payload)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-		ON CONFLICT(source, device_id, sequence, captured_at_ms) DO UPDATE SET
-			profile_id = excluded.profile_id,
-			ingested_at_ms = excluded.ingested_at_ms,
-			raw_payload = excluded.raw_payload,
-			analysis_payload = excluded.analysis_payload
+		ON CONFLICT(source, device_id, sequence, captured_at_ms) DO NOTHING
 	`, window.ProfileID, window.Source, window.DeviceID, window.Sequence, window.CapturedAtMS, window.IngestedAtMS, string(rawPayload), string(analysisPayload))
 	if err != nil {
 		return domain.MeasurementWindow{}, err
 	}
-	id, err := result.LastInsertId()
-	if err != nil || id == 0 {
-		err = store.db.QueryRow(`
+	inserted, err := result.RowsAffected()
+	if err != nil {
+		return domain.MeasurementWindow{}, err
+	}
+	if inserted == 0 {
+		var existingID int64
+		if err := store.db.QueryRow(`
 			SELECT id FROM measurement_windows
 			WHERE source = ? AND device_id = ? AND sequence = ? AND captured_at_ms = ?
-		`, window.Source, window.DeviceID, window.Sequence, window.CapturedAtMS).Scan(&id)
+		`, window.Source, window.DeviceID, window.Sequence, window.CapturedAtMS).Scan(&existingID); err != nil {
+			return domain.MeasurementWindow{}, err
+		}
+		existing, err := store.GetMeasurement(existingID)
 		if err != nil {
 			return domain.MeasurementWindow{}, err
 		}
+		if existing == nil {
+			return domain.MeasurementWindow{}, errors.New("measurement identity disappeared during duplicate lookup")
+		}
+		originalRaw, err := json.Marshal(existing.Raw)
+		if err != nil {
+			return domain.MeasurementWindow{}, err
+		}
+		originalAnalysis, err := json.Marshal(existing.Analysis)
+		if err != nil {
+			return domain.MeasurementWindow{}, err
+		}
+		if string(originalRaw) != string(rawPayload) || string(originalAnalysis) != string(analysisPayload) || existing.ProfileID != window.ProfileID {
+			return domain.MeasurementWindow{}, errors.New("telemetry identity collision: raw or derived evidence differs from an immutable stored measurement")
+		}
+		return *existing, nil
+	}
+	id, err := result.LastInsertId()
+	if err != nil {
+		return domain.MeasurementWindow{}, err
 	}
 	window.ID = id
 	return window, nil
@@ -198,7 +234,7 @@ func (store *SQLiteStore) ListMeasurements(profileID string, limit int) ([]domai
 	rows, err := store.db.Query(`
 		SELECT id, profile_id, source, device_id, sequence, captured_at_ms, ingested_at_ms, raw_payload, analysis_payload
 		FROM measurement_windows WHERE profile_id = ?
-		ORDER BY captured_at_ms DESC, id DESC LIMIT ?
+		ORDER BY ingested_at_ms DESC, id DESC LIMIT ?
 	`, profileID, limit)
 	if err != nil {
 		return nil, err
@@ -359,6 +395,24 @@ func (store *SQLiteStore) SaveProject(project domain.Project) error {
 	return err
 }
 
+// SetProjectVisibility updates only the visibility field, in one statement.
+// Reading the whole payload and writing it back would let a concurrent
+// SaveProject land in between and be overwritten by the stale copy.
+func (store *SQLiteStore) SetProjectVisibility(id string, visibility domain.ProjectVisibility) error {
+	result, err := store.db.Exec("UPDATE projects SET payload = json_set(payload, '$.visibility', ?) WHERE id = ?", string(visibility), id)
+	if err != nil {
+		return err
+	}
+	affected, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if affected == 0 {
+		return sql.ErrNoRows
+	}
+	return nil
+}
+
 func (store *SQLiteStore) GetProject(id string) (*domain.Project, error) {
 	var payload string
 	err := store.db.QueryRow("SELECT payload FROM projects WHERE id = ?", id).Scan(&payload)
@@ -372,6 +426,7 @@ func (store *SQLiteStore) GetProject(id string) (*domain.Project, error) {
 	if err := json.Unmarshal([]byte(payload), &project); err != nil {
 		return nil, err
 	}
+	defaultVisibility(&project)
 	return &project, nil
 }
 
@@ -391,9 +446,18 @@ func (store *SQLiteStore) ListProjects() ([]domain.Project, error) {
 		if err := json.Unmarshal([]byte(payload), &project); err != nil {
 			return nil, err
 		}
+		defaultVisibility(&project)
 		projects = append(projects, project)
 	}
 	return projects, rows.Err()
+}
+
+// Projects stored before visibility existed have no value; treat them as
+// private, the safe default.
+func defaultVisibility(project *domain.Project) {
+	if project.Visibility == "" {
+		project.Visibility = domain.VisibilityPrivate
+	}
 }
 
 func (store *SQLiteStore) Close() error { return store.db.Close() }

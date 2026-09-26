@@ -25,12 +25,14 @@ interface AppState {
   showNewProject: boolean;
   setShowNewProject: (value: boolean) => void;
   currentProjectID: string;
+  /** False until the first API session request settles; before that, `session` is only the local fixture. */
+  sessionReady: boolean;
 
   runTestAction: (action: "plan" | "start" | "capture" | "remeasure" | "cancel") => Promise<void>;
   runOriginalDemo: (action: "wiggle" | "repair" | "reset") => Promise<void>;
   recordUserAction: (description: string) => Promise<void>;
   runScenario: () => Promise<void>;
-  loadProject: (id: string) => Promise<void>;
+  loadProject: (id: string) => Promise<"ready" | "missing">;
   completeProjectAnalysis: (result: AnalyzeProjectResponse) => void;
   loadDemoProject: () => Promise<void>;
   saveProfile: (nextProfile: ProjectProfile) => Promise<ProjectProfile>;
@@ -62,12 +64,14 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
   const [workflow, setWorkflow] = useState<DiagnosticWorkflow | null>(null);
   const [testError, setTestError] = useState<string | null>(null);
   const [legacyVerify, setLegacyVerify] = useState(false);
+  const [sessionReady, setSessionReady] = useState(false);
 
   const currentProjectID = project?.id ?? DEMO_PROJECT_ID;
 
   useEffect(() => {
     demoApi.load().then((remote) => {
       if (remote) { setSession(remote); setSource("api"); }
+      setSessionReady(true);
     });
     demoApi.profile().then(setProfile).catch(() => undefined);
     demoApi.scenarios().then((result) => {
@@ -179,14 +183,17 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
     }
   }, [selectedScenario, scenarios]);
 
-  const loadProject = useCallback(async (id: string) => {
+  const loadProject = useCallback(async (id: string): Promise<"ready" | "missing"> => {
     if (id === DEMO_PROJECT_ID) {
-      if (!project) return;
-      setProject(null);
-      setProbePlan(null);
-      return;
+      if (project) {
+        setProject(null);
+        setProbePlan(null);
+        setProfile(makeDemoProfile());
+        demoApi.profile().then(setProfile).catch(() => undefined);
+      }
+      return "ready";
     }
-    if (project?.id === id) return;
+    if (project?.id === id) return "ready";
     setBusy(true);
     try {
       const freshProject = await projectApi.getProject(id);
@@ -195,8 +202,9 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
       setProfile(freshProfile);
       try { setProbePlan(await projectApi.getProbePlan(id)); } catch { setProbePlan(null); }
       setWorkflow(null);
-    } catch (cause) {
-      setToast(cause instanceof Error ? cause.message : "This project could not be opened.");
+      return "ready";
+    } catch {
+      return "missing";
     } finally {
       setBusy(false);
     }
@@ -257,7 +265,7 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
 
   const value: AppState = {
     session, source, busy, toast, project, profile, probePlan, scenarios, selectedScenario, setSelectedScenario,
-    recommendation, workflow, testError, legacyVerify, showNewProject, setShowNewProject, currentProjectID,
+    recommendation, workflow, testError, legacyVerify, showNewProject, setShowNewProject, currentProjectID, sessionReady,
     runTestAction, runOriginalDemo, recordUserAction, runScenario, loadProject, completeProjectAnalysis,
     loadDemoProject, saveProfile, confirmProfile, confirmConnections,
   };

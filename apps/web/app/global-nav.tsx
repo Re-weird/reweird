@@ -131,7 +131,7 @@ export function GlobalNav() {
   const mode = projectID ? `project:${projectID}` : "global";
 
   return (
-    <header className="sticky top-0 z-40 border-b border-border bg-chrome/95 backdrop-blur supports-[backdrop-filter]:bg-chrome/80">
+    <header data-tw className="sticky top-0 z-40 border-b border-border bg-chrome/95 backdrop-blur supports-[backdrop-filter]:bg-chrome/80">
       <div className="flex h-14 items-center gap-3 px-4 md:px-6">
         <Link href="/" aria-label="ReWeird dashboard" className="grid size-9 place-items-center rounded-lg text-signal transition-colors hover:bg-accent">
           <Waves className="size-[22px]" strokeWidth={1.75} />

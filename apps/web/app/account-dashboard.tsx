@@ -177,7 +177,7 @@ function ActivityRadar() {
 
 export function AccountDashboardView() {
   return (
-    <motion.div variants={stagger} initial="hidden" animate="show" className="mx-auto grid w-full max-w-[1240px] grid-cols-1 gap-10 lg:grid-cols-[250px_minmax(0,1fr)] lg:gap-14">
+    <motion.div data-tw variants={stagger} initial="hidden" animate="show" className="mx-auto grid w-full max-w-[1240px] grid-cols-1 gap-10 lg:grid-cols-[250px_minmax(0,1fr)] lg:gap-14">
       <motion.aside variants={rise} className="flex flex-col gap-6 self-start lg:sticky lg:top-24">
         <div className="relative w-fit">
           <Avatar className="size-24 ring-1 ring-border">

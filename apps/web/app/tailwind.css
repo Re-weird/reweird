@@ -20,6 +20,24 @@
 @custom-variant dark (&:is([data-theme="dark"] *, :root:not([data-theme="light"]) *));
 
 /*
+ * Scoped reset for surfaces built with Tailwind (marked data-tw). Preflight is
+ * off globally so legacy pages keep their look, but without some reset the
+ * browser defaults leak in here: list bullets and 40px indents on ul/ol/dd,
+ * heading and paragraph margins, and native grey button chrome. Base layer
+ * sits above legacy and below utilities, so utilities still win.
+ */
+@layer base {
+  :where([data-tw]) :where(h1, h2, h3, h4, h5, h6, p, ul, ol, dl, dd, figure, blockquote) { margin: 0; }
+  :where([data-tw]) :where(h1, h2, h3, h4, h5, h6) { font-size: inherit; font-weight: inherit; }
+  :where([data-tw]) :where(ul, ol) { padding: 0; list-style: none; }
+  :where([data-tw]) :where(a) { color: inherit; text-decoration: inherit; }
+  :where([data-tw]) :where(button, input, select, textarea) { font: inherit; color: inherit; background-color: transparent; border: 0 solid; padding: 0; margin: 0; }
+  :where([data-tw]) :where(button, [role="button"]) { cursor: pointer; }
+  :where([data-tw]) :where(svg, img) { display: block; }
+  :where([data-tw]) :where(*, ::before, ::after) { box-sizing: border-box; }
+}
+
+/*
  * shadcn/ui semantic color names mapped onto the existing design tokens from
  * workbench.css (the source of truth per design/design.md), so shadcn
  * components follow the same light/dark themes. Deliberately not redefining

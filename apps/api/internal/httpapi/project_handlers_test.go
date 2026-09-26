@@ -406,7 +406,7 @@ func TestFullProjectUnderstandingFlowPersistsAcrossRestart(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	restarted := NewApp(diagnostics.NewEngine(signalanalysis.New()), reopened, simulator.NewUltrasonicSource(), "ultrasonic-demo", ProjectServices{Understanding: projectunderstanding.New(codeanalysis.New(), vision.SkippedAnalyzer{}, catalog), UploadRoot: uploadRoot})
+	restarted := NewApp(diagnostics.NewEngine(signalanalysis.New()), reopened, simulator.NewUltrasonicSource(), "ultrasonic-demo", ProjectServices{Understanding: projectunderstanding.New(codeanalysis.New(), vision.SkippedAnalyzer{}, catalog), UploadRoot: uploadRoot}, false)
 	projectResponse := doJSON(t, restarted, http.MethodGet, "/api/v1/projects/"+project.ID, nil)
 	var persistedProject domain.Project
 	decodeBody(t, projectResponse, &persistedProject)
@@ -485,7 +485,7 @@ func testAppWithVision(t *testing.T, visionAnalyzer vision.Analyzer) (*fiber.App
 		t.Fatal(err)
 	}
 	understanding := projectunderstanding.New(codeanalysis.New(), visionAnalyzer, catalog)
-	return NewApp(diagnostics.NewEngine(signalanalysis.New()), repository, simulator.NewUltrasonicSource(), demo.ID, ProjectServices{Understanding: understanding, UploadRoot: uploadRoot}), repository, databasePath, uploadRoot
+	return NewApp(diagnostics.NewEngine(signalanalysis.New()), repository, simulator.NewUltrasonicSource(), demo.ID, ProjectServices{Understanding: understanding, UploadRoot: uploadRoot}, false), repository, databasePath, uploadRoot
 }
 
 func createTestProject(t *testing.T, app *fiber.App) domain.Project {

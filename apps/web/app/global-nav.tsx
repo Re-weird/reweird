@@ -79,7 +79,7 @@ function AccountMenu({ onLoadDemo }: { onLoadDemo: () => void }) {
               <p className="text-[13px] font-semibold text-foreground">Local session</p>
               <p className="text-xs text-muted-foreground">No user sign-in yet</p>
             </div>
-            <Link href="/" role="menuitem" className={itemClass}><BarChart3 /> Your dashboard</Link>
+            <Link href="/dashboard" role="menuitem" className={itemClass}><BarChart3 /> Your dashboard</Link>
             <Link href="/projects" role="menuitem" className={itemClass}><FolderGit2 /> Your projects</Link>
             <Link href="/settings" role="menuitem" className={itemClass}><Settings /> Settings</Link>
             <div className="my-1 h-px bg-line-soft" />
@@ -101,12 +101,16 @@ export function GlobalNav() {
   const projectName = projectID === DEMO_PROJECT_ID ? "Built-in demo" : project?.id === projectID ? project?.name : undefined;
   const base = projectID ? `/projects/${projectID}` : "";
 
+  // The public landing page (/) and the legacy single-page workbench (/app)
+  // own their own header/chrome; this global nav is only for the routed
+  // dashboard/projects app.
+  if (pathname === "/" || pathname.startsWith("/app")) return null;
 
   return (
     <header data-tw className="sticky top-0 z-40 border-b border-border bg-chrome/95 backdrop-blur supports-[backdrop-filter]:bg-chrome/80">
       <div className="flex h-14 items-center gap-3 px-4 md:px-6">
         {/* Logo from main; crop and dark-mode lift match main's .brand-logo-image. */}
-        <Link href="/" aria-label="ReWeird dashboard" className="relative block h-[34px] w-[66px] shrink-0 overflow-hidden rounded-md transition-opacity hover:opacity-85">
+        <Link href="/dashboard" aria-label="ReWeird dashboard" className="relative block h-[34px] w-[66px] shrink-0 overflow-hidden rounded-md transition-opacity hover:opacity-85">
           <Image src="/images/reweird-logo.png" alt="" width={72} height={72} priority className="absolute top-[-22px] left-[-3px] size-[72px] max-w-none dark:[filter:contrast(.55)_brightness(1.3)]" />
         </Link>
 

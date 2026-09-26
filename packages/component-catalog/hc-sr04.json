@@ -1,0 +1,11 @@
+{
+  "id": "hc-sr04",
+  "name": "HC-SR04 Ultrasonic Distance Sensor",
+  "pins": ["VCC", "TRIG", "ECHO", "GND"],
+  "supply_voltage": { "typical": 5.0, "unit": "V" },
+  "interfaces": ["trigger pulse", "echo pulse"],
+  "notes": [
+    "ECHO level must be made safe for the selected controller input.",
+    "Catalog values are project context and do not replace measured evidence."
+  ]
+}

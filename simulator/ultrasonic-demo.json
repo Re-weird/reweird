@@ -1,0 +1,15 @@
+{
+  "project": "Ultrasonic Distance Sensor",
+  "controller": "ESP32",
+  "sample_rate_hz": 20,
+  "probes": {
+    "P1": { "role": "POWER", "healthy_value": 5.01, "unit": "V" },
+    "P2": { "role": "TRIG", "healthy_value": 40.0, "unit": "kHz" },
+    "P3": { "role": "ECHO", "healthy_value": 28.4, "unit": "pulses/s" }
+  },
+  "states": [
+    "intermittent_echo",
+    "wiggle_correlation",
+    "repaired"
+  ]
+}

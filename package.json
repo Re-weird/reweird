@@ -1,0 +1,17 @@
+{
+  "name": "reweird",
+  "version": "0.1.0",
+  "private": true,
+  "workspaces": [
+    "apps/web",
+    "packages/shared-types"
+  ],
+  "scripts": {
+    "dev": "npm run dev --workspace @reweird/web",
+    "build": "npm run build --workspace @reweird/web",
+    "typecheck": "npm run typecheck --workspace @reweird/web"
+  },
+  "engines": {
+    "node": ">=20.9.0"
+  }
+}

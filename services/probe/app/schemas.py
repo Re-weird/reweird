@@ -93,3 +93,57 @@ class ProbeResponse(BaseModel):
     grounded_evidence_count: int
     unknown_reason: UnknownReason | None = None
     reasoning_notes: list[str] = Field(default_factory=list)
+
+
+# ---------------------------------------------------------------------------
+# Milestone 5: closed-loop diagnostic sessions
+# ---------------------------------------------------------------------------
+
+SessionStatus = Literal["ACTIVE", "DIAGNOSED", "UNKNOWN", "STOPPED"]
+
+
+class DiagnosticStep(BaseModel):
+    """One append-only round of the diagnostic loop.
+
+    `submitted_evidence` is exactly what the caller sent - never mutated.
+    `evaluated_evidence` is that same evidence AFTER Milestone 4's
+    deterministic catalog/specification merge (a no-op copy when no
+    component_id is set) - this is the "deterministic specification/rule
+    state" a reviewer can audit without re-running anything.
+    """
+
+    step_number: int
+    submitted_evidence: StructuredEvidence
+    evaluated_evidence: StructuredEvidence
+    evidence_fingerprint: str
+    result: ProbeResponse
+    created_at_ms: int
+
+
+class DiagnosticSession(BaseModel):
+    session_id: str
+    component_id: str | None = None
+    probe: str
+    role: str
+    status: SessionStatus
+    stop_reason: str | None = None
+    max_steps: int
+    steps: list[DiagnosticStep] = Field(default_factory=list)
+    created_at_ms: int
+    updated_at_ms: int
+
+
+class CreateSessionRequest(BaseModel):
+    evidence: StructuredEvidence
+    component_id: str | None = None
+    max_steps: int | None = None
+
+
+class SubmitEvidenceRequest(BaseModel):
+    evidence: StructuredEvidence
+
+
+class SubmitEvidenceResponse(BaseModel):
+    session: DiagnosticSession
+    duplicate: bool
+    duplicate_of_step: int | None = None

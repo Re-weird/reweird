@@ -100,6 +100,56 @@ tests. Gemini (or `FakeAIProvider`) can only explain/rank an already-computed
 rule result; nothing in `Hypothesis` can mutate a `RuleResult`'s status, so a
 provider cannot override a deterministic finding even if it tries.
 
+## Closed-loop diagnostic sessions (Milestone 5)
+
+`POST /probe` is still a one-shot call. `app/sessions.py` adds an optional,
+**in-memory-only** layer on top of it (no database) that turns repeated
+`run_probe` calls into an auditable diagnostic loop:
+
+    POST /sessions                     create a session from initial evidence
+    POST /sessions/{id}/evidence       submit REAL new StructuredEvidence
+    GET  /sessions/{id}                the complete, ordered step history
+    POST /sessions/{id}/stop           human-initiated termination
+
+Every `DiagnosticStep` is append-only - submitting step 2 never mutates step
+1 - and stores both the caller's raw `submitted_evidence` and the
+post-Milestone-4-merge `evaluated_evidence`, so the deterministic
+specification/rule state behind any hypothesis is always auditable later.
+`component_id` is fixed for the life of a session and Milestone 4's
+catalog/specification evaluation reruns, unchanged, on every step.
+
+**Previous hypotheses are never evidence.** A step's `AI_INTERPRETATION`
+result is never fed back into the next step's `StructuredEvidence`, never
+promoted to `MEASURED`/`DERIVED`/`SPECIFICATION`/`BASELINE`/`SOFTWARE`
+provenance, and never available for a later hypothesis to cite as grounding
+- each step's `ground_evidence()` call only ever sees that step's own
+freshly-submitted facts. `TestPlanner` (unchanged, still not Gemini) still
+decides `recommended_test` - an instruction for what to measure next, never
+a claim that the test already happened.
+
+Two safeguards prevent a session from running forever or faking progress:
+- **A bounded step count** (`max_steps`, default 10): once reached, the
+  session is forced to `STOPPED`/`max_steps_reached` regardless of outcome.
+- **Deterministic duplicate detection**: exact-duplicate evidence (a stable
+  hash of its canonical JSON, checked against every prior step, not just the
+  latest) never appends a new step, changes status, or increases confidence
+  - `POST /sessions/{id}/evidence` returns `duplicate: true` and the step
+  number it matches instead.
+
+Session status is deliberately conservative and independent of how
+confident any hypothesis sounds: `DIAGNOSED` only when the outcome is
+grounded *and* every rule for that step passed (the genuine no-fault case);
+a real fail/warn rule keeps the session `ACTIVE` even though PROBE's
+per-call `outcome` already says `DIAGNOSED`, because a meaningful next test
+still exists. `UNKNOWN` means the provider/evidence couldn't support a safe
+conclusion this round; `STOPPED` means a human or the step limit ended it -
+once `STOPPED`, new evidence is rejected (`409`) but history is never
+deleted.
+
+Storage is a small `SessionStore` protocol (`app/sessions.py`) behind a
+plain in-process `InMemorySessionStore` - deterministic, dependency-free,
+and swappable later without touching the API layer.
+
 ## Run
 
     uv sync
@@ -122,3 +172,13 @@ opt-in live test exists outside the default suite, in `live_tests/`:
       -H "content-type: application/json" \
       -d "{\"evidence\": $(cat fixtures/hc_sr04_voltage_outside_spec.json), \"component_id\": \"hc-sr04\"}" \
       | python -m json.tool
+
+    # Closed-loop session:
+    SESSION=$(curl -s -X POST http://localhost:8091/sessions \
+      -H "content-type: application/json" \
+      -d "{\"evidence\": $(cat fixtures/hc_sr04_not_evaluable.json), \"component_id\": \"hc-sr04\"}")
+    SESSION_ID=$(echo "$SESSION" | python -c "import sys,json;print(json.load(sys.stdin)['session_id'])")
+    curl -s -X POST "http://localhost:8091/sessions/$SESSION_ID/evidence" \
+      -H "content-type: application/json" \
+      -d "{\"evidence\": $(cat fixtures/hc_sr04_missing_echo_activity.json)}" | python -m json.tool
+    curl -s "http://localhost:8091/sessions/$SESSION_ID" | python -m json.tool

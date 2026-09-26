@@ -65,4 +65,10 @@ class TestPlanner:
                 f"Re-capture a trusted baseline for {role} and compare deviation after "
                 "eliminating other causes."
             )
+        if ("specification-not-evaluable", "warn") in ids_by_status:
+            return (
+                f"Capture the specific measurement needed to evaluate {role}'s pending "
+                f"catalog specification on {probe} (e.g. activity count or pulse width), "
+                "then resubmit evidence."
+            )
         return "Continue monitoring during normal operation; no further test indicated."

@@ -52,6 +52,9 @@ signal returns to its healthy baseline.
 - Project Profile, Live Diagnostics, Diagnosis, Verify, and Reports views
 - An interactive circuit map derived from each profile's components and
   connections; matching probe captures may overlay activity and per-probe checks
+- User-confirmed Known Good captures linked to persisted measurement windows,
+  and a Device Passport combining profile, map, source-labeled baselines,
+  diagnostic history, verified outcomes, and concrete current status
 - Deterministic checks for stable power, expected activity, dropouts, and
   movement correlation
 - Structured evidence that keeps measured values, rules, and interpretation
@@ -74,7 +77,7 @@ signal returns to its healthy baseline.
 
 | Category | Current state |
 | --- | --- |
-| Working now | Project input and server-controlled confirmation, static code analysis, SQLite storage, generic signal analysis, guided tests, VERIFY, history, deterministic reports |
+| Working now | Project input and server-controlled confirmation, static code analysis, SQLite storage, generic signal analysis, user-confirmed source-labeled baselines, Device Passport, guided tests, VERIFY, history, deterministic reports |
 | Simulated | Raw P1–P6 electrical scenarios, repair/verification demonstration, eight computer fault scenarios |
 | Optional | Gemini **Vision** for project photos and Gemini PROBE interpretation when configured; read-only Windows computer snapshot after opt-in; explicitly approved report Git commit/push after opt-in |
 | Not yet hardware-validated | ESP32 firmware and USB serial ingestion compile but need electrical calibration and bench testing |
@@ -202,6 +205,21 @@ intended connections and exact generated probe assignments; it only shows
 measurement status for a matching, stored capture. It does not establish that
 the physical wiring matches the profile.
 
+The **Device Passport** lets a local operator select a stored healthy capture
+and explicitly save it as Known Good. The backend checks the confirmed profile,
+probe assignment, raw/derived capture identity, and required signal stability.
+Serial captures become physical baselines only after the project's probe plan
+was confirmed; simulator captures remain labeled simulated and are never used
+for physical comparison. The confirmed profile is unchanged: baseline records
+are separate, immutable SQLite records linked to measurement windows. A later
+matching capture can show **Healthy**, **Deviation detected**, or **Needs
+verification**; simulated comparisons use explicitly simulated labels. These
+labels are comparisons, not physical certification or a numerical health score.
+The ESP32 currently has no wall clock; the Passport uses backend ingestion time
+when the device capture timestamp is unknown.
+The API currently records `local_user_reported`, not an authenticated human
+identity, so keep the stack local/trusted-network only.
+
 ### Real ESP32 over USB serial
 
 The firmware is a PlatformIO project under `firmware/esp32`. Read its safety
@@ -287,6 +305,8 @@ replace simulation without a UI rewrite.
 | `GET` | `/api/v1/profiles/:id` | One Project Profile |
 | `POST` | `/api/v1/profiles` | Validate and create a standalone draft profile only |
 | `PUT` | `/api/v1/profiles/:id` | Update a standalone draft; cannot change project-backed or confirmed profiles |
+| `GET` | `/api/v1/profiles/:id/passport` | Read the aggregated Device Passport and concrete status |
+| `POST` | `/api/v1/profiles/:id/known-good` | Save one stored, user-confirmed healthy capture as a source-labeled baseline |
 | `POST` | `/api/v1/projects` | Create a persisted project shell |
 | `GET` | `/api/v1/projects` | List persisted projects |
 | `GET` | `/api/v1/projects/:id` | Read a project and its input/analysis metadata |
@@ -352,6 +372,10 @@ See [docs/security.md](docs/security.md) for the full trust-boundary checklist.
 
 - Firmware and serial ingestion are implemented and compile, but were not flashed
   or electrically bench-tested because no physical board was available.
+- Passport status describes the **last stored capture**, not continuously
+  certified device health. ESP32 reboot identity and clock synchronization
+  still need bench validation; a conflicting reused telemetry identity is
+  rejected rather than overwriting an existing measurement.
 - USB serial is the only real transport; Wi-Fi, WebSocket, and MQTT adapters are
   not implemented.
 - PROBE diagnostic interpretation runs in `services/probe` when

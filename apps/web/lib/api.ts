@@ -4,9 +4,11 @@ import type {
   DemoSession,
   DiagnosticWorkflow,
   DetailedReport,
+  DevicePassport,
   HistoryDetail,
   HistoryStatus,
   HistorySummary,
+  KnownGoodBaseline,
   MeasurementWindow,
   ProbePlan,
   Project,
@@ -87,6 +89,14 @@ export const demoApi = {
     url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
     return url.toString();
   },
+};
+
+export const passportApi = {
+  get: (profileID: string) => requestJSON<DevicePassport>(`/api/v1/profiles/${encodeURIComponent(profileID)}/passport`),
+  saveKnownGood: (profileID: string, measurementID: number, note: string) => requestJSON<KnownGoodBaseline>(
+    `/api/v1/profiles/${encodeURIComponent(profileID)}/known-good`,
+    { method: "POST", body: JSON.stringify({ measurement_id: measurementID, confirm_healthy: true, note }) },
+  ),
 };
 
 export interface CreateProjectInput {

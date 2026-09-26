@@ -90,6 +90,24 @@ and analysis IDs match the displayed confirmed profile (and whose non-demo
 project probe plan has been marked connected). This is an observation, not
 visual wiring verification or a component-health verdict.
 
+Known Good records are immutable references to persisted measurement windows.
+The server derives PHYSICAL versus SIMULATED from the stored telemetry source,
+checks profile/device/raw/analysis identity and required probe stability, and
+requires an explicit local user healthy report. It never accepts a client-
+claimed source or converts simulator evidence into a physical baseline. Physical
+records additionally require a confirmed project probe plan. Baselines are
+applied to a copy of the confirmed profile only for the same source and device
+at analysis time, preserving the confirmed profile. The Device Passport joins
+this record with the profile/map, recent captures, guided diagnostic history,
+and source-labeled resolved VERIFY outcomes following user-reported actions. Its status uses
+measured deviation/verification labels, not a fabricated health percentage.
+Because ESP32 frames currently have no trusted wall clock, measurement order
+and display time use the backend's persisted ingestion time where needed.
+Repeated identical frames reuse their immutable measurement row; a reused
+source/device/sequence/time identity with different raw or derived evidence is rejected
+instead of mutating baseline evidence. Device boot identity remains a hardware
+validation task.
+
 ## Trust boundaries
 
 Device telemetry is untrusted until validated against both the telemetry schema

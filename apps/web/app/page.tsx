@@ -14,6 +14,7 @@ import {
   CircleDot,
   Cpu,
   FileBarChart,
+  Fingerprint,
   LayoutDashboard,
   Menu,
   Microscope,
@@ -48,14 +49,16 @@ import { HistoryReportView } from "./history-report";
 import { ComputerDiagnosticsView } from "./computer-diagnostics";
 import { SettingsStatusView } from "./settings-status";
 import { Workbench } from "./workbench";
+import { DevicePassportView } from "./device-passport";
 
-type View = "dashboard" | "profile" | "connect" | "simulator" | "live" | "diagnosis" | "guided" | "verify" | "history" | "reports" | "computer" | "settings";
+type View = "dashboard" | "profile" | "connect" | "passport" | "simulator" | "live" | "diagnosis" | "guided" | "verify" | "history" | "reports" | "computer" | "settings";
 type Theme = "light" | "dark";
 
 const nav: { id: View; label: string; icon: typeof Activity; group: "Workspace" | "Diagnostic flow" | "Records" }[] = [
   { id: "dashboard", label: "Workbench", icon: LayoutDashboard, group: "Workspace" },
   { id: "profile", label: "Project overview", icon: Box, group: "Workspace" },
   { id: "connect", label: "Probe setup", icon: Cable, group: "Workspace" },
+  { id: "passport", label: "Device passport", icon: Fingerprint, group: "Workspace" },
   { id: "simulator", label: "Simulator", icon: TestTube2, group: "Diagnostic flow" },
   { id: "live", label: "Live signals", icon: Activity, group: "Diagnostic flow" },
   { id: "diagnosis", label: "Diagnosis", icon: Microscope, group: "Diagnostic flow" },
@@ -259,11 +262,11 @@ function AppShell({
 }
 
 
-function LiveView({ session }: { session: DemoSession }) {
+function LiveView({ session, onPassport }: { session: DemoSession; onPassport: () => void }) {
   const charted = session.probes.filter((probe) => probe.samples?.length).slice(0, 2);
   return (
     <>
-      <section className="page-heading"><div><p className="kicker">Session {session.id}</p><h1>Live diagnostics</h1><p>{session.telemetry_mode === "serial" ? "ESP32 serial" : "Simulator"} telemetry is normalized through the same contract used by every transport.</p></div><div className="live-badge"><span /> {session.telemetry_mode === "serial" ? "SERIAL" : "SIMULATED"} · {session.raw_telemetry ? `${(1000 / session.raw_telemetry.window_ms).toFixed(2)} Hz` : "No raw frame"}</div></section>
+      <section className="page-heading"><div><p className="kicker">Session {session.id}</p><h1>Live diagnostics</h1><p>{session.telemetry_mode === "serial" ? "ESP32 serial" : "Simulator"} telemetry is normalized through the same contract used by every transport.</p></div><div className="heading-actions"><div className="live-badge"><span /> {session.telemetry_mode === "serial" ? "SERIAL" : "SIMULATED"} · {session.raw_telemetry ? `${(1000 / session.raw_telemetry.window_ms).toFixed(2)} Hz` : "No raw frame"}</div><button className="secondary" onClick={onPassport}><Fingerprint size={15} /> Device passport</button></div></section>
       <section className="probe-grid">{session.probes.map((probe) => <ProbeCard reading={probe} key={probe.probe} />)}</section>
       <section className="two-column wide-left">
         <div className="panel"><div className="panel-heading"><div><span className="eyebrow">Raw activity buckets</span><h2>Signal activity</h2></div><div className="chart-legend">{charted.map((probe) => <span key={probe.probe}>{probe.probe} {probe.role}</span>)}</div></div><SignalChart session={session} /></div>
@@ -594,11 +597,12 @@ export default function Home() {
   const view = useMemo(() => {
     if (active === "dashboard") return <Workbench session={session} project={project} profile={profile} source={source} onNavigate={setActive} onUpload={() => setShowNewProject(true)} />;
     if (active === "profile") return <ProjectProfileView project={project} profile={profile} plan={probePlan ?? project?.probe_plan ?? null} session={session} onSave={saveProfile} onConfirm={confirmProfile} onNavigate={setActive} />;
+    if (active === "passport") return <DevicePassportView key={profile?.id ?? "none"} profile={profile} project={project} plan={probePlan ?? project?.probe_plan ?? null} session={session} onNavigate={setActive} />;
     if (active === "connect") return project ? <ProbePlanView project={project} plan={probePlan ?? project?.probe_plan ?? null} onConnected={confirmConnections} /> : <DemoProbePlanView plan={probePlan} onContinue={() => setActive("simulator")} />;
     if (active === "simulator") return <SimulatorView session={session} scenarios={scenarios} selected={selectedScenario} setSelected={setSelectedScenario} onRun={runScenario} onPlan={() => runTestAction("plan")} onDemoTest={() => runOriginalDemo("wiggle")} onDemoRepair={() => runOriginalDemo("repair")} busy={busy} />;
     if (active === "live") {
       if (project && session.profile_id !== profile?.id) return <ProjectLivePending project={project} profile={profile} plan={probePlan} />;
-      return <LiveView session={session} />;
+      return <LiveView session={session} onPassport={() => setActive("passport")} />;
     }
     if (active === "diagnosis") return project && session.profile_id !== profile?.id
       ? <ProjectLivePending project={project} profile={profile} plan={probePlan} />

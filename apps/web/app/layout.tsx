@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 import "./workbench.css";
 import "./circuit-map.css";
+import "./device-passport.css";
 
 export const metadata: Metadata = {
   title: "ReWeird — Hardware Diagnostics",

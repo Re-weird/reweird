@@ -15,6 +15,7 @@ import (
 	"github.com/gofiber/fiber/v2/middleware/logger"
 	"github.com/re-weird/reweird/apps/api/internal/diagnostics"
 	"github.com/re-weird/reweird/apps/api/internal/domain"
+	"github.com/re-weird/reweird/apps/api/internal/passport"
 	"github.com/re-weird/reweird/apps/api/internal/profiles"
 	"github.com/re-weird/reweird/apps/api/internal/projectunderstanding"
 	"github.com/re-weird/reweird/apps/api/internal/reports"
@@ -112,6 +113,8 @@ func NewApp(engine *diagnostics.Engine, repository domain.Repository, source dom
 	api.Post("/projects/:id/profile/confirm", controller.confirmProjectProfile)
 	api.Get("/projects/:id/probe-plan", controller.getProbePlan)
 	api.Post("/projects/:id/probe-plan/confirm", controller.confirmProbePlan)
+	api.Get("/profiles/:id/passport", controller.devicePassport)
+	api.Post("/profiles/:id/known-good", controller.saveKnownGood)
 
 	// Compatibility routes preserve the original dashboard and hackathon demo.
 	api.Get("/demo/session", controller.current)
@@ -235,7 +238,11 @@ func (controller *Controller) analyzeAt(ctx context.Context, stage domain.Stage,
 	if err != nil {
 		return domain.Session{}, err
 	}
-	session, err := controller.engine.AnalyzeEnvelope(ctx, *profile, stage, controller.source.Name(), envelope, reference)
+	currentProfile, err := controller.profileWithKnownGood(*profile, envelope)
+	if err != nil {
+		return domain.Session{}, err
+	}
+	session, err := controller.engine.AnalyzeEnvelope(ctx, currentProfile, stage, controller.source.Name(), envelope, reference)
 	if err != nil {
 		return domain.Session{}, err
 	}
@@ -254,6 +261,22 @@ func (controller *Controller) analyzeAt(ctx context.Context, stage domain.Stage,
 		session.MeasurementID = stored.ID
 	}
 	return session, nil
+}
+
+func (controller *Controller) profileWithKnownGood(profile domain.ProjectProfile, envelope domain.TelemetryEnvelope) (domain.ProjectProfile, error) {
+	source, ok := passport.SourceKind(controller.source.Name())
+	if !ok {
+		return profile, nil
+	}
+	var baseline *domain.KnownGoodBaseline
+	if repository, ok := controller.repository.(domain.PassportRepository); ok && envelope.ProfileID == profile.ID {
+		stored, err := repository.LatestKnownGood(profile.ID, source, envelope.DeviceID)
+		if err != nil {
+			return domain.ProjectProfile{}, err
+		}
+		baseline = stored
+	}
+	return passport.ApplyKnownGood(profile, source, baseline), nil
 }
 
 func (controller *Controller) telemetryStatus(ctx *fiber.Ctx) error {

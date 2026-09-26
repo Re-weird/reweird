@@ -85,21 +85,34 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--cyan); outline-
 .secondary { background: transparent; }
 .text-button { font-size: 11px; font-weight: 500; }
 .icon-button { border-radius: 6px; }
-.global-nav { display: flex; align-items: center; gap: 28px; height: 56px; padding: 0 28px; border-bottom: 1px solid var(--line); background: var(--bg); position: sticky; top: 0; z-index: 30; }
-.global-nav-brand { display: flex; align-items: center; gap: 8px; font-weight: 700; font-size: 14px; letter-spacing: -0.2px; color: var(--text); text-decoration: none; }
+.global-header { position: sticky; top: 0; z-index: 30; background: var(--sidebar-bg); border-bottom: 1px solid var(--line); }
+.global-nav { display: flex; align-items: center; gap: 14px; height: 60px; padding: 0 20px; }
+.global-nav-brand { display: flex; align-items: center; justify-content: center; width: 34px; height: 34px; border-radius: 8px; color: var(--text); text-decoration: none; }
+.global-nav-brand:hover { background: var(--hover-bg); }
 .global-nav-brand svg { color: var(--cyan); }
-.global-nav-brand span span { color: var(--cyan); }
-.global-nav-links { display: flex; align-items: center; gap: 4px; flex: 1; }
-.global-nav-links a { display: flex; align-items: center; gap: 6px; height: 56px; padding: 0 4px; border-bottom: 2px solid transparent; color: var(--muted); font-size: 13px; font-weight: 500; text-decoration: none; }
-.global-nav-links a:hover { color: var(--text); }
-.global-nav-links a.active { color: var(--text); border-bottom-color: var(--cyan); font-weight: 600; }
-.global-nav-actions { display: flex; align-items: center; gap: 10px; }
-.project-tabs { display: flex; align-items: center; gap: 4px; padding: 0 28px; height: 46px; border-bottom: 1px solid var(--line); overflow-x: auto; }
-.project-tabs button { display: flex; align-items: center; gap: 7px; height: 100%; padding: 0 4px; border: 0; background: transparent; color: var(--muted); font-size: 12px; font-weight: 500; white-space: nowrap; border-bottom: 2px solid transparent; cursor: pointer; position: relative; }
-.project-tabs button:hover { color: var(--text); }
-.project-tabs button.active { color: var(--text); border-bottom-color: var(--cyan); font-weight: 600; }
-.project-tabs button svg { stroke-width: 1.5; }
-.project-tabs button i { width: 6px; height: 6px; border-radius: 50%; background: var(--cyan); font-style: normal; margin-left: -2px; }
+.global-nav-crumbs { display: flex; align-items: center; gap: 8px; flex: 1; min-width: 0; font-size: 14px; }
+.global-nav-crumbs a { color: var(--muted); text-decoration: none; white-space: nowrap; }
+.global-nav-crumbs a:hover { color: var(--text); text-decoration: underline; }
+.global-nav-crumbs .crumb-sep { color: var(--subtle-text); }
+.global-nav-crumbs .crumb-current { color: var(--text); font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.global-nav-actions { display: flex; align-items: center; gap: 8px; }
+.global-nav-actions .icon-button { width: 32px; height: 32px; display: grid; place-items: center; border: 1px solid var(--line); background: transparent; color: var(--muted); }
+.global-nav-actions .icon-button:hover { color: var(--text); background: var(--hover-bg); }
+.avatar-menu { position: relative; }
+.avatar-button { width: 32px; height: 32px; border-radius: 50%; border: 1px solid var(--line); background: var(--surface-3); color: var(--text); font: 600 11px "DM Mono", monospace; cursor: pointer; }
+.avatar-dropdown { position: absolute; right: 0; top: calc(100% + 8px); min-width: 220px; padding: 6px; background: var(--surface); border: 1px solid var(--line); border-radius: 9px; box-shadow: 0 12px 32px -12px #0008; display: flex; flex-direction: column; z-index: 40; }
+.avatar-dropdown-head { padding: 8px 10px 10px; border-bottom: 1px solid var(--line-soft); margin-bottom: 4px; display: flex; flex-direction: column; gap: 2px; }
+.avatar-dropdown-head strong { font-size: 12px; }
+.avatar-dropdown-head small { font-size: 11px; color: var(--muted); }
+.avatar-dropdown a, .avatar-dropdown button { display: flex; align-items: center; gap: 9px; padding: 8px 10px; border: 0; border-radius: 6px; background: transparent; color: var(--text); font-size: 12px; text-align: left; text-decoration: none; cursor: pointer; }
+.avatar-dropdown a:hover, .avatar-dropdown button:hover { background: var(--hover-bg); }
+.avatar-dropdown svg { color: var(--muted); }
+.project-tabs { display: flex; align-items: center; gap: 2px; padding: 0 16px; height: 44px; overflow-x: auto; }
+.project-tabs a { display: flex; align-items: center; gap: 7px; height: 100%; padding: 0 10px; color: var(--muted); font-size: 13px; font-weight: 500; white-space: nowrap; border-bottom: 2px solid transparent; text-decoration: none; }
+.project-tabs a:hover { color: var(--text); }
+.project-tabs a.active { color: var(--text); border-bottom-color: var(--cyan); font-weight: 600; }
+.project-tabs a svg { stroke-width: 1.5; }
+.project-tabs a i { width: 6px; height: 6px; border-radius: 50%; background: var(--cyan); font-style: normal; }
 .content { width: auto; max-width: 1530px; padding: 32px 28px 48px; }
 .workbench-content { padding-top: 24px; }
 .page-heading h1 { font-size: clamp(26px, 2.5vw, 35px); font-weight: 600; letter-spacing: -1.1px; }

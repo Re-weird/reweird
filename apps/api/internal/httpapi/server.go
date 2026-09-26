@@ -63,14 +63,25 @@ func NewApp(engine *diagnostics.Engine, repository domain.Repository, source dom
 	}
 
 	app.Get("/health", func(ctx *fiber.Ctx) error {
-		return ctx.JSON(fiber.Map{"status": "ok", "service": "reweird-api", "telemetry_mode": source.Name()})
+		return controller.systemStatus(ctx)
 	})
 
 	api := app.Group("/api/v1")
 	api.Get("/session", controller.current)
+	api.Get("/status", controller.systemStatus)
 	api.Get("/report", controller.report)
 	api.Get("/telemetry/status", controller.telemetryStatus)
 	api.Get("/measurements", controller.listMeasurements)
+	api.Get("/computer/status", controller.computerStatus)
+	api.Get("/computer/scenarios", controller.computerScenarios)
+	api.Post("/computer/simulate", controller.computerSimulate)
+	api.Post("/computer/collect", controller.computerCollect)
+	api.Get("/git/status", controller.gitStatus)
+	api.Get("/git/preview/:id", controller.gitPreview)
+	api.Post("/git/commit/:id", controller.gitCommit)
+	api.Get("/history", controller.listHistory)
+	api.Get("/history/:id", controller.historyDetail)
+	api.Get("/reports/:id", controller.detailedReport)
 	api.Get("/tests/recommendation", controller.recommendTest)
 	api.Get("/tests/current", controller.currentTest)
 	api.Post("/tests", controller.createTest)
@@ -79,6 +90,7 @@ func NewApp(engine *diagnostics.Engine, repository domain.Repository, source dom
 	api.Post("/tests/:id/capture", controller.captureTest)
 	api.Post("/tests/:id/remeasure", controller.remeasureTest)
 	api.Post("/tests/:id/cancel", controller.cancelTest)
+	api.Post("/tests/:id/actions", controller.recordTestAction)
 	api.Get("/simulator/scenarios", controller.listSimulatorScenarios)
 	api.Post("/simulator/scenario", controller.selectSimulatorScenario)
 	api.Get("/profiles", controller.listProfiles)
@@ -99,6 +111,7 @@ func NewApp(engine *diagnostics.Engine, repository domain.Repository, source dom
 
 	// Compatibility routes preserve the original dashboard and hackathon demo.
 	api.Get("/demo/session", controller.current)
+	api.Get("/demo/probe-plan", controller.demoProbePlan)
 	api.Post("/demo/reset", controller.transition(domain.StageDiagnose))
 	api.Post("/demo/wiggle", controller.transition(domain.StageTest))
 	api.Post("/demo/repair", controller.transition(domain.StageVerify))

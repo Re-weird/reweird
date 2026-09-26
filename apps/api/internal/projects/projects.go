@@ -16,6 +16,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/re-weird/reweird/apps/api/internal/domain"
+	"github.com/re-weird/reweird/apps/api/internal/limits"
 )
 
 const (
@@ -63,7 +64,7 @@ func SaveImage(uploadRoot, projectID, filename string, reader io.Reader) (*domai
 	if !safeIDPattern.MatchString(projectID) {
 		return nil, errors.New("invalid project id")
 	}
-	payload, err := readLimited(reader, MaxImageBytes)
+	payload, err := readLimited(reader, int64(limits.Bounded("MAX_IMAGE_BYTES", MaxImageBytes, 1024, MaxImageBytes)))
 	if err != nil {
 		return nil, err
 	}
@@ -143,7 +144,7 @@ func ReadCode(filename string, reader io.Reader) (*domain.ProjectCode, error) {
 	if !hasExtension(lower, ".ino", ".cpp", ".h", ".hpp", ".c", ".py", ".txt") {
 		return nil, errors.New("unsupported code file; use .ino, .cpp, .h, .hpp, .c, .py, or .txt")
 	}
-	payload, err := readLimited(reader, MaxCodeBytes)
+	payload, err := readLimited(reader, int64(limits.Bounded("MAX_CODE_BYTES", MaxCodeBytes, 1024, MaxCodeBytes)))
 	if err != nil {
 		return nil, err
 	}

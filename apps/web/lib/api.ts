@@ -3,6 +3,10 @@ import type {
   ConfirmProfileResponse,
   DemoSession,
   DiagnosticWorkflow,
+  DetailedReport,
+  HistoryDetail,
+  HistoryStatus,
+  HistorySummary,
   MeasurementWindow,
   ProbePlan,
   Project,
@@ -68,6 +72,7 @@ export const demoApi = {
   repair: () => demoRequest("/api/v1/demo/repair", { method: "POST" }),
   reset: () => demoRequest("/api/v1/demo/reset", { method: "POST" }),
   profile: () => requestJSON<ProjectProfile>("/api/v1/profiles/ultrasonic-demo"),
+  probePlan: () => requestJSON<ProbePlan>("/api/v1/demo/probe-plan"),
   scenarios: () => requestJSON<SimulatorScenarioList>("/api/v1/simulator/scenarios"),
   selectScenario: (scenarioID: string) => requestJSON<DemoSession>("/api/v1/simulator/scenario", {
     method: "POST",
@@ -121,4 +126,40 @@ export const testApi = {
   capture: (id: string) => requestJSON<DiagnosticWorkflow>(`/api/v1/tests/${encodeURIComponent(id)}/capture`, { method: "POST" }, 15_000),
   remeasure: (id: string) => requestJSON<DiagnosticWorkflow>(`/api/v1/tests/${encodeURIComponent(id)}/remeasure`, { method: "POST" }, 15_000),
   cancel: (id: string) => requestJSON<DiagnosticWorkflow>(`/api/v1/tests/${encodeURIComponent(id)}/cancel`, { method: "POST" }),
+  recordAction: (id: string, description: string) => requestJSON<DiagnosticWorkflow>(`/api/v1/tests/${encodeURIComponent(id)}/actions`, { method: "POST", body: JSON.stringify({ description }) }),
 };
+
+export const historyApi = {
+  list: (filters: { projectID?: string; status?: HistoryStatus | ""; sort?: "newest" | "oldest" } = {}) => {
+    const query = new URLSearchParams({ limit: "100", sort: filters.sort ?? "newest" });
+    if (filters.projectID) query.set("project_id", filters.projectID);
+    if (filters.status) query.set("status", filters.status);
+    return requestJSON<{ items: HistorySummary[]; count: number }>(`/api/v1/history?${query}`);
+  },
+  detail: (id: string) => requestJSON<HistoryDetail>(`/api/v1/history/${encodeURIComponent(id)}`),
+  report: (id: string) => requestJSON<DetailedReport>(`/api/v1/reports/${encodeURIComponent(id)}`),
+  downloadURL: (id: string, format: "json" | "md") => `/api/v1/reports/${encodeURIComponent(id)}?format=${format}&download=1`,
+};
+
+export interface ComputerAnalysis {
+  snapshot: { source: string; timestamp_ms: number; system: { os: string; cpu_percent: number; memory_total_mb: number; memory_used_mb: number }; disks: Array<{ name: string; total_mb: number; used_mb: number }>; processes: Array<{ name: string; pid: number; memory_mb: number }>; ports: Array<{ port: number; pid: number; process?: string }> };
+  expectations: { exclusive_port?: number; expected_service?: string; expected_local_port?: number; required_dependency?: string; expected_version?: string };
+  findings: Array<{ code: string; severity: string; summary: string; next_action: string; evidence: Array<{ name: string; value: unknown; provenance: string }> }>;
+  evidence: { physical_evidence: unknown[]; computer_evidence: unknown[]; software_evidence: unknown[] };
+}
+
+export const computerApi = {
+  status: () => requestJSON<{ real_collection_enabled: boolean; collector: string; simulator_available: boolean; active_operations_enabled: boolean }>("/api/v1/computer/status"),
+  scenarios: () => requestJSON<{ scenarios: Array<{ id: string; name: string; description: string }> }>("/api/v1/computer/scenarios"),
+  simulate: (scenarioID: string) => requestJSON<ComputerAnalysis>("/api/v1/computer/simulate", { method: "POST", body: JSON.stringify({ scenario_id: scenarioID }) }),
+  collect: (expected: ComputerAnalysis["expectations"]) => requestJSON<ComputerAnalysis>("/api/v1/computer/collect", { method: "POST", body: JSON.stringify(expected) }, 30_000),
+};
+
+export interface GitPreview { enabled: boolean; repo_available: boolean; files: Array<{ path: string; bytes: number }>; secret_scan: "clear" | "blocked"; commit_allowed: boolean; push_configured: boolean; detail?: string }
+export const gitApi = {
+  preview: (id: string) => requestJSON<GitPreview>(`/api/v1/git/preview/${encodeURIComponent(id)}`),
+  commit: (id: string, push = false) => requestJSON<{ commit: string; pushed: boolean }>(`/api/v1/git/commit/${encodeURIComponent(id)}`, { method: "POST", body: JSON.stringify({ approve: true, push }) }, 25_000),
+};
+
+export interface SystemStatus { api: string; database: string; telemetry_mode: string; telemetry: string; esp32: boolean; gemini: string; patch: string; git_sync_enabled: boolean; git_repository_configured: boolean; computer_agent: string; report_retention: string; measurement_window_limit: number }
+export const systemApi = { status: () => requestJSON<SystemStatus>("/api/v1/status") };

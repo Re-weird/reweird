@@ -118,7 +118,7 @@ func (controller *Controller) createTest(ctx *fiber.Ctx) error {
 	plan.ID = id
 	now := time.Now().UTC().UnixMilli()
 	workflow := domain.DiagnosticWorkflow{
-		ID: id, SessionID: recommendation.SessionID, ProjectID: profile.ProjectID, ProfileID: profile.ID, ProfileVersion: profile.Version,
+		ID: id, SessionID: recommendation.SessionID, ProjectID: profile.ProjectID, ProfileID: profile.ID, ProfileVersion: profile.Version, ProfileSnapshot: profile,
 		Status: domain.TestPlanned, Plan: plan, CreatedAtMS: now, UpdatedAtMS: now,
 	}
 	if scenario, ok := controller.source.(domain.FaultScenarioSource); ok {

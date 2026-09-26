@@ -104,22 +104,30 @@ type VerificationResult struct {
 
 // DiagnosticWorkflow persists the entire guided test across API restarts.
 type DiagnosticWorkflow struct {
-	ID             string              `json:"id"`
-	SessionID      string              `json:"session_id"`
-	ProjectID      string              `json:"project_id"`
-	ProfileID      string              `json:"profile_id"`
-	ProfileVersion int                 `json:"profile_version"`
-	ScenarioID     string              `json:"scenario_id,omitempty"`
-	Status         TestState           `json:"status"`
-	Plan           TestPlan            `json:"plan"`
-	Baseline       *MeasurementWindow  `json:"baseline,omitempty"`
-	During         *MeasurementWindow  `json:"during,omitempty"`
-	After          *MeasurementWindow  `json:"after,omitempty"`
-	Result         *TestResult         `json:"result,omitempty"`
-	Verification   *VerificationResult `json:"verification,omitempty"`
-	Error          string              `json:"error,omitempty"`
-	CreatedAtMS    int64               `json:"created_at_ms"`
-	UpdatedAtMS    int64               `json:"updated_at_ms"`
+	ID              string              `json:"id"`
+	SessionID       string              `json:"session_id"`
+	ProjectID       string              `json:"project_id"`
+	ProfileID       string              `json:"profile_id"`
+	ProfileVersion  int                 `json:"profile_version"`
+	ProfileSnapshot *ProjectProfile     `json:"profile_snapshot,omitempty"`
+	ScenarioID      string              `json:"scenario_id,omitempty"`
+	Status          TestState           `json:"status"`
+	Plan            TestPlan            `json:"plan"`
+	Baseline        *MeasurementWindow  `json:"baseline,omitempty"`
+	During          *MeasurementWindow  `json:"during,omitempty"`
+	After           *MeasurementWindow  `json:"after,omitempty"`
+	Result          *TestResult         `json:"result,omitempty"`
+	Verification    *VerificationResult `json:"verification,omitempty"`
+	UserActions     []UserAction        `json:"user_actions,omitempty"`
+	Error           string              `json:"error,omitempty"`
+	CreatedAtMS     int64               `json:"created_at_ms"`
+	UpdatedAtMS     int64               `json:"updated_at_ms"`
+}
+
+type UserAction struct {
+	ID          string `json:"id"`
+	Description string `json:"description"`
+	TimestampMS int64  `json:"timestamp_ms"`
 }
 
 type TestWorkflowRepository interface {

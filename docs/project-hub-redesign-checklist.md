@@ -62,8 +62,13 @@ is stable — items get checked off during implementation, not before.
 - [ ] Signup page
 - [ ] Auth state (logged in/out) + redirect-to-login guard on all routes
 - [ ] Logout action
-- [ ] Dashboard rebuilt as project list ("my projects") + "new project"
-  action — replace current `DashboardView` probe-card layout
+- [x] Dashboard rebuilt as project list ("my projects") + "new project"
+  action — `app/project-dashboard.tsx`, added as a "Projects" nav entry
+  next to Workbench (not yet a replacement for Workbench itself — both
+  exist; still no auth to scope the list per-user)
+- [x] Account-level activity dashboard — `app/account-dashboard.tsx`
+  (real stats/heatmap/outcomes from historyApi + projectApi, no
+  fabricated numbers), added next to Settings in `sidebar-bottom`
 - [ ] Basic account settings (at minimum: logout, maybe email display)
 
 ### Restructure existing (already built, move under a project route)

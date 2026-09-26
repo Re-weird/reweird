@@ -24,7 +24,7 @@ func TestAnalyzerDerivesElectricalFacts(t *testing.T) {
 		},
 	}
 	envelope := domain.TelemetryEnvelope{
-		SchemaVersion: 1, DeviceID: "analysis-device", WindowMS: 1000,
+		SchemaVersion: 2, DeviceID: "analysis-device", ProfileID: "analysis-test", WindowMS: 1000,
 		Samples: []domain.TelemetrySample{
 			{Probe: "P1", Mode: domain.ProbeModeAnalog, AnalogMV: []float64{2490, 2500, 2510}},
 			{Probe: "P2", Mode: domain.ProbeModePulse, EdgeCount: 2000, RisingEdges: 1000, FallingEdges: 1000, PeriodsUS: []float64{990, 1000, 1010}, HighPulseWidthsUS: []float64{490, 500, 510}},
@@ -52,6 +52,9 @@ func TestAnalyzerDerivesElectricalFacts(t *testing.T) {
 	if pwm.JitterUS == nil || *pwm.JitterUS <= 0 {
 		t.Fatalf("jitter = %v, want positive", pwm.JitterUS)
 	}
+	if pwm.AveragePulseWidthUS == nil || math.Abs(*pwm.AveragePulseWidthUS-500) > 0.01 {
+		t.Fatalf("average pulse width = %v, want 500 us", pwm.AveragePulseWidthUS)
+	}
 }
 
 func TestAnalyzerFindsSimultaneousFailureBuckets(t *testing.T) {
@@ -64,7 +67,7 @@ func TestAnalyzerFindsSimultaneousFailureBuckets(t *testing.T) {
 	}
 	profile := domain.ProjectProfile{ID: "shared-failure", ProjectName: "Shared", Controller: "ESP32", LogicVoltage: 3.3, Confirmed: true, Probes: []domain.ProbeConfiguration{configuration("P2"), configuration("P3")}}
 	envelope := domain.TelemetryEnvelope{
-		SchemaVersion: 1, DeviceID: "analysis-device", WindowMS: 1000,
+		SchemaVersion: 2, DeviceID: "analysis-device", ProfileID: "shared-failure", WindowMS: 1000,
 		Samples: []domain.TelemetrySample{
 			{Probe: "P2", Mode: domain.ProbeModePulse, EdgeCount: 6, RisingEdges: 3, FallingEdges: 3, ActivityCounts: []float64{1, 0, 1}},
 			{Probe: "P3", Mode: domain.ProbeModePulse, EdgeCount: 6, RisingEdges: 3, FallingEdges: 3, ActivityCounts: []float64{1, 0, 1}},

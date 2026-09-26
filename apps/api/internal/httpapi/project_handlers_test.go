@@ -284,6 +284,45 @@ func testApp(t *testing.T) (*fiber.App, *store.SQLiteStore) {
 	return app, repository
 }
 
+func TestSimulatorScenarioAPIStoresRawAndDerivedWindow(t *testing.T) {
+	app, _ := testApp(t)
+	listResponse := doJSON(t, app, http.MethodGet, "/api/v1/simulator/scenarios", nil)
+	if listResponse.StatusCode != http.StatusOK {
+		t.Fatalf("scenario list status = %d body=%s", listResponse.StatusCode, readBody(t, listResponse))
+	}
+	var available struct {
+		Active    string                     `json:"active"`
+		Scenarios []domain.SimulatorScenario `json:"scenarios"`
+	}
+	decodeBody(t, listResponse, &available)
+	if len(available.Scenarios) != 9 {
+		t.Fatalf("scenarios = %d, want 9", len(available.Scenarios))
+	}
+
+	runResponse := doJSON(t, app, http.MethodPost, "/api/v1/simulator/scenario", map[string]any{"scenario_id": simulator.ScenarioTimingDrift})
+	if runResponse.StatusCode != http.StatusOK {
+		t.Fatalf("run status = %d body=%s", runResponse.StatusCode, readBody(t, runResponse))
+	}
+	var session domain.Session
+	decodeBody(t, runResponse, &session)
+	if session.ScenarioID != simulator.ScenarioTimingDrift || session.MeasurementID == 0 || session.RawTelemetry.ProfileID != "ultrasonic-demo" {
+		t.Fatalf("session = %#v", session)
+	}
+	if !strings.Contains(session.Diagnosis.Headline, "timing outside specification") {
+		t.Fatalf("diagnosis = %#v", session.Diagnosis)
+	}
+
+	measurementsResponse := doJSON(t, app, http.MethodGet, "/api/v1/measurements?profile_id=ultrasonic-demo&limit=10", nil)
+	if measurementsResponse.StatusCode != http.StatusOK {
+		t.Fatalf("measurements status = %d body=%s", measurementsResponse.StatusCode, readBody(t, measurementsResponse))
+	}
+	var windows []domain.MeasurementWindow
+	decodeBody(t, measurementsResponse, &windows)
+	if len(windows) == 0 || windows[0].Raw.ProfileID != windows[0].Analysis.ProfileID {
+		t.Fatalf("measurements = %#v", windows)
+	}
+}
+
 func testAppWithVision(t *testing.T, visionAnalyzer vision.Analyzer) (*fiber.App, *store.SQLiteStore, string, string) {
 	t.Helper()
 	root := t.TempDir()

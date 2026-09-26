@@ -9,7 +9,7 @@ import (
 )
 
 func TestDecodeLineAcceptsVersionedTelemetry(t *testing.T) {
-	line := []byte(`{"schema_version":1,"device_id":"reweird-001","captured_at_ms":1000,"uptime_ms":1000,"window_ms":1000,"sequence":1,"samples":[{"probe":"P1","mode":"analog","analog_mv":[1640,1650,1660]}]}`)
+	line := []byte(`{"schema_version":2,"device_id":"reweird-001","profile_id":"ultrasonic-demo","captured_at_ms":1000,"uptime_ms":1000,"window_ms":1000,"sequence":1,"samples":[{"probe":"P1","mode":"analog","analog_mv":[1640,1650,1660]}]}`)
 
 	envelope, err := DecodeLine(line)
 	if err != nil {
@@ -21,7 +21,7 @@ func TestDecodeLineAcceptsVersionedTelemetry(t *testing.T) {
 }
 
 func TestDecodeLineRejectsUnknownFields(t *testing.T) {
-	line := []byte(`{"schema_version":1,"device_id":"reweird-001","window_ms":1000,"samples":[{"probe":"P1","mode":"analog"}],"command":"drive_patch_high"}`)
+	line := []byte(`{"schema_version":2,"device_id":"reweird-001","profile_id":"ultrasonic-demo","window_ms":1000,"samples":[{"probe":"P1","mode":"analog"}],"command":"drive_patch_high"}`)
 
 	if _, err := DecodeLine(line); err == nil {
 		t.Fatal("DecodeLine() accepted an unknown command field")

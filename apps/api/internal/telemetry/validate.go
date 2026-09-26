@@ -9,10 +9,11 @@ import (
 	"github.com/re-weird/reweird/apps/api/internal/domain"
 )
 
-const SchemaVersion = 1
+const SchemaVersion = 2
 
 var deviceIDPattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_-]{2,63}$`)
 var probePattern = regexp.MustCompile(`^P[1-6]$`)
+var profileIDPattern = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{2,63}$`)
 
 func Validate(envelope domain.TelemetryEnvelope) error {
 	if envelope.SchemaVersion != SchemaVersion {
@@ -20,6 +21,9 @@ func Validate(envelope domain.TelemetryEnvelope) error {
 	}
 	if !deviceIDPattern.MatchString(envelope.DeviceID) {
 		return errors.New("device_id must be 3-64 letters, digits, underscores, or hyphens")
+	}
+	if !profileIDPattern.MatchString(envelope.ProfileID) {
+		return errors.New("profile_id must be 3-64 lowercase letters, digits, or hyphens")
 	}
 	if envelope.CapturedAtMS < 0 {
 		return errors.New("captured_at_ms cannot be negative")
@@ -53,6 +57,9 @@ func ValidateForProfile(envelope domain.TelemetryEnvelope, profile domain.Projec
 	}
 	if !profile.Confirmed {
 		return errors.New("project profile must be user-confirmed before hardware telemetry is accepted")
+	}
+	if envelope.ProfileID != profile.ID {
+		return fmt.Errorf("telemetry profile_id %q does not match active profile %q", envelope.ProfileID, profile.ID)
 	}
 	for _, sample := range envelope.Samples {
 		configuration, ok := profile.Probe(sample.Probe)

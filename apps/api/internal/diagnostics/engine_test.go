@@ -62,6 +62,7 @@ func TestGenericRules(t *testing.T) {
 	engine := NewEngine(signalanalysis.New())
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
+			test.envelope.ProfileID = test.profile.ID
 			session, err := engine.AnalyzeEnvelope(test.profile, test.stage, "test", test.envelope, nil)
 			if err != nil {
 				t.Fatalf("AnalyzeEnvelope() error = %v", err)
@@ -188,8 +189,9 @@ func powerProfile(voltageRange []float64) domain.ProjectProfile {
 
 func pulseEnvelope(rising uint32, activity []float64) domain.TelemetryEnvelope {
 	return domain.TelemetryEnvelope{
-		SchemaVersion: 1,
+		SchemaVersion: 2,
 		DeviceID:      "test-device-001",
+		ProfileID:     "generic-pulse-test",
 		WindowMS:      1000,
 		Samples:       []domain.TelemetrySample{pulseSample("P2", rising, activity)},
 	}
@@ -214,8 +216,9 @@ func pulseSample(probe string, rising uint32, activity []float64) domain.Telemet
 
 func analogEnvelope(millivolts []float64) domain.TelemetryEnvelope {
 	return domain.TelemetryEnvelope{
-		SchemaVersion: 1,
+		SchemaVersion: 2,
 		DeviceID:      "test-device-001",
+		ProfileID:     "power-rail-test",
 		WindowMS:      1000,
 		Samples: []domain.TelemetrySample{{
 			Probe:    "P1",

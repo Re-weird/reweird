@@ -70,3 +70,35 @@ func TestProjectAndConfirmedProfilePersistAcrossReopen(t *testing.T) {
 		t.Fatalf("profile after reopen = %#v err=%v", storedProfile, err)
 	}
 }
+
+func TestRawAndDerivedMeasurementWindowPersists(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "measurements.db")
+	repository, err := Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	window := domain.MeasurementWindow{
+		ProfileID: "measurement-profile", Source: "simulator", DeviceID: "device-001", Sequence: 7, CapturedAtMS: 1234,
+		Raw:      domain.TelemetryEnvelope{SchemaVersion: 2, DeviceID: "device-001", ProfileID: "measurement-profile", CapturedAtMS: 1234, WindowMS: 1000, Sequence: 7, Samples: []domain.TelemetrySample{{Probe: "P1", Mode: domain.ProbeModeAnalog, AnalogMV: []float64{1000, 1100}}}},
+		Analysis: domain.AnalysisResult{SchemaVersion: 2, DeviceID: "device-001", ProfileID: "measurement-profile", CapturedAtMS: 1234, WindowMS: 1000, Probes: []domain.DerivedFacts{{Probe: "P1", Role: "SUPPLY", Mode: domain.ProbeModeAnalog, Stable: true}}},
+	}
+	stored, err := repository.SaveMeasurement(window)
+	if err != nil || stored.ID == 0 {
+		t.Fatalf("SaveMeasurement() = %#v, %v", stored, err)
+	}
+	if err := repository.Close(); err != nil {
+		t.Fatal(err)
+	}
+	reopened, err := Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer reopened.Close()
+	windows, err := reopened.ListMeasurements("measurement-profile", 10)
+	if err != nil || len(windows) != 1 {
+		t.Fatalf("ListMeasurements() = %#v, %v", windows, err)
+	}
+	if windows[0].Raw.Samples[0].AnalogMV[1] != 1100 || windows[0].Analysis.Probes[0].Role != "SUPPLY" {
+		t.Fatalf("measurement after reopen = %#v", windows[0])
+	}
+}

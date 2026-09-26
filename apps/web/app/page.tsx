@@ -41,17 +41,18 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import type { AnalyzeProjectResponse, DemoSession, ProbePlan, ProbeReading, Project, ProjectProfile, RuleResult } from "@reweird/shared-types";
+import type { AnalyzeProjectResponse, DemoSession, ProbePlan, ProbeReading, Project, ProjectProfile, RuleResult, SimulatorScenario } from "@reweird/shared-types";
 import { demoApi, projectApi } from "@/lib/api";
 import { makeDemoProfile, makeDemoSession } from "@/lib/demo";
 import { NewProjectModal, ProbePlanView, ProjectProfileView } from "./project-workflow";
 
-type View = "dashboard" | "profile" | "connect" | "live" | "diagnosis" | "verify" | "reports";
+type View = "dashboard" | "profile" | "connect" | "simulator" | "live" | "diagnosis" | "verify" | "reports";
 
 const nav: { id: View; label: string; icon: typeof Activity }[] = [
   { id: "dashboard", label: "Overview", icon: LayoutDashboard },
   { id: "profile", label: "Project profile", icon: Box },
   { id: "connect", label: "Connect ReWeird", icon: Cable },
+  { id: "simulator", label: "Fault simulator", icon: TestTube2 },
   { id: "live", label: "Live diagnostics", icon: Activity },
   { id: "diagnosis", label: "Diagnosis", icon: Microscope },
   { id: "verify", label: "Verify", icon: CheckCircle2 },
@@ -68,7 +69,7 @@ function MiniChart({ values, danger = false }: { values: number[]; danger?: bool
   if (!values.length) return <div className="mini-empty">No probe assigned</div>;
   const max = Math.max(...values, 1);
   const points = values
-    .map((value, index) => `${(index / (values.length - 1)) * 120},${35 - (value / max) * 29}`)
+    .map((value, index) => `${values.length === 1 ? 60 : (index / (values.length - 1)) * 120},${35 - (value / max) * 29}`)
     .join(" ");
   return (
     <svg className="mini-chart" viewBox="0 0 120 38" preserveAspectRatio="none" role="img" aria-label="Recent signal trend">
@@ -121,10 +122,11 @@ function ConfidenceRing({ value }: { value: number }) {
 }
 
 function SignalChart({ session }: { session: DemoSession }) {
-  const rows = session.probes[0].samples.map((_, index) => ({
+  const charted = session.probes.filter((probe) => probe.samples.length).slice(0, 2);
+  const rows = (charted[0]?.samples ?? []).map((_, index) => ({
     time: `${index * 5}s`,
-    power: session.probes[0].samples[index],
-    echo: session.probes[2].samples[index],
+    primary: charted[0]?.samples[index],
+    secondary: charted[1]?.samples[index],
   }));
   return (
     <div className="chart-wrap">
@@ -140,8 +142,8 @@ function SignalChart({ session }: { session: DemoSession }) {
           <XAxis dataKey="time" stroke="#65717b" fontSize={11} tickLine={false} axisLine={false} />
           <YAxis stroke="#65717b" fontSize={11} tickLine={false} axisLine={false} />
           <Tooltip contentStyle={{ background: "#111a21", border: "1px solid #2b3943", borderRadius: 10, fontSize: 12 }} />
-          <Area type="monotone" dataKey="echo" stroke="#ff5c7a" strokeWidth={2} fill="url(#echoGradient)" name="P3 ECHO" />
-          <Area type="monotone" dataKey="power" stroke="#23d5ab" strokeWidth={2} fill="transparent" name="P1 POWER" />
+          <Area type="monotone" dataKey="primary" stroke="#ff5c7a" strokeWidth={2} fill="url(#echoGradient)" name={charted[0] ? `${charted[0].probe} ${charted[0].role}` : "Signal"} />
+          {charted[1] && <Area type="monotone" dataKey="secondary" stroke="#23d5ab" strokeWidth={2} fill="transparent" name={`${charted[1].probe} ${charted[1].role}`} />}
         </AreaChart>
       </ResponsiveContainer>
     </div>
@@ -205,7 +207,7 @@ function AppShell({
           <div className="topbar-title"><span>{nav.find((item) => item.id === active)?.label}</span><small>{projectContext}</small></div>
           <div className="top-actions">
             <div className={`connection-pill ${hardwareConnected ? "" : "waiting"}`}><span /> {hardwareConnected ? "Hardware connected" : "Hardware waiting"}</div>
-            <div className="mode-pill"><Radio size={13} /> {source === "api" ? "API simulator" : "Browser simulator"}</div>
+            <div className="mode-pill"><Radio size={13} /> {source === "api" ? (session.telemetry_mode === "serial" ? "ESP32 serial" : "API simulator") : "Browser simulator"}</div>
             <button className="icon-button" aria-label="Search"><Search size={18} /></button>
             <button className="primary compact" onClick={onNewProject}><Plus size={16} /> New project</button>
           </div>
@@ -217,22 +219,23 @@ function AppShell({
 }
 
 function DashboardView({ session, setActive }: { session: DemoSession; setActive: (view: View) => void }) {
-  const alertCount = session.stage === "verify" ? 0 : 1;
+  const alertCount = session.evidence.rule_results.filter((rule) => rule.status === "fail").length;
+  const focus = session.probes.find((probe) => probe.probe === session.evidence.probe) ?? session.probes[0];
   return (
     <>
       <section className="hero-row">
         <div>
           <p className="kicker">Diagnostic workspace</p>
           <h1>Good evening, engineer.</h1>
-          <p>One active session is collecting evidence from your ultrasonic sensor project.</p>
+          <p>One active session is turning validated raw samples into profile-aware evidence.</p>
         </div>
         <button className="secondary" onClick={() => setActive("live")}><Activity size={17} /> Open live session</button>
       </section>
 
       <section className="metric-grid">
-        <article className="metric-card"><span className="metric-icon green"><Radio size={18} /></span><div><small>Hardware</small><strong>Connected</strong><em>ESP32 · 4 probes</em></div></article>
-        <article className="metric-card"><span className="metric-icon cyan"><Gauge size={18} /></span><div><small>Samples analyzed</small><strong>18,420</strong><em>+1,240 this session</em></div></article>
-        <article className="metric-card"><span className={`metric-icon ${alertCount ? "red" : "green"}`}><TriangleAlert size={18} /></span><div><small>Active findings</small><strong>{alertCount}</strong><em>{alertCount ? "P3 needs attention" : "All signals nominal"}</em></div></article>
+        <article className="metric-card"><span className="metric-icon green"><Radio size={18} /></span><div><small>Telemetry</small><strong>{session.hardware_connected ? "Connected" : "Waiting"}</strong><em>{session.raw_telemetry?.device_id ?? session.telemetry_mode ?? "simulator"} · {session.probes.length} probes</em></div></article>
+        <article className="metric-card"><span className="metric-icon cyan"><Gauge size={18} /></span><div><small>Measurement window</small><strong>{session.raw_telemetry ? `${session.raw_telemetry.window_ms / 1000}s` : "60s"}</strong><em>{session.measurement_id ? `Stored as #${session.measurement_id}` : "Normalized in memory"}</em></div></article>
+        <article className="metric-card"><span className={`metric-icon ${alertCount ? "red" : "green"}`}><TriangleAlert size={18} /></span><div><small>Active findings</small><strong>{alertCount}</strong><em>{alertCount ? `${focus?.probe ?? "Signal"} needs attention` : "All signals nominal"}</em></div></article>
         <article className="metric-card"><span className="metric-icon violet"><ShieldCheck size={18} /></span><div><small>Safety state</small><strong>Protected</strong><em>PATCH output locked</em></div></article>
       </section>
 
@@ -265,7 +268,7 @@ function DashboardView({ session, setActive }: { session: DemoSession; setActive
         <div className={`panel finding-card ${session.stage === "verify" ? "resolved" : ""}`}>
           <div className="finding-title"><span><Sparkles size={18} /></span><div><small>Latest finding</small><h2>{session.diagnosis.headline}</h2></div></div>
           <p>{session.diagnosis.summary}</p>
-          <div className="evidence-chips"><span><Check size={13} /> Rail stable</span><span><Check size={13} /> TRIG active</span><span className={session.stage === "verify" ? "" : "danger-chip"}>{session.probes[2].dropouts} dropouts</span></div>
+          <div className="evidence-chips"><span><Check size={13} /> Profile {session.profile_id ?? "matched"}</span><span><Check size={13} /> Raw frame validated</span><span className={focus?.dropouts ? "danger-chip" : ""}>{focus?.dropouts ?? 0} dropouts</span></div>
           <button className="primary full" onClick={() => setActive(session.stage === "verify" ? "verify" : "diagnosis")}>{session.stage === "verify" ? "View verification" : "Review diagnosis"}<ChevronRight size={17} /></button>
         </div>
       </section>
@@ -274,12 +277,13 @@ function DashboardView({ session, setActive }: { session: DemoSession; setActive
 }
 
 function LiveView({ session }: { session: DemoSession }) {
+  const charted = session.probes.filter((probe) => probe.samples.length).slice(0, 2);
   return (
     <>
-      <section className="page-heading"><div><p className="kicker">Session RW-2409-017</p><h1>Live diagnostics</h1><p>Simulator telemetry is normalized through the same contract used by physical hardware.</p></div><div className="live-badge"><span /> LIVE · 20 Hz</div></section>
+      <section className="page-heading"><div><p className="kicker">Session RW-2409-017</p><h1>Live diagnostics</h1><p>{session.telemetry_mode === "serial" ? "ESP32 serial" : "Simulator"} telemetry is normalized through the same contract used by every transport.</p></div><div className="live-badge"><span /> LIVE · {session.raw_telemetry ? `${(1000 / session.raw_telemetry.window_ms).toFixed(2)} Hz` : "20 Hz"}</div></section>
       <section className="probe-grid">{session.probes.map((probe) => <ProbeCard reading={probe} key={probe.probe} />)}</section>
       <section className="two-column wide-left">
-        <div className="panel"><div className="panel-heading"><div><span className="eyebrow">Last 60 seconds</span><h2>Signal activity</h2></div><div className="chart-legend"><span className="echo" />P3 ECHO <span className="power" />P1 POWER</div></div><SignalChart session={session} /></div>
+        <div className="panel"><div className="panel-heading"><div><span className="eyebrow">Raw activity buckets</span><h2>Signal activity</h2></div><div className="chart-legend">{charted.map((probe) => <span key={probe.probe}>{probe.probe} {probe.role}</span>)}</div></div><SignalChart session={session} /></div>
         <div className="panel"><div className="panel-heading"><div><span className="eyebrow">Analysis</span><h2>Rule engine</h2></div></div><div className="rules-list">{session.evidence.rule_results.map((rule) => <RuleRow rule={rule} key={rule.id} />)}</div><div className="engine-note"><Bolt size={16} /><span>Deterministic checks run before any AI interpretation.</span></div></div>
       </section>
     </>
@@ -288,16 +292,21 @@ function LiveView({ session }: { session: DemoSession }) {
 
 function DiagnosisView({ session, onWiggle, onRepair, busy }: { session: DemoSession; onWiggle: () => void; onRepair: () => void; busy: boolean }) {
   const tested = session.stage === "test" || session.stage === "repair";
+  const focus = session.probes.find((probe) => probe.probe === session.evidence.probe);
+  const expected = Object.entries(session.evidence.expected).slice(0, 3);
+  const observed = Object.entries(session.evidence.observed).slice(0, 3);
+  const baseline = Object.entries(session.evidence.baseline).slice(0, 3);
+  const renderFacts = (facts: [string, unknown][]) => facts.map(([key, value]) => <small key={key}>{key.replaceAll("_", " ")}: {String(value)}</small>);
   return (
     <>
       <section className="page-heading"><div><p className="kicker">Evidence review</p><h1>{session.diagnosis.headline}</h1><p>Measurement, rule output, and inference are kept visibly separate.</p></div><ConfidenceRing value={session.diagnosis.confidence} /></section>
       <section className="diagnosis-layout">
         <div className="panel evidence-panel">
-          <div className="panel-heading"><div><span className="eyebrow">Structured evidence</span><h2>Expected vs. observed</h2></div><span className="probe-tag">P3 · ECHO</span></div>
+          <div className="panel-heading"><div><span className="eyebrow">Structured evidence</span><h2>Expected vs. observed</h2></div><span className="probe-tag">{session.evidence.probe} · {session.evidence.role}</span></div>
           <div className="compare-grid">
-            <div><span>Expected</span><strong>Continuous return pulses</strong><small>0 dropouts / minute</small></div>
-            <div className="observed"><span>Observed</span><strong>{session.probes[2].dropouts} unexpected dropouts</strong><small>Power rail stayed at 5.01 V</small></div>
-            <div><span>Baseline</span><strong>28.4 pulses / second</strong><small>Captured while healthy</small></div>
+            <div><span>Expected</span><strong>{String(session.evidence.expected.signal ?? "Configured behavior")}</strong>{renderFacts(expected)}</div>
+            <div className="observed"><span>Observed</span><strong>{focus?.dropouts ?? 0} detected dropouts</strong>{renderFacts(observed)}</div>
+            <div><span>Baseline</span><strong>{String(session.evidence.baseline.status ?? "Unknown")}</strong>{renderFacts(baseline)}</div>
           </div>
           <div className="rules-list">{session.evidence.rule_results.map((rule) => <RuleRow rule={rule} key={rule.id} />)}</div>
         </div>
@@ -317,18 +326,84 @@ function DiagnosisView({ session, onWiggle, onRepair, busy }: { session: DemoSes
   );
 }
 
+function SimulatorView({
+  session,
+  scenarios,
+  selected,
+  setSelected,
+  onRun,
+  onTest,
+  onVerify,
+  busy,
+}: {
+  session: DemoSession;
+  scenarios: SimulatorScenario[];
+  selected: string;
+  setSelected: (id: string) => void;
+  onRun: () => void;
+  onTest: () => void;
+  onVerify: () => void;
+  busy: boolean;
+}) {
+  const activeScenario = scenarios.find((scenario) => scenario.id === session.scenario_id);
+  return (
+    <>
+      <section className="page-heading"><div><p className="kicker">Layers 3–4 software harness</p><h1>Raw telemetry fault simulator</h1><p>Each case emits bounded electrical samples through the same validation, normalization, profile matching, storage, analysis, and diagnosis path reserved for ESP32 serial.</p></div><div className="live-badge"><span /> PATCH locked</div></section>
+      <section className="pipeline-strip" aria-label="Telemetry processing pipeline">
+        {["Raw samples", "Validate", "Normalize", "Match profile", "Store window", "Signal analysis", "Evidence", "Diagnosis"].map((step, index) => <div key={step}><span>{index + 1}</span>{step}</div>)}
+      </section>
+      <section className="simulator-layout">
+        <div className="panel scenario-panel">
+          <div className="panel-heading"><div><span className="eyebrow">Simulated faults</span><h2>Select a deterministic input</h2></div></div>
+          <div className="scenario-list">
+            {scenarios.map((scenario) => (
+              <label className={selected === scenario.id ? "selected" : ""} key={scenario.id}>
+                <input type="radio" name="scenario" value={scenario.id} checked={selected === scenario.id} onChange={() => setSelected(scenario.id)} />
+                <span><strong>{scenario.name}</strong><small>{scenario.description}</small></span>
+              </label>
+            ))}
+          </div>
+          <button className="primary full" disabled={busy || !selected} onClick={onRun}>{busy ? <RefreshCw className="spin" size={17} /> : <TestTube2 size={17} />} Load raw samples and analyze</button>
+        </div>
+        <div className="panel simulator-result">
+          <div className="panel-heading"><div><span className="eyebrow">Current result</span><h2>{session.diagnosis.headline}</h2></div><span className="session-id">#{session.measurement_id ?? "memory"}</span></div>
+          <p>{session.stage === "verify" ? "VERIFY captured a fresh healthy window and compared it with the original fault evidence." : activeScenario?.description ?? "Select a scenario to run it through the backend pipeline."}</p>
+          <div className="result-meta"><span>Contract v{session.raw_telemetry?.schema_version ?? 2}</span><span>{session.raw_telemetry?.device_id ?? "browser fixture"}</span><span>Profile {session.profile_id ?? "ultrasonic-demo"}</span></div>
+          <div className="analysis-table">
+            <div className="analysis-head"><span>Probe</span><span>Raw input</span><span>Derived facts</span><span>Status</span></div>
+            {session.probes.filter((probe) => probe.role !== "UNASSIGNED").map((probe) => {
+              const raw = session.raw_telemetry?.samples.find((sample) => sample.probe === probe.probe);
+              const facts = session.analysis?.probes.find((item) => item.probe === probe.probe);
+              const rawCount = raw?.analog_mv?.length ?? raw?.periods_us?.length ?? raw?.activity_counts?.length ?? 0;
+              const derived = facts?.average_voltage !== undefined
+                ? `${facts.average_voltage.toFixed(2)} V · Δ ${facts.voltage_variation?.toFixed(2) ?? "0.00"} V`
+                : facts?.frequency_hz !== undefined
+                  ? `${facts.frequency_hz.toFixed(1)} Hz · ${facts.duty_cycle_percent?.toFixed(1) ?? "—"}% duty`
+                  : `${facts?.digital_transitions ?? 0} transitions`;
+              return <div className="analysis-row" key={probe.probe}><span><b>{probe.probe}</b><small>{probe.role}</small></span><span>{rawCount} samples<small>{raw?.max_gap_us ? `max gap ${raw.max_gap_us} µs` : raw?.mode}</small></span><span>{derived}<small>{facts?.jitter_us !== undefined ? `jitter ${facts.jitter_us.toFixed(2)} µs` : `${facts?.dropout_events ?? probe.dropouts} dropouts`}</small></span><span className={`status-label ${probe.status}`}>{probe.status}</span></div>;
+            })}
+          </div>
+          {!!session.analysis?.simultaneous_dropout_groups?.length && <div className="shared-failure"><TriangleAlert size={17} /> Shared failure group: {session.analysis.simultaneous_dropout_groups.map((group) => group.join(" + ")).join(", ")}</div>}
+          <div className="simulator-actions"><button className="secondary" onClick={onTest} disabled={busy || session.stage === "verify"}><Activity size={16} /> Run guided movement test</button><button className="primary" onClick={onVerify} disabled={busy || session.stage === "verify"}><CheckCircle2 size={16} /> Simulate correction &amp; VERIFY</button></div>
+        </div>
+      </section>
+      <section className="security-note"><ShieldCheck size={20} /><div><strong>Input-only by design</strong><span>The simulator and future ESP32 serial adapter can only supply measurements. The PATCH endpoint remains physically and logically disabled.</span></div></section>
+    </>
+  );
+}
+
 function VerifyView({ session, onReset, busy }: { session: DemoSession; onReset: () => void; busy: boolean }) {
   const verified = session.stage === "verify";
   return (
     <>
-      <section className="page-heading"><div><p className="kicker">Repair verification</p><h1>{verified ? "Signal returned to baseline" : "Verification is waiting"}</h1><p>{verified ? "Re-measurement confirms the repair changed the observed behavior." : "Complete the guided test and simulated repair to unlock before/after evidence."}</p></div>{verified && <div className="verified-seal"><CheckCircle2 size={24} /> VERIFIED</div>}</section>
+      <section className="page-heading"><div><p className="kicker">Repair verification</p><h1>{verified ? "Signal returned to baseline" : "Verification is waiting"}</h1><p>{verified ? "Re-measurement confirms the simulated correction changed the observed behavior." : "Complete the guided test and simulated correction to unlock before/after evidence."}</p></div>{verified && <div className="verified-seal"><CheckCircle2 size={24} /> VERIFIED</div>}</section>
       <section className={`verification-panel ${verified ? "ready" : "locked"}`}>
         <div className="before-after">
           <div><span>Before repair</span><strong>{session.before.dropouts_per_minute}</strong><small>dropouts / minute</small><em className="bad">Intermittent</em></div>
           <div className="delta-arrow"><ChevronRight size={26} /></div>
           <div><span>After repair</span><strong>{session.after?.dropouts_per_minute ?? "—"}</strong><small>dropouts / minute</small><em className={verified ? "good" : "pending"}>{session.after?.stability ?? "Pending"}</em></div>
         </div>
-        <div className="verification-summary"><span className="big-check">{verified ? <Check size={30} /> : <Gauge size={30} />}</span><div><h2>{verified ? "Issue appears resolved" : "No post-repair sample yet"}</h2><p>{verified ? "P3 ECHO is stable, the rail remains healthy, and the dropout rate now matches the stored baseline." : "ReWeird will compare the next measurement window with the original fault evidence."}</p></div></div>
+        <div className="verification-summary"><span className="big-check">{verified ? <Check size={30} /> : <Gauge size={30} />}</span><div><h2>{verified ? "Issue appears resolved" : "No post-repair sample yet"}</h2><p>{verified ? `${session.evidence.probe} ${session.evidence.role} is stable and the new measurement window matches the configured healthy behavior.` : "ReWeird will compare the next measurement window with the original fault evidence."}</p></div></div>
       </section>
       {verified && <button className="secondary center-button" onClick={onReset} disabled={busy}><RefreshCw size={16} /> Reset demo</button>}
     </>
@@ -346,19 +421,20 @@ function ProjectLivePending({ project, profile, plan }: { project: Project; prof
 }
 
 function ReportsView({ session }: { session: DemoSession }) {
+  const focus = session.probes.find((probe) => probe.probe === session.evidence.probe);
   function downloadReport() {
     const blob = new Blob([JSON.stringify(session, null, 2)], { type: "application/json" });
     const url = URL.createObjectURL(blob);
     const anchor = document.createElement("a");
     anchor.href = url;
-    anchor.download = "reweird-diagnostic-RW-2409-017.json";
+    anchor.download = `reweird-diagnostic-${session.id}.json`;
     anchor.click();
     URL.revokeObjectURL(url);
   }
   return (
     <>
       <section className="page-heading"><div><p className="kicker">Audit-ready history</p><h1>Diagnostic reports</h1><p>Reports preserve measurements, deterministic rules, user actions, and AI interpretation separately.</p></div><button className="primary" onClick={downloadReport}><Download size={16} /> Download JSON</button></section>
-      <section className="panel reports-table"><div className="report-row report-head"><span>Report</span><span>Finding</span><span>Status</span><span>Evidence</span><span /></div><div className="report-row"><span><b>RW-2409-017</b><small>Today · 6:42 PM</small></span><span>P3 intermittent ECHO</span><span className={`status-label ${session.stage === "verify" ? "stable" : "intermittent"}`}>{session.stage === "verify" ? "Resolved" : "In progress"}</span><span>{session.evidence.rule_results.length} rule results</span><button className="icon-button" onClick={downloadReport} aria-label="Download report"><Download size={16} /></button></div></section>
+      <section className="panel reports-table"><div className="report-row report-head"><span>Report</span><span>Finding</span><span>Status</span><span>Evidence</span><span /></div><div className="report-row"><span><b>{session.id}</b><small>Measurement #{session.measurement_id ?? "local"}</small></span><span>{session.evidence.probe} {focus?.status ?? "measured"} {session.evidence.role}</span><span className={`status-label ${session.stage === "verify" ? "stable" : "intermittent"}`}>{session.stage === "verify" ? "Resolved" : "In progress"}</span><span>{session.evidence.rule_results.length} rule results</span><button className="icon-button" onClick={downloadReport} aria-label="Download report"><Download size={16} /></button></div></section>
       <section className="security-note"><ShieldCheck size={20} /><div><strong>Git synchronization is off</strong><span>No report or project data leaves this workspace without explicit approval and a secrets scan.</span></div></section>
     </>
   );
@@ -374,12 +450,18 @@ export default function Home() {
   const [project, setProject] = useState<Project | null>(null);
   const [profile, setProfile] = useState<ProjectProfile | null>(() => makeDemoProfile());
   const [probePlan, setProbePlan] = useState<ProbePlan | null>(null);
+  const [scenarios, setScenarios] = useState<SimulatorScenario[]>([]);
+  const [selectedScenario, setSelectedScenario] = useState("intermittent-connection");
 
   useEffect(() => {
     demoApi.load().then((remote) => {
       if (remote) { setSession(remote); setSource("api"); }
     });
     demoApi.profile().then(setProfile).catch(() => undefined);
+    demoApi.scenarios().then((result) => {
+      setScenarios(result.scenarios);
+      setSelectedScenario(result.active);
+    }).catch(() => undefined);
   }, []);
 
   useEffect(() => {
@@ -396,8 +478,22 @@ export default function Home() {
     setSource(remote ? "api" : "browser");
     setBusy(false);
     if (kind === "wiggle") setToast("Wiggle test complete: movement correlation detected");
-    if (kind === "repair") { setToast("Repair verified: P3 matches the healthy baseline"); setActive("verify"); }
+    if (kind === "repair") { setToast("Correction verified against the healthy profile and baseline"); setActive("verify"); }
     if (kind === "reset") { setToast("Demo reset to the initial fault"); setActive("dashboard"); }
+  };
+
+  const runScenario = async () => {
+    setBusy(true);
+    try {
+      const next = await demoApi.selectScenario(selectedScenario);
+      setSession(next);
+      setSource("api");
+      setToast(`${scenarios.find((scenario) => scenario.id === selectedScenario)?.name ?? "Scenario"} analyzed from raw telemetry`);
+    } catch {
+      setToast("The API simulator is unavailable; start the Go backend to run fault scenarios");
+    } finally {
+      setBusy(false);
+    }
   };
 
   const completeProjectAnalysis = (result: AnalyzeProjectResponse) => {
@@ -451,6 +547,7 @@ export default function Home() {
     if (active === "dashboard") return <DashboardView session={session} setActive={setActive} />;
     if (active === "profile") return <ProjectProfileView project={project} profile={profile} onSave={saveProfile} onConfirm={confirmProfile} />;
     if (active === "connect") return <ProbePlanView project={project} plan={probePlan ?? project?.probe_plan ?? null} onConnected={confirmConnections} />;
+    if (active === "simulator") return <SimulatorView session={session} scenarios={scenarios} selected={selectedScenario} setSelected={setSelectedScenario} onRun={runScenario} onTest={() => action("wiggle")} onVerify={() => action("repair")} busy={busy} />;
     if (active === "live") {
       if (project && session.profile_id !== profile?.id) return <ProjectLivePending project={project} profile={profile} plan={probePlan} />;
       return <LiveView session={session} />;
@@ -458,7 +555,7 @@ export default function Home() {
     if (active === "diagnosis") return <DiagnosisView session={session} onWiggle={() => action("wiggle")} onRepair={() => action("repair")} busy={busy} />;
     if (active === "verify") return <VerifyView session={session} onReset={() => action("reset")} busy={busy} />;
     return <ReportsView session={session} />;
-  }, [active, session, busy, project, profile, probePlan]);
+  }, [active, session, busy, project, profile, probePlan, scenarios, selectedScenario]);
 
   return (
     <AppShell active={active} setActive={setActive} session={session} source={source} projectName={project?.name ?? session.project_name} projectContext={project ? `${project.controller} · ${project.analysis_status}` : "ESP32 · Built-in demo"} hardwareConnected={!project || session.profile_id === profile?.id ? session.hardware_connected : false} onNewProject={() => setShowNewProject(true)}>

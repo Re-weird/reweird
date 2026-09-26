@@ -2,12 +2,14 @@ import type {
   AnalyzeProjectResponse,
   ConfirmProfileResponse,
   DemoSession,
+  MeasurementWindow,
   ProbePlan,
   Project,
   ProjectProfile,
+  SimulatorScenarioList,
 } from "@reweird/shared-types";
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080";
+const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "";
 
 export class ApiError extends Error {
   constructor(
@@ -52,7 +54,7 @@ async function requestJSON<T>(path: string, init?: RequestInit, timeoutMS = 8_00
 
 async function demoRequest(path: string, init?: RequestInit): Promise<DemoSession | null> {
   try {
-    return await requestJSON<DemoSession>(path, init, 1_200);
+    return await requestJSON<DemoSession>(path, init, 5_000);
   } catch {
     return null;
   }
@@ -64,6 +66,13 @@ export const demoApi = {
   repair: () => demoRequest("/api/v1/demo/repair", { method: "POST" }),
   reset: () => demoRequest("/api/v1/demo/reset", { method: "POST" }),
   profile: () => requestJSON<ProjectProfile>("/api/v1/profiles/ultrasonic-demo"),
+  scenarios: () => requestJSON<SimulatorScenarioList>("/api/v1/simulator/scenarios"),
+  selectScenario: (scenarioID: string) => requestJSON<DemoSession>("/api/v1/simulator/scenario", {
+    method: "POST",
+    body: JSON.stringify({ scenario_id: scenarioID }),
+  }),
+  measurements: (profileID = "ultrasonic-demo", limit = 20) =>
+    requestJSON<MeasurementWindow[]>(`/api/v1/measurements?profile_id=${encodeURIComponent(profileID)}&limit=${limit}`),
 };
 
 export interface CreateProjectInput {

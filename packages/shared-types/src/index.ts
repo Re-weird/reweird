@@ -67,6 +67,10 @@ export interface DemoSession {
   hardware_connected: boolean;
   telemetry_mode?: "simulator" | "serial" | "browser" | string;
   profile_id?: string;
+  scenario_id?: string;
+  measurement_id?: number;
+  raw_telemetry?: TelemetryEnvelope;
+  analysis?: SignalAnalysis;
   probes: ProbeReading[];
   evidence: StructuredEvidence;
   diagnosis: {
@@ -79,6 +83,92 @@ export interface DemoSession {
   before: { dropouts_per_minute: number; stability: string };
   after?: { dropouts_per_minute: number; stability: string };
   timeline: TimelineEvent[];
+}
+
+export interface TelemetrySample {
+  probe: string;
+  mode: "analog" | "digital" | "pulse";
+  analog_mv?: number[];
+  state?: 0 | 1;
+  edge_count?: number;
+  rising_edges?: number;
+  falling_edges?: number;
+  periods_us?: number[];
+  high_pulse_widths_us?: number[];
+  max_gap_us?: number;
+  activity_counts?: number[];
+}
+
+export interface TelemetryEnvelope {
+  schema_version: 2;
+  device_id: string;
+  profile_id: string;
+  captured_at_ms: number;
+  uptime_ms: number;
+  window_ms: number;
+  sequence: number;
+  samples: TelemetrySample[];
+}
+
+export interface DerivedSignalFacts {
+  probe: string;
+  role: string;
+  mode: "analog" | "digital" | "pulse";
+  average_voltage?: number;
+  minimum_voltage?: number;
+  maximum_voltage?: number;
+  voltage_variation?: number;
+  digital_state?: number;
+  digital_transitions: number;
+  pulse_count: number;
+  frequency_hz?: number;
+  duty_cycle_percent?: number;
+  average_pulse_width_us?: number;
+  minimum_pulse_width_us?: number;
+  maximum_pulse_width_us?: number;
+  jitter_us?: number;
+  maximum_gap_us?: number;
+  dropout_events: number;
+  missing_expected_activity: boolean;
+  stable: boolean;
+  rail_stable?: boolean;
+  failure_buckets?: number[];
+  activity_counts?: number[];
+  baseline_deviation_percent?: number;
+}
+
+export interface SignalAnalysis {
+  schema_version: number;
+  device_id: string;
+  profile_id: string;
+  captured_at_ms: number;
+  window_ms: number;
+  probes: DerivedSignalFacts[];
+  simultaneous_dropout_groups?: string[][];
+}
+
+export interface SimulatorScenario {
+  id: string;
+  name: string;
+  description: string;
+  expected_finding: string;
+}
+
+export interface SimulatorScenarioList {
+  active: string;
+  scenarios: SimulatorScenario[];
+}
+
+export interface MeasurementWindow {
+  id: number;
+  profile_id: string;
+  source: string;
+  device_id: string;
+  sequence: number;
+  captured_at_ms: number;
+  ingested_at_ms: number;
+  raw: TelemetryEnvelope;
+  analysis: SignalAnalysis;
 }
 
 export interface ProjectProfile {

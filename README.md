@@ -23,7 +23,11 @@ signal returns to its healthy baseline.
 - A replaceable telemetry source interface with simulator and USB-serial ESP32 implementations
 - Compilable ESP32 firmware for passive P1-P6 ADC, digital, edge, pulse-period,
   pulse-width, and activity-window measurements
-- A versioned, strictly validated telemetry v1 contract
+- A versioned, strictly validated telemetry v2 contract with explicit Project Profile matching
+- Nine realistic raw-telemetry scenarios: healthy, dead signal, low voltage,
+  unstable power, missing pulses, intermittent connection, simultaneous
+  dropouts, timing drift, and software-controlled change
+- Durable SQLite measurement windows preserving both original samples and derived facts
 - Generic signal analysis for voltage statistics, transitions, frequency, duty
   cycle, jitter, missing activity, dropouts, simultaneous failures, and trusted
   baseline deviation
@@ -104,9 +108,11 @@ npm install
 npm run dev
 ```
 
-The web app automatically detects the API at `http://localhost:8080`. The header
-will show **API simulator**. Configure a different URL with
-`NEXT_PUBLIC_API_URL`.
+The Next.js server proxies `/api/*` to `http://127.0.0.1:8080` by default, so the
+browser uses one origin and the header shows **API simulator**. Configure a
+different server-side target with `API_INTERNAL_URL`; `NEXT_PUBLIC_API_URL`
+remains available for deployments that intentionally expose a separate API
+origin.
 
 Uploads default to `apps/api/data/uploads` when the API is started from that
 directory. Override this with `UPLOAD_DIR`. To enable Gemini Vision, keep the key
@@ -198,9 +204,11 @@ Then open [http://localhost:3000](http://localhost:3000).
 ```text
 TelemetrySource (simulator or ESP32 USB serial)
         ↓
-Validated telemetry v1 window
+Validated telemetry v2 window + confirmed profile match
         ↓
-Signal analysis (voltage, edges, frequency, duty, jitter, dropouts)
+Durable raw measurement storage
+        ↓
+Signal analysis (voltage, edges, frequency, duty, pulse width, jitter, gaps, dropouts)
         ↓
 Project Profile + specifications + trusted baseline
         ↓
@@ -225,6 +233,9 @@ without a UI rewrite.
 | `GET` | `/health` | Service health |
 | `GET` | `/api/v1/session` | Current session from the selected telemetry source |
 | `GET` | `/api/v1/telemetry/status` | Device/frame connection state |
+| `GET` | `/api/v1/measurements` | Stored raw and derived measurement windows |
+| `GET` | `/api/v1/simulator/scenarios` | List the nine deterministic raw-sample scenarios |
+| `POST` | `/api/v1/simulator/scenario` | Select and analyze a simulator scenario |
 | `GET` | `/api/v1/profiles` | Persistent Project Profiles |
 | `GET` | `/api/v1/profiles/:id` | One Project Profile |
 | `POST` | `/api/v1/profiles` | Validate and create a Project Profile |
@@ -249,11 +260,19 @@ without a UI rewrite.
 State-changing demo transitions are written to SQLite as immutable diagnostic
 snapshots.
 
+Open **Fault simulator** to select any scenario and inspect the complete software
+path from raw samples through validation, normalization, profile matching,
+measurement storage, structured evidence, diagnosis, guided change, and VERIFY.
+The simulator does not inject a diagnosis label into the engine; each result is
+derived from the raw electrical values and the confirmed profile.
+
 ## Safety model
 
 - The LLM never receives or controls raw GPIO directly.
 - Firmware and backend perform input-only sensing; PATCH output is locked.
-- ESP32 frames are schema-versioned and bounded. The backend rejects unknown
+- ESP32 frames are schema-versioned and bounded. Telemetry v2 requires a
+  `profile_id`, and the backend rejects frames that do not match the active
+  confirmed profile. It also rejects unknown
   fields, duplicate probes, invalid states, unsafe ADC values, mismatched probe
   modes, oversized arrays, and unconfirmed profiles.
 - ESP32 pins must never see more than 3.3 V. Higher low-voltage signals require a

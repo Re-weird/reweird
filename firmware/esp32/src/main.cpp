@@ -140,8 +140,9 @@ static ProbeSnapshot snapshotAndReset(size_t index) {
 
 static void emitTelemetry(uint32_t windowMS) {
   JsonDocument document;
-  document["schema_version"] = 1;
+  document["schema_version"] = 2;
   document["device_id"] = deviceID;
+  document["profile_id"] = REWEIRD_PROFILE_ID;
   document["captured_at_ms"] = 0;  // No trusted wall clock on the device.
   document["uptime_ms"] = millis();
   document["window_ms"] = windowMS;

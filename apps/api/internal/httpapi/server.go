@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"log"
+	"strconv"
 	"sync"
 	"time"
 
@@ -66,6 +67,9 @@ func NewApp(engine *diagnostics.Engine, repository domain.Repository, source dom
 	api := app.Group("/api/v1")
 	api.Get("/session", controller.current)
 	api.Get("/telemetry/status", controller.telemetryStatus)
+	api.Get("/measurements", controller.listMeasurements)
+	api.Get("/simulator/scenarios", controller.listSimulatorScenarios)
+	api.Post("/simulator/scenario", controller.selectSimulatorScenario)
 	api.Get("/profiles", controller.listProfiles)
 	api.Get("/profiles/:id", controller.getProfile)
 	api.Post("/profiles", controller.saveProfile)
@@ -191,7 +195,29 @@ func (controller *Controller) analyzeAt(ctx context.Context, stage domain.Stage,
 	if profile == nil {
 		return domain.Session{}, errors.New("active Project Profile was not found")
 	}
-	return controller.engine.Analyze(ctx, *profile, stage, controller.source, reference)
+	envelope, err := controller.source.Latest(ctx)
+	if err != nil {
+		return domain.Session{}, err
+	}
+	session, err := controller.engine.AnalyzeEnvelope(*profile, stage, controller.source.Name(), envelope, reference)
+	if err != nil {
+		return domain.Session{}, err
+	}
+	session.RawTelemetry = envelope
+	if scenario, ok := controller.source.(domain.FaultScenarioSource); ok {
+		session.ScenarioID = scenario.CurrentScenario()
+	}
+	if measurements, ok := controller.repository.(domain.MeasurementRepository); ok {
+		stored, err := measurements.SaveMeasurement(domain.MeasurementWindow{
+			ProfileID: envelope.ProfileID, Source: controller.source.Name(), DeviceID: envelope.DeviceID,
+			Sequence: envelope.Sequence, CapturedAtMS: envelope.CapturedAtMS, Raw: envelope, Analysis: session.Analysis,
+		})
+		if err != nil {
+			return domain.Session{}, err
+		}
+		session.MeasurementID = stored.ID
+	}
+	return session, nil
 }
 
 func (controller *Controller) telemetryStatus(ctx *fiber.Ctx) error {
@@ -207,10 +233,69 @@ func (controller *Controller) telemetryStatus(ctx *fiber.Ctx) error {
 		"mode":           controller.source.Name(),
 		"connected":      true,
 		"device_id":      envelope.DeviceID,
+		"profile_id":     envelope.ProfileID,
 		"schema_version": envelope.SchemaVersion,
 		"sequence":       envelope.Sequence,
 		"captured_at_ms": envelope.CapturedAtMS,
 	})
+}
+
+func (controller *Controller) listMeasurements(ctx *fiber.Ctx) error {
+	repository, ok := controller.repository.(domain.MeasurementRepository)
+	if !ok {
+		return ctx.Status(fiber.StatusNotImplemented).JSON(fiber.Map{"error": "MEASUREMENT_STORAGE_UNAVAILABLE"})
+	}
+	profileID := ctx.Query("profile_id")
+	if profileID == "" {
+		controller.mu.RLock()
+		profileID = controller.profileID
+		controller.mu.RUnlock()
+	}
+	limit, err := strconv.Atoi(ctx.Query("limit", "50"))
+	if err != nil || limit < 1 || limit > 200 {
+		return ctx.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "INVALID_LIMIT", "detail": "limit must be between 1 and 200"})
+	}
+	windows, err := repository.ListMeasurements(profileID, limit)
+	if err != nil {
+		return internalError(ctx, err)
+	}
+	return ctx.JSON(windows)
+}
+
+func (controller *Controller) listSimulatorScenarios(ctx *fiber.Ctx) error {
+	source, ok := controller.source.(domain.FaultScenarioSource)
+	if !ok {
+		return ctx.Status(fiber.StatusConflict).JSON(fiber.Map{"error": "SIMULATOR_UNAVAILABLE", "detail": "The active telemetry source is not the simulator."})
+	}
+	return ctx.JSON(fiber.Map{"active": source.CurrentScenario(), "scenarios": source.Scenarios()})
+}
+
+func (controller *Controller) selectSimulatorScenario(ctx *fiber.Ctx) error {
+	source, ok := controller.source.(domain.FaultScenarioSource)
+	if !ok {
+		return ctx.Status(fiber.StatusConflict).JSON(fiber.Map{"error": "SIMULATOR_UNAVAILABLE", "detail": "The active telemetry source is not the simulator."})
+	}
+	var request struct {
+		ScenarioID string `json:"scenario_id"`
+	}
+	if err := ctx.BodyParser(&request); err != nil || request.ScenarioID == "" {
+		return ctx.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "INVALID_SCENARIO", "detail": "scenario_id is required"})
+	}
+	if err := source.SetScenario(request.ScenarioID); err != nil {
+		return ctx.Status(fiber.StatusUnprocessableEntity).JSON(fiber.Map{"error": "INVALID_SCENARIO", "detail": err.Error()})
+	}
+	controller.mu.Lock()
+	controller.stage = domain.StageDiagnose
+	controller.reference = nil
+	controller.mu.Unlock()
+	session, err := controller.analyze(ctx.Context())
+	if err != nil {
+		return serviceUnavailable(ctx, err)
+	}
+	if err := controller.repository.SaveSession(session); err != nil {
+		return internalError(ctx, err)
+	}
+	return ctx.JSON(session)
 }
 
 func (controller *Controller) listProfiles(ctx *fiber.Ctx) error {

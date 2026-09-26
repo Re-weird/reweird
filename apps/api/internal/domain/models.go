@@ -172,6 +172,7 @@ const (
 type TelemetryEnvelope struct {
 	SchemaVersion int               `json:"schema_version"`
 	DeviceID      string            `json:"device_id"`
+	ProfileID     string            `json:"profile_id"`
 	CapturedAtMS  int64             `json:"captured_at_ms"`
 	UptimeMS      uint64            `json:"uptime_ms"`
 	WindowMS      uint32            `json:"window_ms"`
@@ -331,10 +332,15 @@ type DerivedFacts struct {
 	PulseCount               uint32    `json:"pulse_count"`
 	FrequencyHz              *float64  `json:"frequency_hz,omitempty"`
 	DutyCyclePercent         *float64  `json:"duty_cycle_percent,omitempty"`
+	AveragePulseWidthUS      *float64  `json:"average_pulse_width_us,omitempty"`
+	MinimumPulseWidthUS      *float64  `json:"minimum_pulse_width_us,omitempty"`
+	MaximumPulseWidthUS      *float64  `json:"maximum_pulse_width_us,omitempty"`
 	JitterUS                 *float64  `json:"jitter_us,omitempty"`
+	MaximumGapUS             *float64  `json:"maximum_gap_us,omitempty"`
 	DropoutEvents            int       `json:"dropout_events"`
 	MissingExpectedActivity  bool      `json:"missing_expected_activity"`
 	Stable                   bool      `json:"stable"`
+	RailStable               *bool     `json:"rail_stable,omitempty"`
 	FailureBuckets           []int     `json:"failure_buckets,omitempty"`
 	ActivityCounts           []float64 `json:"activity_counts,omitempty"`
 	BaselineDeviationPercent *float64  `json:"baseline_deviation_percent,omitempty"`
@@ -343,6 +349,7 @@ type DerivedFacts struct {
 type AnalysisResult struct {
 	SchemaVersion             int            `json:"schema_version"`
 	DeviceID                  string         `json:"device_id"`
+	ProfileID                 string         `json:"profile_id"`
 	CapturedAtMS              int64          `json:"captured_at_ms"`
 	WindowMS                  uint32         `json:"window_ms"`
 	Probes                    []DerivedFacts `json:"probes"`
@@ -428,6 +435,9 @@ type Session struct {
 	HardwareConnected bool                `json:"hardware_connected"`
 	TelemetryMode     string              `json:"telemetry_mode"`
 	ProfileID         string              `json:"profile_id"`
+	ScenarioID        string              `json:"scenario_id,omitempty"`
+	MeasurementID     int64               `json:"measurement_id,omitempty"`
+	RawTelemetry      TelemetryEnvelope   `json:"raw_telemetry"`
 	Probes            []ProbeReading      `json:"probes"`
 	Analysis          AnalysisResult      `json:"analysis"`
 	Evidence          Evidence            `json:"evidence"`
@@ -447,6 +457,20 @@ type ScenarioTelemetrySource interface {
 	SetStage(stage Stage)
 }
 
+type SimulatorScenario struct {
+	ID              string `json:"id"`
+	Name            string `json:"name"`
+	Description     string `json:"description"`
+	ExpectedFinding string `json:"expected_finding"`
+}
+
+type FaultScenarioSource interface {
+	ScenarioTelemetrySource
+	Scenarios() []SimulatorScenario
+	SetScenario(id string) error
+	CurrentScenario() string
+}
+
 type FreshTelemetrySource interface {
 	TelemetrySource
 	WaitNext(ctx context.Context, afterSequence uint64) (TelemetryEnvelope, error)
@@ -462,4 +486,21 @@ type Repository interface {
 	SaveProject(project Project) error
 	GetProject(id string) (*Project, error)
 	ListProjects() ([]Project, error)
+}
+
+type MeasurementWindow struct {
+	ID           int64             `json:"id"`
+	ProfileID    string            `json:"profile_id"`
+	Source       string            `json:"source"`
+	DeviceID     string            `json:"device_id"`
+	Sequence     uint64            `json:"sequence"`
+	CapturedAtMS int64             `json:"captured_at_ms"`
+	IngestedAtMS int64             `json:"ingested_at_ms"`
+	Raw          TelemetryEnvelope `json:"raw"`
+	Analysis     AnalysisResult    `json:"analysis"`
+}
+
+type MeasurementRepository interface {
+	SaveMeasurement(window MeasurementWindow) (MeasurementWindow, error)
+	ListMeasurements(profileID string, limit int) ([]MeasurementWindow, error)
 }

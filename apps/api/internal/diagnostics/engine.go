@@ -231,15 +231,6 @@ func buildDiagnosis(profile domain.ProjectProfile, analysis domain.AnalysisResul
 			NextTest:       fmt.Sprintf("Reseat or replace the %s connection, then re-measure.", focus.Role),
 		}
 	}
-	if hasRule(rules, "simultaneous-dropout", "fail") || hasRule(rules, "power-rail-instability", "fail") {
-		return domain.Diagnosis{
-			Headline:       "Shared electrical instability",
-			Summary:        "Several monitored paths failed together or the configured power rail moved outside tolerance. Investigate a shared supply or ground cause first.",
-			PossibleCauses: []string{"Unstable power supply", "Shared ground problem", "Connector or harness affecting multiple paths"},
-			Confidence:     0.82,
-			NextTest:       "Measure the configured power rail and ground reference during the failure window.",
-		}
-	}
 	if hasRuleForProbe(rules, "missing-signal", focus.Probe) {
 		return domain.Diagnosis{
 			Headline:       fmt.Sprintf("Missing %s activity", focus.Role),
@@ -256,6 +247,24 @@ func buildDiagnosis(profile domain.ProjectProfile, analysis domain.AnalysisResul
 			PossibleCauses: []string{"Supply regulation problem", "Unexpected load", "Incorrect divider scale", "Wiring resistance"},
 			Confidence:     0.9,
 			NextTest:       "Verify the measurement divider and compare the source rail under load.",
+		}
+	}
+	if hasRuleForProbe(rules, "frequency-outside-specification", focus.Probe) {
+		return domain.Diagnosis{
+			Headline:       fmt.Sprintf("%s timing outside specification", focus.Role),
+			Summary:        "The signal remains active, but its measured frequency is outside the confirmed Project Profile range.",
+			PossibleCauses: []string{"Clock or timer configuration drift", "Unexpected software timing change", "Oscillator or supply instability"},
+			Confidence:     0.88,
+			NextTest:       "Compare the configured timer or PWM settings with the measured frequency and jitter.",
+		}
+	}
+	if hasRule(rules, "simultaneous-dropout", "fail") || hasRule(rules, "power-rail-instability", "fail") {
+		return domain.Diagnosis{
+			Headline:       "Shared electrical instability",
+			Summary:        "Several monitored paths failed together or the configured power rail moved outside tolerance. Investigate a shared supply or ground cause first.",
+			PossibleCauses: []string{"Unstable power supply", "Shared ground problem", "Connector or harness affecting multiple paths"},
+			Confidence:     0.82,
+			NextTest:       "Measure the configured power rail and ground reference during the failure window.",
 		}
 	}
 	if hasRuleForProbe(rules, "unexpected-dropout", focus.Probe) {
@@ -322,6 +331,15 @@ func buildEvidence(profile domain.ProjectProfile, analysis domain.AnalysisResult
 	}
 	if focus.JitterUS != nil {
 		derived = append(derived, domain.EvidenceFact{Probe: focus.Probe, Name: "jitter", Value: *focus.JitterUS, Unit: "us", Provenance: domain.ProvenanceDerived})
+	}
+	if focus.AveragePulseWidthUS != nil {
+		derived = append(derived, domain.EvidenceFact{Probe: focus.Probe, Name: "average_pulse_width", Value: *focus.AveragePulseWidthUS, Unit: "us", Provenance: domain.ProvenanceDerived})
+	}
+	if focus.MaximumGapUS != nil {
+		derived = append(derived, domain.EvidenceFact{Probe: focus.Probe, Name: "maximum_gap", Value: *focus.MaximumGapUS, Unit: "us", Provenance: domain.ProvenanceDerived})
+	}
+	if focus.RailStable != nil {
+		derived = append(derived, domain.EvidenceFact{Probe: focus.Probe, Name: "rail_stable", Value: *focus.RailStable, Provenance: domain.ProvenanceDerived})
 	}
 
 	baseline := map[string]any{"status": domain.BaselineUnknown}

@@ -56,6 +56,20 @@ func (store *SQLiteStore) migrate() error {
 		);
 		CREATE INDEX IF NOT EXISTS idx_projects_updated_at
 			ON projects(updated_at DESC);
+		CREATE TABLE IF NOT EXISTS measurement_windows (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			profile_id TEXT NOT NULL,
+			source TEXT NOT NULL,
+			device_id TEXT NOT NULL,
+			sequence INTEGER NOT NULL,
+			captured_at_ms INTEGER NOT NULL,
+			ingested_at_ms INTEGER NOT NULL,
+			raw_payload TEXT NOT NULL,
+			analysis_payload TEXT NOT NULL,
+			UNIQUE(source, device_id, sequence, captured_at_ms)
+		);
+		CREATE INDEX IF NOT EXISTS idx_measurements_profile_captured
+			ON measurement_windows(profile_id, captured_at_ms DESC, id DESC);
 	`)
 	return err
 }
@@ -89,6 +103,76 @@ func (store *SQLiteStore) LatestSession() (*domain.Session, error) {
 		return nil, err
 	}
 	return &session, nil
+}
+
+func (store *SQLiteStore) SaveMeasurement(window domain.MeasurementWindow) (domain.MeasurementWindow, error) {
+	if window.IngestedAtMS == 0 {
+		window.IngestedAtMS = time.Now().UTC().UnixMilli()
+	}
+	rawPayload, err := json.Marshal(window.Raw)
+	if err != nil {
+		return domain.MeasurementWindow{}, err
+	}
+	analysisPayload, err := json.Marshal(window.Analysis)
+	if err != nil {
+		return domain.MeasurementWindow{}, err
+	}
+	result, err := store.db.Exec(`
+		INSERT INTO measurement_windows
+			(profile_id, source, device_id, sequence, captured_at_ms, ingested_at_ms, raw_payload, analysis_payload)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+		ON CONFLICT(source, device_id, sequence, captured_at_ms) DO UPDATE SET
+			profile_id = excluded.profile_id,
+			ingested_at_ms = excluded.ingested_at_ms,
+			raw_payload = excluded.raw_payload,
+			analysis_payload = excluded.analysis_payload
+	`, window.ProfileID, window.Source, window.DeviceID, window.Sequence, window.CapturedAtMS, window.IngestedAtMS, string(rawPayload), string(analysisPayload))
+	if err != nil {
+		return domain.MeasurementWindow{}, err
+	}
+	id, err := result.LastInsertId()
+	if err != nil || id == 0 {
+		err = store.db.QueryRow(`
+			SELECT id FROM measurement_windows
+			WHERE source = ? AND device_id = ? AND sequence = ? AND captured_at_ms = ?
+		`, window.Source, window.DeviceID, window.Sequence, window.CapturedAtMS).Scan(&id)
+		if err != nil {
+			return domain.MeasurementWindow{}, err
+		}
+	}
+	window.ID = id
+	return window, nil
+}
+
+func (store *SQLiteStore) ListMeasurements(profileID string, limit int) ([]domain.MeasurementWindow, error) {
+	if limit < 1 || limit > 200 {
+		limit = 50
+	}
+	rows, err := store.db.Query(`
+		SELECT id, profile_id, source, device_id, sequence, captured_at_ms, ingested_at_ms, raw_payload, analysis_payload
+		FROM measurement_windows WHERE profile_id = ?
+		ORDER BY captured_at_ms DESC, id DESC LIMIT ?
+	`, profileID, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	windows := make([]domain.MeasurementWindow, 0)
+	for rows.Next() {
+		var window domain.MeasurementWindow
+		var rawPayload, analysisPayload string
+		if err := rows.Scan(&window.ID, &window.ProfileID, &window.Source, &window.DeviceID, &window.Sequence, &window.CapturedAtMS, &window.IngestedAtMS, &rawPayload, &analysisPayload); err != nil {
+			return nil, err
+		}
+		if err := json.Unmarshal([]byte(rawPayload), &window.Raw); err != nil {
+			return nil, err
+		}
+		if err := json.Unmarshal([]byte(analysisPayload), &window.Analysis); err != nil {
+			return nil, err
+		}
+		windows = append(windows, window)
+	}
+	return windows, rows.Err()
 }
 
 func (store *SQLiteStore) SaveProfile(profile domain.ProjectProfile) error {

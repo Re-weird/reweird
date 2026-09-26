@@ -18,21 +18,25 @@ ReWeird follows ports-and-adapters boundaries at the points most likely to chang
 5. User confirmation persists an immutable authoritative profile and generates
    generic GND/P1-P6 placement instructions. Probe connection confirmation is a
    separate persisted action.
-6. A `TelemetrySource` supplies a bounded telemetry v1 window. The current
+6. A `TelemetrySource` supplies a bounded telemetry v2 window. Every frame names
+   the confirmed Project Profile it was configured for. The current
    implementations are the ultrasonic simulator and USB-serial ESP32 reader.
 7. Payload validation enforces the schema, P1-P6 identifiers, array bounds,
    finite values, confirmed profile, configured mode, and safe input metadata.
-8. Signal analysis derives average/minimum/maximum voltage, variation,
-   transitions, pulse count, frequency, duty cycle, jitter, missing activity,
-   dropout events, shared failure buckets, stability, and baseline deviation.
-9. The deterministic diagnostic engine compares those facts with component
+8. Accepted raw frames and their normalized analysis are stored together as
+   immutable measurement windows in SQLite.
+9. Signal analysis derives average/minimum/maximum voltage, variation,
+   transitions, pulse count, frequency, duty cycle, pulse-width statistics,
+   jitter, maximum gap, missing activity, dropout events, shared failure
+   buckets, rail stability, and baseline deviation.
+10. The deterministic diagnostic engine compares those facts with component
    specifications and project baselines.
-10. Structured evidence records measured, derived, specification, baseline,
+11. Structured evidence records measured, derived, specification, baseline,
    software, and future AI provenance separately.
-11. A PROBE adapter may interpret that evidence and recommend a next test.
-12. A test planner chooses an allowed action. Any future PATCH request passes a
+12. A PROBE adapter may interpret that evidence and recommend a next test.
+13. A test planner chooses an allowed action. Any future PATCH request passes a
    separate safety validator and user-approval boundary.
-13. A new measurement window is compared with the original evidence by VERIFY.
+14. A new measurement window is compared with the original evidence by VERIFY.
 
 ## Replaceable boundaries
 
@@ -48,7 +52,7 @@ ReWeird follows ports-and-adapters boundaries at the points most likely to chang
 - Frontend API client: Go API with a browser fixture as a development fallback.
 
 The browser fixture follows the same session response contract as the Go API. The
-Go simulator and real firmware both enter the backend through the telemetry v1
+Go simulator and real firmware both enter the backend through the telemetry v2
 contract and the same signal analyzer. The fixture is not a second product
 architecture; it keeps the hackathon UI runnable when Go or hardware is absent.
 

@@ -2,8 +2,10 @@
 
 import { useEffect, useState } from "react";
 import { Activity, ArrowDownToLine, ArrowUpRight, Bolt, Check, ChevronRight, Cpu, FileText, History, LockKeyhole, Radio, Waves } from "lucide-react";
-import type { DemoSession, HistorySummary, Project, ProjectProfile } from "@reweird/shared-types";
+import type { DemoSession, HistorySummary, ProbePlan, Project, ProjectProfile, SimulatorScenario } from "@reweird/shared-types";
 import { historyApi } from "@/lib/api";
+import { realBreakReady, telemetryLabel } from "@/lib/weird-demo";
+import { MakeItWeird } from "./make-it-weird";
 import { ProbeCard, RuleRow, SignalChart } from "./signal-components";
 import type { ProjectTabID } from "@/lib/project-routes";
 
@@ -15,9 +17,14 @@ type Props = {
   onNavigate: (tab: ProjectTabID) => void;
   /** Recent sessions are limited to this project's history. */
   historyProjectID: string;
+  plan: ProbePlan | null;
+  scenarios: SimulatorScenario[];
+  busy: boolean;
+  onRunScenario: (scenarioID: string, mystery: boolean) => Promise<void>;
+  onBrowserDemo: () => Promise<void>;
 };
 
-export function Workbench({ session, project, profile, source, onNavigate, historyProjectID }: Props) {
+export function Workbench({ session, project, profile, source, onNavigate, historyProjectID, plan, scenarios, busy, onRunScenario, onBrowserDemo }: Props) {
   const [recent, setRecent] = useState<HistorySummary[]>([]);
   const [historyState, setHistoryState] = useState<"loading" | "ready" | "offline">("loading");
   useEffect(() => {
@@ -35,6 +42,7 @@ export function Workbench({ session, project, profile, source, onNavigate, histo
   const destinations: ProjectTabID[] = ["workbench", "diagnosis", "next-test", "verify"];
   const currentStep = { detect: 0, diagnose: 1, test: 2, repair: 2, verify: 3 }[session.stage];
   const confidence = Math.round(session.diagnosis.confidence * 100);
+  const canBreakPhysical = realBreakReady(session, source, profile, plan);
 
   return <div className="workbench">
     <div className="workbench-main">
@@ -43,6 +51,13 @@ export function Workbench({ session, project, profile, source, onNavigate, histo
         <div className="welcome-photo" aria-hidden="true" />
         <span className="welcome-caption" aria-hidden="true"></span>
       </section>
+
+      <MakeItWeird scenarios={scenarios} busy={busy} onRun={onRunScenario} onBrowserDemo={onBrowserDemo} />
+      <nav className="weird-journey" aria-label="Optional demo journey"><span className="bench-label">Demo journey</span>{([
+        ["Understand", "overview"], ["Map", "overview"], ["Make it weird", "simulator"], ["Detect", "workbench"],
+        ["Diagnose", "diagnosis"], ["Test", "next-test"], ["VERIFY", "verify"], ["Passport", "passport"],
+      ] as [string, ProjectTabID][]).map(([label, tab], index) => <button key={`${label}-${index}`} onClick={() => onNavigate(tab)} className={index === currentStep + 3 && matchesProject ? "current" : ""}>{label}</button>)}</nav>
+      {canBreakPhysical && <section className="weird-physical"><span className="bench-label">Optional serial demo · passive monitoring only</span><h2>YOUR TURN. Make the project act weird.</h2><p>Only use a pre-designated, low-voltage safe demo interaction documented for this build while ReWeird watches. Never disconnect arbitrary power, ground, or unknown connections.</p><button className="secondary" onClick={() => onNavigate("diagnosis")}>I’ve broken it · inspect evidence <ArrowUpRight size={15} /></button><small>This opens the latest evidence; it neither records nor verifies that a physical change occurred.</small></section>}
 
       <section className="bench-stats" aria-label="Current project summary">
         <div><Activity size={17} /><strong>{matchesProject ? activeProbes.length : "—"}<small>Active probes</small></strong></div>
@@ -70,8 +85,9 @@ export function Workbench({ session, project, profile, source, onNavigate, histo
 
     <div className="workbench-rail">
       <section className="bench-panel bench-analysis">
-        <div className="bench-panel-head"><div><span className="bench-label">02 / Understand</span><h2>Latest analysis</h2></div><span className="analysis-source">{!matchesProject ? "Pending" : source === "browser" ? "Demo" : session.telemetry_mode === "serial" ? "Serial" : "Simulated"}</span></div>
+        <div className="bench-panel-head"><div><span className="bench-label">02 / Understand</span><h2>Latest analysis</h2></div><span className="analysis-source">{!matchesProject ? "Pending" : telemetryLabel(session, source)}</span></div>
         {matchesProject ? <>
+          {failures.length > 0 && <div className="weird-analysis-kicker">SOMETHING’S WEIRD. <small>{session.evidence.probe} · {session.evidence.role} · {failures.length} failed {failures.length === 1 ? "check" : "checks"}</small></div>}
           <div className="analysis-headline"><span className={`analysis-mark ${failures.length ? "attention" : ""}`}><Activity size={21} /></span><div><h3>{session.diagnosis.headline}</h3><span className="analysis-confidence">{confidence}% confidence <span>· interpretation</span></span></div></div>
           <p className="analysis-summary">{session.diagnosis.summary}</p>
           <div className="hypothesis-heading"><span className="bench-label">Possible causes</span><small>Not yet confirmed</small></div>

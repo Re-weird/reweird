@@ -118,3 +118,69 @@ func TestRawAndDerivedMeasurementWindowPersists(t *testing.T) {
 		t.Fatalf("measurement after reopen = %#v", windows[0])
 	}
 }
+
+// Projects saved before visibility existed have no "visibility" key in their
+// stored payload; both read paths must report them as private.
+func TestLegacyProjectWithoutVisibilityReadsAsPrivate(t *testing.T) {
+	repository, err := Open(filepath.Join(t.TempDir(), "reweird-legacy.db"))
+	if err != nil {
+		t.Fatalf("Open() error = %v", err)
+	}
+	defer repository.Close()
+
+	legacy := `{"id":"legacy-rig","name":"Legacy rig","controller":"ESP32","logic_voltage":3.3,"analysis_status":"PENDING","created_at_ms":1,"updated_at_ms":1}`
+	if _, err := repository.db.Exec(
+		"INSERT INTO projects (id, payload, analysis_status, created_at, updated_at) VALUES (?, ?, ?, datetime('now'), datetime('now'))",
+		"legacy-rig", legacy, "PENDING",
+	); err != nil {
+		t.Fatalf("insert legacy project: %v", err)
+	}
+
+	project, err := repository.GetProject("legacy-rig")
+	if err != nil || project == nil {
+		t.Fatalf("GetProject() = %v, %v", project, err)
+	}
+	if project.Visibility != domain.VisibilityPrivate {
+		t.Fatalf("GetProject visibility = %q, want private", project.Visibility)
+	}
+
+	listed, err := repository.ListProjects()
+	if err != nil || len(listed) != 1 {
+		t.Fatalf("ListProjects() = %v, %v", listed, err)
+	}
+	if listed[0].Visibility != domain.VisibilityPrivate {
+		t.Fatalf("ListProjects visibility = %q, want private", listed[0].Visibility)
+	}
+}
+
+func TestSetProjectVisibilityChangesOnlyVisibility(t *testing.T) {
+	repository, err := Open(filepath.Join(t.TempDir(), "reweird-visibility.db"))
+	if err != nil {
+		t.Fatalf("Open() error = %v", err)
+	}
+	defer repository.Close()
+
+	project := domain.Project{ID: "rig", Name: "Rig", Description: "original", Controller: "ESP32", LogicVoltage: 3.3, AnalysisStatus: domain.AnalysisPending, Visibility: domain.VisibilityPrivate}
+	if err := repository.SaveProject(project); err != nil {
+		t.Fatalf("SaveProject() error = %v", err)
+	}
+	stored, _ := repository.GetProject("rig")
+
+	if err := repository.SetProjectVisibility("rig", domain.VisibilityPublic); err != nil {
+		t.Fatalf("SetProjectVisibility() error = %v", err)
+	}
+	updated, err := repository.GetProject("rig")
+	if err != nil || updated == nil {
+		t.Fatalf("GetProject() = %v, %v", updated, err)
+	}
+	if updated.Visibility != domain.VisibilityPublic {
+		t.Fatalf("visibility = %q, want public", updated.Visibility)
+	}
+	if updated.Description != "original" || updated.Controller != "ESP32" || updated.UpdatedAtMS != stored.UpdatedAtMS {
+		t.Fatalf("other fields changed: %#v", updated)
+	}
+
+	if err := repository.SetProjectVisibility("missing", domain.VisibilityPublic); err == nil {
+		t.Fatal("SetProjectVisibility on a missing project returned nil error")
+	}
+}

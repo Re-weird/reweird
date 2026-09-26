@@ -395,6 +395,24 @@ func (store *SQLiteStore) SaveProject(project domain.Project) error {
 	return err
 }
 
+// SetProjectVisibility updates only the visibility field, in one statement.
+// Reading the whole payload and writing it back would let a concurrent
+// SaveProject land in between and be overwritten by the stale copy.
+func (store *SQLiteStore) SetProjectVisibility(id string, visibility domain.ProjectVisibility) error {
+	result, err := store.db.Exec("UPDATE projects SET payload = json_set(payload, '$.visibility', ?) WHERE id = ?", string(visibility), id)
+	if err != nil {
+		return err
+	}
+	affected, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if affected == 0 {
+		return sql.ErrNoRows
+	}
+	return nil
+}
+
 func (store *SQLiteStore) GetProject(id string) (*domain.Project, error) {
 	var payload string
 	err := store.db.QueryRow("SELECT payload FROM projects WHERE id = ?", id).Scan(&payload)
@@ -408,6 +426,7 @@ func (store *SQLiteStore) GetProject(id string) (*domain.Project, error) {
 	if err := json.Unmarshal([]byte(payload), &project); err != nil {
 		return nil, err
 	}
+	defaultVisibility(&project)
 	return &project, nil
 }
 
@@ -427,9 +446,18 @@ func (store *SQLiteStore) ListProjects() ([]domain.Project, error) {
 		if err := json.Unmarshal([]byte(payload), &project); err != nil {
 			return nil, err
 		}
+		defaultVisibility(&project)
 		projects = append(projects, project)
 	}
 	return projects, rows.Err()
+}
+
+// Projects stored before visibility existed have no value; treat them as
+// private, the safe default.
+func defaultVisibility(project *domain.Project) {
+	if project.Visibility == "" {
+		project.Visibility = domain.VisibilityPrivate
+	}
 }
 
 func (store *SQLiteStore) Close() error { return store.db.Close() }

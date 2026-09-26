@@ -9,10 +9,12 @@ import { GitSyncPanel } from "./git-sync";
 const statuses: HistoryStatus[] = ["OPEN", "TESTING", "WAITING_FOR_USER", "VERIFYING", "RESOLVED", "IMPROVED", "UNRESOLVED", "CANCELLED", "INCONCLUSIVE"];
 const date = (value?: number) => value ? new Date(value).toLocaleString() : "—";
 
-export function HistoryReportView({ mode }: { mode: "history" | "reports" }) {
+// With `projectID`, the view is locked to that project: the project picker is
+// hidden and only its sessions/reports can be listed or opened.
+export function HistoryReportView({ mode, projectID: scopedProjectID }: { mode: "history" | "reports"; projectID?: string }) {
   const [items, setItems] = useState<HistorySummary[]>([]);
   const [projects, setProjects] = useState<Array<{ id: string; name: string }>>([]);
-  const [projectID, setProjectID] = useState("");
+  const [projectID, setProjectID] = useState(scopedProjectID ?? "");
   const [status, setStatus] = useState<HistoryStatus | "">("");
   const [sort, setSort] = useState<"newest" | "oldest">("newest");
   const [selectedID, setSelectedID] = useState("");
@@ -21,11 +23,13 @@ export function HistoryReportView({ mode }: { mode: "history" | "reports" }) {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
+  useEffect(() => { if (scopedProjectID !== undefined) setProjectID(scopedProjectID); }, [scopedProjectID]);
   useEffect(() => {
+    if (scopedProjectID !== undefined) return;
     historyApi.list().then((response) => {
       setProjects(Array.from(new Map(response.items.map((item) => [item.project_id, { id: item.project_id, name: item.project_name }])).values()));
     }).catch(() => undefined);
-  }, []);
+  }, [scopedProjectID]);
   useEffect(() => {
     let live = true;
     setLoading(true);
@@ -50,7 +54,7 @@ export function HistoryReportView({ mode }: { mode: "history" | "reports" }) {
     <section className="page-heading"><div><p className="kicker">Persisted diagnostic evidence</p><h1>{mode === "history" ? "Diagnostic history" : "Diagnostic reports"}</h1><p>Browse stored guided tests and deterministic reports. Measured facts, derived facts, user actions, and VERIFY remain distinct.</p></div><div className="live-badge"><span /> {loading ? "Loading" : `${items.length} sessions`}</div></section>
     {error && <div className="form-error page-error">{error}</div>}
     <section className="panel history-controls">
-      <label>Project<select value={projectID} onChange={(event) => setProjectID(event.target.value)}><option value="">All projects</option>{projects.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
+      {scopedProjectID === undefined && <label>Project<select value={projectID} onChange={(event) => setProjectID(event.target.value)}><option value="">All projects</option>{projects.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>}
       <label>Status<select value={status} onChange={(event) => setStatus(event.target.value as HistoryStatus | "")}><option value="">All statuses</option>{statuses.map((item) => <option key={item} value={item}>{item.replaceAll("_", " ")}</option>)}</select></label>
       <label>Order<select value={sort} onChange={(event) => setSort(event.target.value as "newest" | "oldest")}><option value="newest">Newest first</option><option value="oldest">Oldest first</option></select></label>
     </section>

@@ -1,0 +1,94 @@
+/*
+ * Single CSS entry. Tailwind v4 without preflight: the rest of the app still
+ * runs on the hand-written design system (globals.css + workbench.css), and
+ * preflight's reset would restyle every existing page.
+ */
+@layer legacy, theme, base, components, utilities;
+@import url("https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Manrope:wght@400;500;600;700;800&display=swap");
+/*
+ * The hand-written design system lives in the lowest layer. Unlayered CSS
+ * beats every @layer, so without this its element rules (e.g.
+ * `button { color: inherit }`) would silently override Tailwind utilities.
+ * Relative order between the two legacy files is unchanged, so existing
+ * pages render exactly as before.
+ */
+@import "./globals.css" layer(legacy);
+@import "./workbench.css" layer(legacy);
+@import "./circuit-map.css" layer(legacy);
+@import "./device-passport.css" layer(legacy);
+@import "tailwindcss/theme.css" layer(theme);
+@import "tailwindcss/utilities.css" layer(utilities);
+
+@custom-variant dark (&:is([data-theme="dark"] *, :root:not([data-theme="light"]) *));
+
+/*
+ * Scoped reset for surfaces built with Tailwind (marked data-tw). Preflight is
+ * off globally so legacy pages keep their look, but without some reset the
+ * browser defaults leak in here: list bullets and 40px indents on ul/ol/dd,
+ * heading and paragraph margins, and native grey button chrome. Base layer
+ * sits above legacy and below utilities, so utilities still win.
+ */
+@layer base {
+  :where([data-tw]) :where(h1, h2, h3, h4, h5, h6, p, ul, ol, dl, dd, figure, blockquote) { margin: 0; }
+  :where([data-tw]) :where(h1, h2, h3, h4, h5, h6) { font-size: inherit; font-weight: inherit; }
+  :where([data-tw]) :where(ul, ol) { padding: 0; list-style: none; }
+  :where([data-tw]) :where(a) { color: inherit; text-decoration: inherit; }
+  :where([data-tw]) :where(button, input, select, textarea) { font: inherit; color: inherit; background-color: transparent; border: 0 solid; padding: 0; margin: 0; }
+  :where([data-tw]) :where(button, [role="button"]) { cursor: pointer; }
+  :where([data-tw]) :where(svg, img) { display: block; }
+  :where([data-tw]) :where(*, ::before, ::after) { box-sizing: border-box; }
+}
+
+/*
+ * shadcn/ui semantic color names mapped onto the existing design tokens from
+ * workbench.css (the source of truth per design/design.md), so shadcn
+ * components follow the same light/dark themes. Deliberately not redefining
+ * the raw --muted / --border variables shadcn normally ships: --muted already
+ * means "secondary text color" in this app.
+ */
+@theme inline {
+  --color-background: var(--bg);
+  --color-foreground: var(--text);
+  --color-card: var(--surface);
+  --color-card-foreground: var(--text);
+  --color-popover: var(--surface);
+  --color-popover-foreground: var(--text);
+  --color-primary: var(--action);
+  --color-primary-foreground: #ffffff;
+  --color-secondary: var(--surface-2);
+  --color-secondary-foreground: var(--text);
+  --color-muted: var(--surface-2);
+  --color-muted-foreground: var(--muted);
+  --color-accent: var(--hover-bg);
+  --color-accent-foreground: var(--text);
+  --color-destructive: var(--red);
+  --color-border: var(--line);
+  --color-input: var(--line);
+  --color-ring: var(--cyan);
+
+  --color-signal: var(--cyan);
+  --color-graph: var(--graph);
+  --color-signal-soft: var(--cyan-soft);
+  --color-pass: var(--green);
+  --color-warn: var(--amber);
+  --color-fail: var(--red);
+  --color-line-soft: var(--line-soft);
+  --color-subtle: var(--subtle-text);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-surface-3: var(--surface-3);
+  --color-chrome: var(--sidebar-bg);
+
+  --font-sans: "Manrope", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "DM Mono", ui-monospace, monospace;
+
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 9px;
+  --radius-xl: 12px;
+}
+
+@keyframes heat-in {
+  from { opacity: 0; transform: translateY(4px) scale(0.6); }
+  to { opacity: 1; transform: none; }
+}

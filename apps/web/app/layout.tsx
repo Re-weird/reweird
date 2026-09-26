@@ -1,8 +1,9 @@
 import type { Metadata } from "next";
-import "./globals.css";
-import "./workbench.css";
-import "./circuit-map.css";
-import "./device-passport.css";
+import "./tailwind.css";
+import { AppStateProvider } from "@/lib/app-state";
+import { TooltipProvider } from "@/components/ui/tooltip";
+import { GlobalNav } from "./global-nav";
+import { AppChrome } from "./app-chrome";
 
 export const metadata: Metadata = {
   title: "ReWeird — Hardware Diagnostics",
@@ -13,7 +14,14 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="en">
-      <body>{children}</body>
+      <body>
+        <AppStateProvider>
+          <TooltipProvider delayDuration={150}>
+            <GlobalNav />
+            <AppChrome>{children}</AppChrome>
+          </TooltipProvider>
+        </AppStateProvider>
+      </body>
     </html>
   );
 }

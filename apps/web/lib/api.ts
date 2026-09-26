@@ -115,6 +115,7 @@ function uploadFile(path: string, file: File): Promise<Project> {
 export const projectApi = {
   createProject: (input: CreateProjectInput) =>
     requestJSON<Project>("/api/v1/projects", { method: "POST", body: JSON.stringify(input) }),
+  listProjects: () => requestJSON<Project[]>("/api/v1/projects"),
   uploadProjectImage: (projectID: string, file: File) => uploadFile(`/api/v1/projects/${projectID}/media`, file),
   uploadProjectCode: (projectID: string, file: File) => uploadFile(`/api/v1/projects/${projectID}/code`, file),
   submitPastedCode: (projectID: string, codeText: string, filename = "pasted-code.ino") =>
@@ -125,6 +126,8 @@ export const projectApi = {
   analyzeProject: (projectID: string) =>
     requestJSON<AnalyzeProjectResponse>(`/api/v1/projects/${projectID}/analyze`, { method: "POST" }, 35_000),
   getProject: (projectID: string) => requestJSON<Project>(`/api/v1/projects/${projectID}`),
+  setVisibility: (projectID: string, visibility: Project["visibility"]) =>
+    requestJSON<Project>(`/api/v1/projects/${projectID}/visibility`, { method: "PUT", body: JSON.stringify({ visibility }) }),
   getDraftProfile: (projectID: string) => requestJSON<ProjectProfile>(`/api/v1/projects/${projectID}/profile`),
   saveProfileCorrections: (projectID: string, profile: ProjectProfile) =>
     requestJSON<ProjectProfile>(`/api/v1/projects/${projectID}/profile`, { method: "PUT", body: JSON.stringify(profile) }),

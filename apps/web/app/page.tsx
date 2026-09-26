@@ -45,8 +45,9 @@ import { makeDemoProfile, makeDemoSession } from "@/lib/demo";
 import { NewProjectModal, ProbePlanView, ProjectProfileView } from "./project-workflow";
 import { GuidedTestView } from "./guided-test";
 import { HistoryReportView } from "./history-report";
+import { ComputerDiagnosticsView } from "./computer-diagnostics";
 
-type View = "dashboard" | "profile" | "connect" | "simulator" | "live" | "diagnosis" | "guided" | "verify" | "history" | "reports";
+type View = "dashboard" | "profile" | "connect" | "simulator" | "live" | "diagnosis" | "guided" | "verify" | "history" | "reports" | "computer";
 
 const nav: { id: View; label: string; icon: typeof Activity }[] = [
   { id: "dashboard", label: "Overview", icon: LayoutDashboard },
@@ -59,6 +60,7 @@ const nav: { id: View; label: string; icon: typeof Activity }[] = [
   { id: "verify", label: "Verify", icon: CheckCircle2 },
   { id: "history", label: "History", icon: RefreshCw },
   { id: "reports", label: "Reports", icon: FileBarChart },
+  { id: "computer", label: "Computer diagnostics", icon: Cpu },
 ];
 
 const stageIndex = { detect: 0, diagnose: 1, test: 2, repair: 2, verify: 3 } as const;
@@ -574,6 +576,7 @@ export default function Home() {
     if (active === "verify" && legacyVerify) return <LegacyDemoVerifyView session={session} onReset={() => runOriginalDemo("reset")} busy={busy} />;
     if (active === "guided" || active === "verify") return <GuidedTestView workflow={workflow} recommendation={recommendation} busy={busy} error={testError} onPlan={() => runTestAction("plan")} onStart={() => runTestAction("start")} onCapture={() => runTestAction("capture")} onRemeasure={() => runTestAction("remeasure")} onCancel={() => runTestAction("cancel")} onRecordAction={recordUserAction} />;
     if (active === "history") return <HistoryReportView mode="history" />;
+    if (active === "computer") return <ComputerDiagnosticsView />;
     return <HistoryReportView mode="reports" />;
   }, [active, session, busy, project, profile, probePlan, scenarios, selectedScenario, workflow, recommendation, testError, legacyVerify]);
 

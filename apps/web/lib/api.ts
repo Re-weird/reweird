@@ -139,3 +139,17 @@ export const historyApi = {
   report: (id: string) => requestJSON<DetailedReport>(`/api/v1/reports/${encodeURIComponent(id)}`),
   downloadURL: (id: string, format: "json" | "md") => `/api/v1/reports/${encodeURIComponent(id)}?format=${format}&download=1`,
 };
+
+export interface ComputerAnalysis {
+  snapshot: { source: string; timestamp_ms: number; system: { os: string; cpu_percent: number; memory_total_mb: number; memory_used_mb: number }; disks: Array<{ name: string; total_mb: number; used_mb: number }>; processes: Array<{ name: string; pid: number; memory_mb: number }>; ports: Array<{ port: number; pid: number; process?: string }> };
+  expectations: { exclusive_port?: number; expected_service?: string; expected_local_port?: number; required_dependency?: string; expected_version?: string };
+  findings: Array<{ code: string; severity: string; summary: string; next_action: string; evidence: Array<{ name: string; value: unknown; provenance: string }> }>;
+  evidence: { physical_evidence: unknown[]; computer_evidence: unknown[]; software_evidence: unknown[] };
+}
+
+export const computerApi = {
+  status: () => requestJSON<{ real_collection_enabled: boolean; collector: string; simulator_available: boolean; active_operations_enabled: boolean }>("/api/v1/computer/status"),
+  scenarios: () => requestJSON<{ scenarios: Array<{ id: string; name: string; description: string }> }>("/api/v1/computer/scenarios"),
+  simulate: (scenarioID: string) => requestJSON<ComputerAnalysis>("/api/v1/computer/simulate", { method: "POST", body: JSON.stringify({ scenario_id: scenarioID }) }),
+  collect: (expected: ComputerAnalysis["expectations"]) => requestJSON<ComputerAnalysis>("/api/v1/computer/collect", { method: "POST", body: JSON.stringify(expected) }, 15_000),
+};

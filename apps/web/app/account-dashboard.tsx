@@ -1,80 +1,305 @@
 "use client";
 
-// Layout/placement matches the planned wireframe exactly. No data fetching -
-// every grid/value renders neutral/zero (not hidden behind empty-state text)
-// since there is no real backend for per-user activity yet. Wiring real
-// numbers is a separate follow-up task.
+import { memo, useMemo } from "react";
+import Link from "next/link";
+import { motion, useReducedMotion, type Variants } from "framer-motion";
+import { ArrowUpRight, FolderGit2 } from "lucide-react";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Button } from "@/components/ui/button";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { cn } from "@/lib/utils";
 
-const HEATMAP_WEEKS = 20;
-const weeks = Array.from({ length: HEATMAP_WEEKS }, (_, w) => w);
-const days = Array.from({ length: 7 }, (_, d) => d);
+// Layout and motion only. There is no per-user activity backend yet, so every
+// figure is an honest zero rather than an invented number (design/design.md:
+// no fabricated metrics). Wiring real data is a separate task.
 
-export function AccountDashboardView({ onNavigate }: { onNavigate: (view: "projects" | "settings") => void }) {
-  return <div className="account-dashboard">
-    <div className="account-layout">
-      <aside className="account-sidebar">
-        <div className="account-avatar">—</div>
-        <div className="account-identity"><strong>Local session</strong><small>No user sign-in</small></div>
-        <button className="text-button" disabled>Edit profile</button>
-        <div className="account-joined">Joined —</div>
-        <div className="account-stat-list">
-          <div><span>Projects</span><strong>0</strong></div>
-          <div><span>Diagnostic sessions</span><strong>0</strong></div>
-          <div><span>Resolved</span><strong>0</strong></div>
-          <div><span>Unresolved</span><strong>0</strong></div>
-          <div><span>Avg. time to resolve</span><strong>—</strong></div>
+const WEEKS = 20;
+const DAY_MS = 86_400_000;
+const spring = { type: "spring", stiffness: 100, damping: 20 } as const;
+
+const stagger: Variants = { hidden: {}, show: { transition: { staggerChildren: 0.07, delayChildren: 0.05 } } };
+const rise: Variants = { hidden: { opacity: 0, y: 14 }, show: { opacity: 1, y: 0, transition: spring } };
+
+const stats = [
+  { label: "Projects", value: "0" },
+  { label: "Diagnostic sessions", value: "0" },
+  { label: "Resolved", value: "0" },
+  { label: "Unresolved", value: "0" },
+  { label: "Avg. time to resolve", value: "—" },
+];
+
+const outcomes = [
+  { label: "Resolved", tone: "bg-pass" },
+  { label: "Improved", tone: "bg-warn" },
+  { label: "Unresolved", tone: "bg-fail" },
+];
+
+function useCalendar() {
+  return useMemo(() => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const start = new Date(today.getTime() - (today.getDay() + (WEEKS - 1) * 7) * DAY_MS);
+    const weeks = Array.from({ length: WEEKS }, (_, w) => new Date(start.getTime() + w * 7 * DAY_MS));
+    const months = weeks.map((week, index) => {
+      const previous = weeks[index - 1];
+      return !previous || previous.getMonth() !== week.getMonth() ? week.toLocaleString("en", { month: "short" }) : "";
+    });
+    return { weeks, months };
+  }, []);
+}
+
+function SectionHead({ index, title, meta }: { index: string; title: string; meta?: string }) {
+  return (
+    <div className="mb-5 flex items-baseline justify-between gap-4">
+      <div className="flex items-baseline gap-3">
+        <span className="font-mono text-[10px] tracking-[0.12em] text-subtle">{index}</span>
+        <h2 className="text-[13px] font-semibold tracking-tight text-foreground">{title}</h2>
+      </div>
+      {meta && <span className="font-mono text-[11px] text-subtle">{meta}</span>}
+    </div>
+  );
+}
+
+const PresencePulse = memo(function PresencePulse() {
+  const reduce = useReducedMotion();
+  return (
+    <span className="absolute right-1 bottom-1 grid size-3.5 place-items-center rounded-full bg-background">
+      {!reduce && (
+        <motion.span
+          className="absolute size-2.5 rounded-full bg-subtle"
+          animate={{ scale: [1, 2.1], opacity: [0.45, 0] }}
+          transition={{ duration: 2.4, repeat: Infinity, ease: "easeOut" }}
+        />
+      )}
+      <span className="relative size-2 rounded-full bg-subtle" />
+    </span>
+  );
+});
+
+const ScanSweep = memo(function ScanSweep() {
+  const reduce = useReducedMotion();
+  if (reduce) return null;
+  return (
+    <div className="pointer-events-none absolute inset-0 overflow-hidden" aria-hidden="true">
+      <motion.div
+        className="h-full w-1/6 bg-linear-to-r from-transparent via-signal/12 to-transparent"
+        initial={{ x: "-100%" }}
+        animate={{ x: "600%" }}
+        transition={{ duration: 7, repeat: Infinity, ease: "easeInOut", repeatDelay: 1.5 }}
+      />
+    </div>
+  );
+});
+
+const RadarCore = memo(function RadarCore() {
+  const reduce = useReducedMotion();
+  return (
+    <g>
+      {!reduce && (
+        <motion.circle
+          cx="130" cy="130" r="4"
+          className="fill-signal"
+          animate={{ r: [4, 16], opacity: [0.35, 0] }}
+          transition={{ duration: 2.8, repeat: Infinity, ease: "easeOut" }}
+        />
+      )}
+      <circle cx="130" cy="130" r="3.5" className="fill-signal" />
+    </g>
+  );
+});
+
+function ActivityHeatmap() {
+  const { weeks, months } = useCalendar();
+  return (
+    <div className="relative">
+      <div className="mb-2 ml-8 grid gap-[3px] font-mono text-[10px] text-subtle" style={{ gridTemplateColumns: `repeat(${WEEKS}, 11px)` }}>
+        {months.map((label, index) => <span key={index} className="whitespace-nowrap">{label}</span>)}
+      </div>
+      <div className="flex gap-2">
+        <div className="grid grid-rows-7 gap-[3px] pt-px font-mono text-[10px] leading-[11px] text-subtle">
+          {["", "Mon", "", "Wed", "", "Fri", ""].map((day, index) => <span key={index} className="h-[11px] w-6">{day}</span>)}
         </div>
-      </aside>
-
-      <div className="account-main">
-        <div className="account-tabs">
-          <button className="active">Overview</button>
-          <button onClick={() => onNavigate("projects")}>Projects</button>
-          <button onClick={() => onNavigate("settings")}>Settings</button>
-        </div>
-
-        <section className="account-section">
-          <div className="account-section-head"><h2>0 diagnostic sessions in the last year</h2>
-            <div className="heatmap-legend">Less<span className="heatmap-cell" /><span className="heatmap-cell" /><span className="heatmap-cell" /><span className="heatmap-cell" />More</div>
-          </div>
-          <div className="heatmap-grid">
-            {weeks.map((w) => <div className="heatmap-col" key={w}>{days.map((d) => <div className="heatmap-cell" key={d} />)}</div>)}
-          </div>
-        </section>
-
-        <section className="account-section">
-          <div className="account-section-head"><h2>Recent projects</h2></div>
-          <div className="account-plain-row"><span>No projects yet</span></div>
-        </section>
-
-        <section className="account-section">
-          <div className="account-section-head"><h2>Activity overview</h2></div>
-          <div className="account-activity">
-            <p className="account-activity-copy">No diagnostic activity yet.</p>
-            <svg width="220" height="220" viewBox="0 0 220 220" className="activity-chart">
-              <line x1="110" y1="110" x2="110" y2="30" stroke="var(--line)" strokeWidth="1" />
-              <line x1="110" y1="110" x2="190" y2="110" stroke="var(--line)" strokeWidth="1" />
-              <line x1="110" y1="110" x2="110" y2="190" stroke="var(--line)" strokeWidth="1" />
-              <line x1="110" y1="110" x2="30" y2="110" stroke="var(--line)" strokeWidth="1" />
-              <circle cx="110" cy="110" r="3" fill="var(--muted)" />
-              <text x="110" y="20" textAnchor="middle" fontSize="10" fill="var(--subtle-text)">Guided tests</text>
-              <text x="200" y="114" textAnchor="start" fontSize="10" fill="var(--subtle-text)">Computer checks</text>
-              <text x="110" y="206" textAnchor="middle" fontSize="10" fill="var(--subtle-text)">Git syncs</text>
-              <text x="20" y="114" textAnchor="end" fontSize="10" fill="var(--subtle-text)">Diagnoses</text>
-            </svg>
-          </div>
-        </section>
-
-        <section className="account-section">
-          <div className="account-section-head"><h2>Session outcomes</h2><small>0 total, all time</small></div>
-          <div className="outcome-bar"><span style={{ width: "100%", background: "var(--line-soft)" }} /></div>
-          <div className="outcome-legend">
-            <span><i className="status-dot stable" />Resolved <strong>0</strong></span>
-            <span><i className="status-dot active" />Improved <strong>0</strong></span>
-            <span><i className="status-dot intermittent" />Unresolved <strong>0</strong></span>
-          </div>
-        </section>
+        <motion.div className="relative flex gap-[3px]" variants={{ show: { transition: { staggerChildren: 0.018 } } }}>
+          {weeks.map((week) => (
+            <motion.div
+              key={week.getTime()}
+              className="grid grid-rows-7 gap-[3px]"
+              variants={{ hidden: { opacity: 0, y: 6 }, show: { opacity: 1, y: 0, transition: spring } }}
+            >
+              {Array.from({ length: 7 }, (_, day) => (
+                <span key={day} className="size-[11px] rounded-[2px] bg-line-soft" title={`${new Date(week.getTime() + day * DAY_MS).toLocaleDateString()}: 0 sessions`} />
+              ))}
+            </motion.div>
+          ))}
+          <ScanSweep />
+        </motion.div>
+      </div>
+      <div className="mt-4 flex items-center justify-end gap-1.5 font-mono text-[10px] text-subtle">
+        Less
+        {["bg-line-soft", "bg-signal/25", "bg-signal/50", "bg-signal/75", "bg-signal"].map((tone) => <span key={tone} className={cn("size-[11px] rounded-[2px]", tone)} />)}
+        More
       </div>
     </div>
-  </div>;
+  );
+}
+
+function ActivityRadar() {
+  const axes = [
+    { x2: 130, y2: 30, label: "Guided tests", lx: 130, ly: 16, anchor: "middle" as const },
+    { x2: 230, y2: 130, label: "Computer checks", lx: 236, ly: 134, anchor: "start" as const },
+    { x2: 130, y2: 230, label: "Git syncs", lx: 130, ly: 252, anchor: "middle" as const },
+    { x2: 30, y2: 130, label: "Diagnoses", lx: 24, ly: 134, anchor: "end" as const },
+  ];
+  const rings = [0.33, 0.66, 1].map((scale) => {
+    const r = 100 * scale;
+    return `130,${130 - r} ${130 + r},130 130,${130 + r} ${130 - r},130`;
+  });
+  return (
+    <svg viewBox="-70 0 400 262" className="h-auto w-full max-w-[380px] overflow-visible" role="img" aria-label="Activity mix across diagnoses, guided tests, computer checks and git syncs: no activity yet">
+      {rings.map((points) => <polygon key={points} points={points} className="fill-none stroke-line-soft" strokeWidth="1" />)}
+      {axes.map((axis, index) => (
+        <g key={axis.label}>
+          <motion.line
+            x1="130" y1="130" x2={axis.x2} y2={axis.y2}
+            className="stroke-border" strokeWidth="1"
+            initial={{ pathLength: 0 }}
+            animate={{ pathLength: 1 }}
+            transition={{ duration: 0.9, delay: 0.25 + index * 0.12, ease: [0.16, 1, 0.3, 1] }}
+          />
+          <text x={axis.lx} y={axis.ly} textAnchor={axis.anchor} className="fill-muted-foreground text-[11px]">{axis.label}</text>
+          <text x={axis.lx} y={axis.ly + 13} textAnchor={axis.anchor} className="fill-subtle font-mono text-[10px]">0%</text>
+        </g>
+      ))}
+      <RadarCore />
+    </svg>
+  );
+}
+
+export function AccountDashboardView({ onNavigate }: { onNavigate: (view: "projects" | "settings") => void }) {
+  return (
+    <motion.div variants={stagger} initial="hidden" animate="show" className="mx-auto grid w-full max-w-[1240px] grid-cols-1 gap-10 lg:grid-cols-[250px_minmax(0,1fr)] lg:gap-14">
+      <motion.aside variants={rise} className="flex flex-col gap-6 self-start lg:sticky lg:top-24">
+        <div className="relative w-fit">
+          <Avatar className="size-24 ring-1 ring-border">
+            <AvatarFallback className="bg-surface-3 font-mono text-2xl font-medium text-muted-foreground">RW</AvatarFallback>
+          </Avatar>
+          <PresencePulse />
+        </div>
+
+        <div>
+          <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-subtle">Operator</p>
+          <h1 className="mt-1.5 text-xl font-semibold tracking-tight text-foreground">Local session</h1>
+          <p className="mt-0.5 text-sm text-muted-foreground">No user sign-in yet</p>
+        </div>
+
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <span tabIndex={0} className="w-full rounded-md">
+              <Button variant="outline" size="sm" disabled className="w-full">Edit profile</Button>
+            </span>
+          </TooltipTrigger>
+          <TooltipContent side="right">Profiles arrive with sign-in</TooltipContent>
+        </Tooltip>
+
+        <dl className="divide-y divide-line-soft border-y border-line-soft">
+          {stats.map((stat) => (
+            <div key={stat.label} className="flex items-baseline justify-between py-2.5 transition-colors hover:bg-accent/40">
+              <dt className="text-xs text-muted-foreground">{stat.label}</dt>
+              <dd className="font-mono text-base tabular-nums text-foreground">{stat.value}</dd>
+            </div>
+          ))}
+        </dl>
+
+        <p className="font-mono text-[11px] text-subtle">Joined —</p>
+      </motion.aside>
+
+      <motion.div variants={stagger} className="min-w-0">
+        <motion.div variants={rise}>
+          <Tabs value="overview" onValueChange={(value) => { if (value === "projects" || value === "settings") onNavigate(value); }}>
+            <TabsList variant="line" className="h-auto w-full justify-start gap-7 border-b border-border p-0">
+              {[["overview", "Overview"], ["projects", "Projects"], ["settings", "Settings"]].map(([value, label]) => (
+                <TabsTrigger key={value} value={value} className="h-auto flex-none rounded-none px-0 pb-3 text-[13px] after:bottom-[-1px] after:bg-signal">
+                  {label}
+                </TabsTrigger>
+              ))}
+            </TabsList>
+          </Tabs>
+        </motion.div>
+
+        <motion.section variants={rise} className="relative mt-8">
+          <div
+            className="pointer-events-none absolute -inset-x-4 -inset-y-4 opacity-60 [background-image:radial-gradient(var(--line-soft)_1px,transparent_1px)] [background-size:14px_14px] [mask-image:radial-gradient(ellipse_at_30%_40%,black,transparent_75%)]"
+            aria-hidden="true"
+          />
+          <div className="relative">
+            <SectionHead index="01" title="Diagnostic activity" meta={`Last ${WEEKS} weeks`} />
+            <div className="grid grid-cols-1 items-end gap-8 md:grid-cols-[150px_minmax(0,1fr)]">
+              <div>
+                <p className="font-mono text-6xl leading-none font-light tabular-nums tracking-tighter text-foreground">0</p>
+                <p className="mt-3 max-w-[18ch] text-xs leading-relaxed text-muted-foreground">sessions recorded across every project</p>
+              </div>
+              <div className="overflow-x-auto pb-1">
+                <ActivityHeatmap />
+              </div>
+            </div>
+          </div>
+        </motion.section>
+
+        <div className="mt-12 grid grid-cols-1 gap-12 border-t border-line-soft pt-10 xl:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)] xl:gap-16">
+          <motion.section variants={rise}>
+            <SectionHead index="02" title="Activity overview" meta="All projects" />
+            <div className="grid grid-cols-1 items-center gap-6 sm:grid-cols-[minmax(0,0.8fr)_minmax(0,1.2fr)]">
+              <p className="max-w-[34ch] text-sm leading-relaxed text-muted-foreground">
+                Nothing to break down yet. Diagnoses, guided tests, computer checks, and git syncs will shape this once sessions exist.
+              </p>
+              <ActivityRadar />
+            </div>
+          </motion.section>
+
+          <motion.section variants={rise}>
+            <SectionHead index="03" title="Session outcomes" meta="0 total · all time" />
+            <div className="h-1.5 w-full overflow-hidden rounded-full bg-line-soft" role="img" aria-label="No session outcomes yet" />
+            <ul className="mt-6 divide-y divide-line-soft">
+              {outcomes.map((outcome) => (
+                <li key={outcome.label} className="flex items-center gap-3 py-3">
+                  <span className={cn("size-2 rounded-full opacity-70", outcome.tone)} />
+                  <span className="flex-1 text-sm text-muted-foreground">{outcome.label}</span>
+                  <span className="h-1 w-24 rounded-full bg-line-soft" aria-hidden="true" />
+                  <span className="w-8 text-right font-mono text-sm tabular-nums text-foreground">0</span>
+                </li>
+              ))}
+            </ul>
+          </motion.section>
+        </div>
+
+        <motion.section variants={rise} className="mt-12 border-t border-line-soft pt-10">
+          <SectionHead index="04" title="Recent projects" />
+          <div className="grid grid-cols-1 items-center gap-8 md:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)]">
+            <div className="flex flex-col gap-2" aria-hidden="true">
+              {[1, 0.55, 0.25].map((opacity) => (
+                <div key={opacity} className="flex items-center gap-3 border-b border-line-soft py-3" style={{ opacity }}>
+                  <span className="size-2 rounded-full bg-line-soft" />
+                  <span className="h-2 w-40 rounded-full bg-line-soft" />
+                  <span className="ml-auto h-2 w-12 rounded-full bg-line-soft" />
+                </div>
+              ))}
+            </div>
+            <div className="flex flex-col items-start gap-4">
+              <span className="grid size-10 place-items-center rounded-lg border border-border bg-surface-2 text-muted-foreground">
+                <FolderGit2 className="size-[18px]" strokeWidth={1.5} />
+              </span>
+              <div>
+                <h3 className="text-sm font-semibold text-foreground">No projects on the bench yet</h3>
+                <p className="mt-1 max-w-[40ch] text-sm leading-relaxed text-muted-foreground">Projects you open or analyze will line up here, most recent first.</p>
+              </div>
+              <Button asChild variant="outline" size="sm" className="active:scale-[0.98]">
+                <Link href="/projects">Go to projects <ArrowUpRight /></Link>
+              </Button>
+            </div>
+          </div>
+        </motion.section>
+      </motion.div>
+    </motion.div>
+  );
 }

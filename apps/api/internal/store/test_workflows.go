@@ -36,6 +36,35 @@ func (store *SQLiteStore) LatestTestWorkflow(profileID string) (*domain.Diagnost
 	return store.readTestWorkflow("SELECT payload FROM test_workflows WHERE profile_id = ? ORDER BY updated_at_ms DESC, id DESC LIMIT 1", profileID)
 }
 
+// ListTestWorkflows pages over the existing persisted test records; it does
+// not create a second session store. Callers can filter the bounded page.
+func (store *SQLiteStore) ListTestWorkflows(limit, offset int) ([]domain.DiagnosticWorkflow, error) {
+	if limit < 1 || limit > 200 {
+		limit = 100
+	}
+	if offset < 0 {
+		offset = 0
+	}
+	rows, err := store.db.Query("SELECT payload FROM test_workflows ORDER BY created_at_ms DESC, id DESC LIMIT ? OFFSET ?", limit, offset)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := make([]domain.DiagnosticWorkflow, 0, limit)
+	for rows.Next() {
+		var payload string
+		if err := rows.Scan(&payload); err != nil {
+			return nil, err
+		}
+		var workflow domain.DiagnosticWorkflow
+		if err := json.Unmarshal([]byte(payload), &workflow); err != nil {
+			return nil, err
+		}
+		items = append(items, workflow)
+	}
+	return items, rows.Err()
+}
+
 func (store *SQLiteStore) readTestWorkflow(query, value string) (*domain.DiagnosticWorkflow, error) {
 	var payload string
 	err := store.db.QueryRow(query, value).Scan(&payload)

@@ -466,6 +466,7 @@ export interface DiagnosticWorkflow {
   project_id: string;
   profile_id: string;
   profile_version: number;
+  profile_snapshot?: ProjectProfile;
   scenario_id?: string;
   status: TestState;
   plan: TestPlan;
@@ -474,7 +475,35 @@ export interface DiagnosticWorkflow {
   after?: MeasurementWindow;
   result?: TestResult;
   verification?: VerificationResult;
+  user_actions?: UserAction[];
   error?: string;
   created_at_ms: number;
   updated_at_ms: number;
+}
+
+export interface UserAction { id: string; description: string; timestamp_ms: number }
+export type HistoryStatus = "OPEN" | "TESTING" | "WAITING_FOR_USER" | "VERIFYING" | "RESOLVED" | "IMPROVED" | "UNRESOLVED" | "CANCELLED" | "INCONCLUSIVE";
+export interface HistorySummary {
+  id: string;
+  project_id: string;
+  project_name: string;
+  session_id: string;
+  profile_id: string;
+  profile_version: number;
+  telemetry_source?: string;
+  original_problem: string;
+  status: HistoryStatus;
+  started_at_ms: number;
+  ended_at_ms?: number;
+}
+export interface HistoryEvent { id: string; timestamp_ms: number; kind: string; description: string; provenance: EvidenceProvenance | "GUIDED_TEST" | "USER"; window_id?: number }
+export interface HistoryDetail { summary: HistorySummary; timeline: HistoryEvent[]; workflow: DiagnosticWorkflow }
+export interface ReportFact { probe?: string; window_id?: number; metric: string; value: unknown; unit?: string; provenance: string }
+export interface DetailedReport {
+  report_id: string; project_id: string; project_name: string; session_id: string; date_ms: number; controller?: string;
+  profile_id: string; profile_revision: number; summary: string; observed_behavior: string; expected_behavior?: string;
+  measured_evidence: ReportFact[]; derived_evidence: ReportFact[]; tests_performed: TestPlan[]; test_results: TestResult[];
+  user_actions: UserAction[]; before_window_id?: number; after_window_id?: number; verify_result?: VerificationResult;
+  final_status: HistoryStatus; unresolved_items: string[]; provenance: string[]; system_information: Record<string, unknown>;
+  security_redaction_count: number;
 }

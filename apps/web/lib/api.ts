@@ -3,6 +3,10 @@ import type {
   ConfirmProfileResponse,
   DemoSession,
   DiagnosticWorkflow,
+  DetailedReport,
+  HistoryDetail,
+  HistoryStatus,
+  HistorySummary,
   MeasurementWindow,
   ProbePlan,
   Project,
@@ -121,4 +125,17 @@ export const testApi = {
   capture: (id: string) => requestJSON<DiagnosticWorkflow>(`/api/v1/tests/${encodeURIComponent(id)}/capture`, { method: "POST" }, 15_000),
   remeasure: (id: string) => requestJSON<DiagnosticWorkflow>(`/api/v1/tests/${encodeURIComponent(id)}/remeasure`, { method: "POST" }, 15_000),
   cancel: (id: string) => requestJSON<DiagnosticWorkflow>(`/api/v1/tests/${encodeURIComponent(id)}/cancel`, { method: "POST" }),
+  recordAction: (id: string, description: string) => requestJSON<DiagnosticWorkflow>(`/api/v1/tests/${encodeURIComponent(id)}/actions`, { method: "POST", body: JSON.stringify({ description }) }),
+};
+
+export const historyApi = {
+  list: (filters: { projectID?: string; status?: HistoryStatus | ""; sort?: "newest" | "oldest" } = {}) => {
+    const query = new URLSearchParams({ limit: "100", sort: filters.sort ?? "newest" });
+    if (filters.projectID) query.set("project_id", filters.projectID);
+    if (filters.status) query.set("status", filters.status);
+    return requestJSON<{ items: HistorySummary[]; count: number }>(`/api/v1/history?${query}`);
+  },
+  detail: (id: string) => requestJSON<HistoryDetail>(`/api/v1/history/${encodeURIComponent(id)}`),
+  report: (id: string) => requestJSON<DetailedReport>(`/api/v1/reports/${encodeURIComponent(id)}`),
+  downloadURL: (id: string, format: "json" | "md") => `/api/v1/reports/${encodeURIComponent(id)}?format=${format}&download=1`,
 };

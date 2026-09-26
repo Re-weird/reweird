@@ -12,7 +12,6 @@ import {
   ChevronRight,
   CircleDot,
   Cpu,
-  Download,
   FileBarChart,
   Gauge,
   GitBranch,
@@ -45,8 +44,9 @@ import { ApiError, demoApi, projectApi, testApi } from "@/lib/api";
 import { makeDemoProfile, makeDemoSession } from "@/lib/demo";
 import { NewProjectModal, ProbePlanView, ProjectProfileView } from "./project-workflow";
 import { GuidedTestView } from "./guided-test";
+import { HistoryReportView } from "./history-report";
 
-type View = "dashboard" | "profile" | "connect" | "simulator" | "live" | "diagnosis" | "guided" | "verify" | "reports";
+type View = "dashboard" | "profile" | "connect" | "simulator" | "live" | "diagnosis" | "guided" | "verify" | "history" | "reports";
 
 const nav: { id: View; label: string; icon: typeof Activity }[] = [
   { id: "dashboard", label: "Overview", icon: LayoutDashboard },
@@ -57,6 +57,7 @@ const nav: { id: View; label: string; icon: typeof Activity }[] = [
   { id: "diagnosis", label: "Diagnosis", icon: Microscope },
   { id: "guided", label: "Guided test", icon: TestTube2 },
   { id: "verify", label: "Verify", icon: CheckCircle2 },
+  { id: "history", label: "History", icon: RefreshCw },
   { id: "reports", label: "Reports", icon: FileBarChart },
 ];
 
@@ -414,26 +415,6 @@ function ProjectLivePending({ project, profile, plan }: { project: Project; prof
   );
 }
 
-function ReportsView({ session }: { session: DemoSession }) {
-  const focus = session.probes.find((probe) => probe.probe === session.evidence.probe);
-  function downloadReport() {
-    const blob = new Blob([JSON.stringify(session, null, 2)], { type: "application/json" });
-    const url = URL.createObjectURL(blob);
-    const anchor = document.createElement("a");
-    anchor.href = url;
-    anchor.download = `reweird-diagnostic-${session.id}.json`;
-    anchor.click();
-    URL.revokeObjectURL(url);
-  }
-  return (
-    <>
-      <section className="page-heading"><div><p className="kicker">Audit-ready history</p><h1>Diagnostic reports</h1><p>Reports preserve measurements, deterministic rules, user actions, and AI interpretation separately.</p></div><button className="primary" onClick={downloadReport}><Download size={16} /> Download JSON</button></section>
-      <section className="panel reports-table"><div className="report-row report-head"><span>Report</span><span>Finding</span><span>Status</span><span>Evidence</span><span /></div><div className="report-row"><span><b>{session.id}</b><small>Measurement #{session.measurement_id ?? "local"}</small></span><span>{session.evidence.probe} {focus?.status ?? "measured"} {session.evidence.role}</span><span className={`status-label ${session.stage === "verify" ? "stable" : "intermittent"}`}>{session.stage === "verify" ? "Resolved" : "In progress"}</span><span>{session.evidence.rule_results.length} rule results</span><button className="icon-button" onClick={downloadReport} aria-label="Download report"><Download size={16} /></button></div></section>
-      <section className="security-note"><ShieldCheck size={20} /><div><strong>Git synchronization is off</strong><span>No report or project data leaves this workspace without explicit approval and a secrets scan.</span></div></section>
-    </>
-  );
-}
-
 export default function Home() {
   const [session, setSession] = useState<DemoSession>(() => makeDemoSession());
   const [active, setActive] = useState<View>("dashboard");
@@ -505,6 +486,15 @@ export default function Home() {
     if (action === "repair") setActive("verify");
     if (action === "reset") setActive("simulator");
     setBusy(false);
+  };
+
+  const recordUserAction = async (description: string) => {
+    if (!workflow) return;
+    setBusy(true);
+    setTestError(null);
+    try { setWorkflow(await testApi.recordAction(workflow.id, description)); setToast("User action added to diagnostic history"); }
+    catch (cause) { setTestError(cause instanceof Error ? cause.message : "The action could not be recorded."); }
+    finally { setBusy(false); }
   };
 
   const runScenario = async () => {
@@ -582,8 +572,9 @@ export default function Home() {
     }
     if (active === "diagnosis") return <DiagnosisView session={session} onPlan={() => runTestAction("plan")} busy={busy} />;
     if (active === "verify" && legacyVerify) return <LegacyDemoVerifyView session={session} onReset={() => runOriginalDemo("reset")} busy={busy} />;
-    if (active === "guided" || active === "verify") return <GuidedTestView workflow={workflow} recommendation={recommendation} busy={busy} error={testError} onPlan={() => runTestAction("plan")} onStart={() => runTestAction("start")} onCapture={() => runTestAction("capture")} onRemeasure={() => runTestAction("remeasure")} onCancel={() => runTestAction("cancel")} />;
-    return <ReportsView session={session} />;
+    if (active === "guided" || active === "verify") return <GuidedTestView workflow={workflow} recommendation={recommendation} busy={busy} error={testError} onPlan={() => runTestAction("plan")} onStart={() => runTestAction("start")} onCapture={() => runTestAction("capture")} onRemeasure={() => runTestAction("remeasure")} onCancel={() => runTestAction("cancel")} onRecordAction={recordUserAction} />;
+    if (active === "history") return <HistoryReportView mode="history" />;
+    return <HistoryReportView mode="reports" />;
   }, [active, session, busy, project, profile, probePlan, scenarios, selectedScenario, workflow, recommendation, testError, legacyVerify]);
 
   return (

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import Image from "next/image";
 import {
   Activity,
   BarChart3,
@@ -26,7 +27,6 @@ import {
   Sun,
   TestTube2,
   TriangleAlert,
-  Waves,
   X,
   Upload,
 } from "lucide-react";
@@ -208,7 +208,7 @@ function AppShell({
     <div className="app-shell">
       <aside className={`sidebar ${mobileOpen ? "mobile-open" : ""}`}>
         <button className="mobile-close" onClick={() => setMobileOpen(false)} aria-label="Close menu"><X size={20} /></button>
-        <div className="brand"><span className="brand-mark"><Waves size={22} /></span><span>Re<span>Weird</span></span></div>
+        <div className="brand"><span className="brand-mark"><Image src="/images/reweird-logo.png" alt="" width={72} height={72} className="brand-logo-image" priority /></span><span>Re<span>Weird</span></span></div>
         <button className="project-switcher" onClick={() => { setActive("profile"); setMobileOpen(false); }}>
           <span className="device-icon"><Cpu size={18} /></span>
           <div><small>Active project</small><strong>{projectName}</strong></div>

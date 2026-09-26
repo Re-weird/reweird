@@ -85,3 +85,8 @@
   --radius-lg: 9px;
   --radius-xl: 12px;
 }
+
+@keyframes heat-in {
+  from { opacity: 0; transform: translateY(4px) scale(0.6); }
+  to { opacity: 1; transform: none; }
+}

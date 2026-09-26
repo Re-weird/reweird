@@ -11,7 +11,7 @@ import { cn } from "@/lib/utils";
 // figure is an honest zero rather than an invented number (design/design.md:
 // no fabricated metrics). Wiring real data is a separate task.
 
-const WEEKS = 20;
+const WEEKS = 52;
 const DAY_MS = 86_400_000;
 const spring = { type: "spring", stiffness: 100, damping: 20 } as const;
 
@@ -84,31 +84,32 @@ const RadarCore = memo(function RadarCore() {
   );
 });
 
+// A full year that stretches to the row width: one fluid CSS grid, week
+// columns share the width (minmax keeps cells legible and scrolls on small
+// screens). Cells fade in column by column via a CSS animation - 364 motion
+// components would be needlessly heavy.
 function ActivityHeatmap() {
   const { weeks, months } = useCalendar();
+  const columns = `1.75rem repeat(${WEEKS}, minmax(9px, 1fr))`;
   return (
-    <div className="relative">
-      <div className="mb-2 ml-8 grid gap-[3px] font-mono text-[10px] text-subtle" style={{ gridTemplateColumns: `repeat(${WEEKS}, 11px)` }}>
-        {months.map((label, index) => <span key={index} className="whitespace-nowrap">{label}</span>)}
-      </div>
-      <div className="flex gap-2">
-        <div className="grid grid-rows-7 gap-[3px] pt-px font-mono text-[10px] leading-[11px] text-subtle">
-          {["", "Mon", "", "Wed", "", "Fri", ""].map((day, index) => <span key={index} className="h-[11px] w-6">{day}</span>)}
-        </div>
-        <motion.div className="relative flex gap-[3px]" variants={{ show: { transition: { staggerChildren: 0.018 } } }}>
-          {weeks.map((week) => (
-            <motion.div
-              key={week.getTime()}
-              className="grid grid-rows-7 gap-[3px]"
-              variants={{ hidden: { opacity: 0, y: 6 }, show: { opacity: 1, y: 0, transition: spring } }}
-            >
-              {Array.from({ length: 7 }, (_, day) => (
-                <span key={day} className="size-[11px] rounded-[2px] bg-line-soft" title={`${new Date(week.getTime() + day * DAY_MS).toLocaleDateString()}: 0 sessions`} />
-              ))}
-            </motion.div>
-          ))}
-          <ScanSweep />
-        </motion.div>
+    <div className="relative w-full">
+      <div className="relative grid gap-[3px] font-mono text-[10px] text-subtle" style={{ gridTemplateColumns: columns }}>
+        <span />
+        {months.map((label, index) => <span key={index} className="overflow-visible whitespace-nowrap">{label}</span>)}
+        {Array.from({ length: 7 }, (_, day) => (
+          <div key={day} className="contents">
+            <span className="flex items-center leading-none">{day % 2 === 1 ? ["", "Mon", "", "Wed", "", "Fri", ""][day] : ""}</span>
+            {weeks.map((week, column) => (
+              <span
+                key={week.getTime()}
+                className="aspect-square w-full rounded-[2px] bg-line-soft motion-reduce:[animation:none]"
+                style={{ animation: `heat-in 520ms cubic-bezier(0.16, 1, 0.3, 1) ${column * 14 + day * 10}ms both` }}
+                title={`${new Date(week.getTime() + day * DAY_MS).toLocaleDateString()}: 0 sessions`}
+              />
+            ))}
+          </div>
+        ))}
+        <div className="pointer-events-none absolute inset-y-0 right-0 left-7"><ScanSweep /></div>
       </div>
       <div className="mt-4 flex items-center justify-end gap-1.5 font-mono text-[10px] text-subtle">
         Less
@@ -161,15 +162,9 @@ export function AccountDashboardView() {
             aria-hidden="true"
           />
           <div className="relative">
-            <SectionHead index="01" title="Diagnostic activity" meta={`Last ${WEEKS} weeks`} />
-            <div className="grid grid-cols-1 items-end gap-8 md:grid-cols-[150px_minmax(0,1fr)]">
-              <div>
-                <p className="font-mono text-6xl leading-none font-light tabular-nums tracking-tighter text-foreground">0</p>
-                <p className="mt-3 max-w-[18ch] text-xs leading-relaxed text-muted-foreground">sessions recorded across every project</p>
-              </div>
-              <div className="overflow-x-auto pb-1">
-                <ActivityHeatmap />
-              </div>
+            <SectionHead index="01" title="0 diagnostic sessions in the last year" meta="All projects" />
+            <div className="overflow-x-auto pb-1">
+              <ActivityHeatmap />
             </div>
           </div>
         </motion.section>

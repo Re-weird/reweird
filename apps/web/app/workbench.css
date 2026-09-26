@@ -27,30 +27,30 @@
   --scope-bg: #121518;
 }
 :root[data-theme="light"] {
-  --bg: #f1f2f3;
-  --sidebar-bg: #fafbfc;
-  --surface: #ffffff;
-  --surface-2: #f6f7f8;
-  --surface-3: #e9edf1;
-  --card-bg: #fff;
-  --field-bg: #fafbfc;
-  --line: #dcdfe3;
-  --line-soft: #e9ebee;
+  --bg: #e3e5e8;
+  --sidebar-bg: #eaecef;
+  --surface: #eef0f2;
+  --surface-2: #e6e8eb;
+  --surface-3: #d9dde2;
+  --card-bg: #eef0f2;
+  --field-bg: #eaecef;
+  --line: #c8cdd3;
+  --line-soft: #d8dce0;
   --text: #22282e;
-  --muted: #616b76;
-  --subtle-text: #69747f;
-  --cyan: #335f9b;
-  --cyan-soft: #eaf0f9;
+  --muted: #545d68;
+  --subtle-text: #5a6470;
+  --cyan: #2f5890;
+  --cyan-soft: #d9e3f0;
   --red: #a94e48;
   --green: #437361;
   --violet: #616b76;
   --amber: #886327;
   --action: #365f9d;
-  --topbar-bg: #f1f2f3ef;
-  --panel-bg: #ffffff;
-  --hover-bg: #edf0f3;
+  --topbar-bg: #e3e5e8ef;
+  --panel-bg: #eef0f2;
+  --hover-bg: #dcdfe3;
   --shadow: 0 2px 4px #26364b04;
-  --scope-bg: #f8fafb;
+  --scope-bg: #e9ebee;
 }
 body { background: var(--bg); font-family: "Manrope", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; -webkit-font-smoothing: antialiased; }
 button, a, input, textarea, select { -webkit-tap-highlight-color: transparent; }

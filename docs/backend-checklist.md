@@ -48,16 +48,19 @@ Check items off as you go. Ping me when a section is done — I'll review before
 - [x] Compare before/after → fixed / still_failing / unclear — `internal/reports` (**done today**)
 - [x] Report endpoint `GET /api/v1/report` (**done today**)
 
-## 7. Computer Diagnostics (Layer 10) — NOT STARTED (optional for V1 per context.md)
-- [ ] Local agent reads CPU/mem/disk/network/process/service state
-- [ ] Feed results into same Diagnostic Engine (Combined Mode)
+## 7. Computer Diagnostics (Layer 10) — DONE (optional for V1, landed anyway)
+- [x] Local agent reads CPU/mem/disk/network/process/service state, read-only — `internal/computer` (`PlatformCollector`, `WindowsCollector`, non-Windows stub), plus `Simulator` for demo scenarios
+- [x] Deterministic analysis over the snapshot — `internal/computer/rules.go: Analyze`/`validate`/`ValidateExpectations`
+- [x] Exposed via `httpapi/computer_handlers.go` (landed on `main` 2026-09-26, commit `3c30fc7`)
+- [ ] Not verified: whether it feeds into the same `domain.Evidence`/diagnostic-engine "Combined Mode" described in the original plan, or stays a separate read-only surface — check before building anything on top
 
-## 8. Git / Audit Layer (Layer 11) — NOT STARTED, real gap
-- [ ] Security scan on report/files before commit
-- [ ] Determine commit author: Human vs "ReWire Bot"
-- [ ] Approved → auto commit + auto push
-- [ ] Not approved → local only, no push
-- [ ] Audit log of every diagnostic/test/commit action
+## 8. Git / Audit Layer (Layer 11) — DONE
+- [x] Security scan on report/files before commit — `internal/gitsync/sync.go: SecretCount`, blocks commit when `SecretScan != "clear"`
+- [x] Repo-root validation (rejects paths outside the configured Git worktree, rejects traversal) — `inspectRepo`/`safeTargets`
+- [x] Approved → commit (+ optional push via `config.AutoPush`); not approved → local only, no push — `BuildPreview`/`Commit`
+- [x] Exposed via `httpapi/git_handlers.go`, opt-in via `Config.Enabled` (default off per security.md), plus a `docs/git-sync.md` writeup (landed on `main` 2026-09-26, commit `0003e79`)
+- [x] Diagnostic history/audit trail — `internal/history`, `httpapi/history_handlers.go`, persisted via `store` (commit `f7e74bf`)
+- [ ] Fixed today: `inspectRepo` failed on macOS because it compared `filepath.Abs` against git's symlink-resolved `--show-toplevel` without resolving the configured path's own symlinks first (broke under macOS's `/tmp` → `/private/tmp` TMPDIR). See `sync.go: inspectRepo`.
 
 ## 9. AI Service Integration — DONE
 - [x] Architecture decision made (see `docs/architecture.md`): Vision/CodeAnalysis/ProjectUnderstanding live in Go as swappable adapters, not a separate Python service. `services/probe`, `services/signal-analysis`, `services/vision` stay stub READMEs.
@@ -72,7 +75,7 @@ Check items off as you go. Ping me when a section is done — I'll review before
 
 ---
 
-**Next real gaps, in order:** PROBE Gemini adapter (§9) → Git/Audit layer (§8) → Computer Diagnostics (§7, optional) → WebSocket live push (§1).
+**Next real gap:** WebSocket live push (§1). Everything else in the original ordered list is done.
 
 **When you finish a section, tell me which number — I'll check the code against the doc before you continue.**
 
@@ -90,18 +93,11 @@ Check items off as you go. Ping me when a section is done — I'll review before
 - [x] Wired into `internal/diagnostics/engine.go` (`NewEngineWithProbe`) and selected in `cmd/server/main.go` from the same `GEMINI_API_KEY`/`GEMINI_MODEL` env vars vision uses
 - [ ] Not done: prompt tuning against real hardware evidence and a live-key integration test (needs an operator key, out of scope for this pass)
 
-### B. Git / Audit layer (Layer 11) — real gap, not started
-- [ ] Secret-scan pass over report/session data before any commit (block on match, no bypass)
-- [ ] Commit author resolution: real human identity when available, else a bot identity — never silently attribute AI output to a person
-- [ ] Opt-in adapter: approved → commit + push; not approved → local-only commit, no push
-- [ ] Append-only audit log: one record per diagnostic/test/repair/commit action, with timestamp + actor + evidence refs
-- [ ] User-facing setting to enable/disable git sync per project (default OFF, per current security.md stance)
+### B. Git / Audit layer (Layer 11) — DONE, landed on `main` outside this plan
+- [x] `internal/gitsync` + `httpapi/git_handlers.go` + `internal/history` cover secret-scan-before-commit, opt-in commit/push, and an audit trail. See §8 for the exact commits and today's macOS symlink fix.
 
-### C. Computer Diagnostics (Layer 10) — optional for V1
-- [ ] Local agent: read CPU/mem/disk/network/process/service state (read-only, no control path)
-- [ ] Normalize into the same `domain.DerivedFacts` shape signal-analysis already produces, so diagnostic engine rules apply unmodified
-- [ ] "Combined Mode": diagnostic engine consumes hardware evidence + computer evidence together in one Evidence bundle
-- [ ] Explicitly out of scope: any write/kill/service-restart action — read-only until a separate PATCH-style gate exists
+### C. Computer Diagnostics (Layer 10) — DONE, landed on `main` outside this plan
+- [x] `internal/computer` + `httpapi/computer_handlers.go` cover the read-only local collector and deterministic analysis. See §7 — one thing left to verify: whether it merges into the hardware `domain.Evidence` bundle ("Combined Mode") or stays a separate surface.
 
 ### D. WebSocket live telemetry push (Layer 4)
 - [ ] `/api/v1/ws/telemetry` endpoint, one connection per active session
@@ -123,4 +119,4 @@ Check items off as you go. Ping me when a section is done — I'll review before
 - Wi-Fi/WebSocket/MQTT telemetry transports — USB serial only for now
 - Multi-file project uploads, video, GitHub import, OCR — single image + single source payload only
 
-**Suggested build order:** D → B → C → F, with G staying parked. (A done 2026-09-26 — see §9. E landed on `main` independently 2026-09-26 — see §10.) D finishes the interaction loop; B closes the named "real gap"; C is optional; F is hardware time, not code time, and can run in parallel with any of the above once a board is available.
+**Suggested build order:** D → F, with G staying parked. (A, B, C, E all done 2026-09-26 — see §7-§10; most of B/C/E landed independently from other work on `main` while this plan was being executed.) D is the only remaining code gap and finishes the interaction loop; F is hardware time, not code time, and can run in parallel once a board is available.

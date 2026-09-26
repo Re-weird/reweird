@@ -167,10 +167,10 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
 
   const runOriginalDemo = useCallback(async (action: "wiggle" | "repair" | "reset") => {
     setBusy(true);
+    const remote = await demoApi[action]();
     setProject(null);
     setProbePlan(null);
     setProfile(makeDemoProfile());
-    const remote = await demoApi[action]();
     const next = remote ?? makeDemoSession(action === "wiggle" ? "test" : action === "repair" ? "verify" : "diagnose");
     setSession(next);
     setSource(remote ? "api" : "browser");
@@ -195,6 +195,9 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
     setBusy(true);
     try {
       const next = await demoApi.selectScenario(selectedScenario);
+      const nextRecommendation = await testApi.recommendation().catch(() => null);
+      // Fetch first, then swap to demo data and navigate in the same tick, so
+      // a real project's URL is never left showing without its project.
       setProject(null);
       setProbePlan(null);
       setProfile(makeDemoProfile());
@@ -202,7 +205,7 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
       setSource("api");
       setWorkflow(null);
       setLegacyVerify(false);
-      setRecommendation(await testApi.recommendation().catch(() => null));
+      setRecommendation(nextRecommendation);
       router.push(projectPath(DEMO_PROJECT_ID, "simulator"));
       setToast(`${scenarios.find((scenario) => scenario.id === selectedScenario)?.name ?? "Scenario"} analyzed from raw telemetry`);
     } catch {

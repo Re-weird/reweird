@@ -50,8 +50,9 @@ import { ComputerDiagnosticsView } from "./computer-diagnostics";
 import { SettingsStatusView } from "./settings-status";
 import { Workbench } from "./workbench";
 import { ProjectDashboardView } from "./project-dashboard";
+import { AccountDashboardView } from "./account-dashboard";
 
-type View = "dashboard" | "projects" | "profile" | "connect" | "simulator" | "live" | "diagnosis" | "guided" | "verify" | "history" | "reports" | "computer" | "settings";
+type View = "dashboard" | "projects" | "profile" | "connect" | "simulator" | "live" | "diagnosis" | "guided" | "verify" | "history" | "reports" | "computer" | "settings" | "account";
 type Theme = "light" | "dark";
 
 const nav: { id: View; label: string; icon: typeof Activity; group: "Workspace" | "Diagnostic flow" | "Records" }[] = [
@@ -235,6 +236,7 @@ function AppShell({
           ))}
         </nav>
         <div className="sidebar-bottom">
+          <button onClick={() => { setActive("account"); setMobileOpen(false); }} aria-current={active === "account" ? "page" : undefined}><BarChart3 size={17} /> Your activity</button>
           <button onClick={() => { setActive("settings"); setMobileOpen(false); }} aria-current={active === "settings" ? "page" : undefined}><Settings size={17} /> Settings & status</button>
           <div className="operator"><span>RW</span><div><strong>Local session</strong><small>No user sign-in</small></div></div>
         </div>
@@ -244,7 +246,7 @@ function AppShell({
       <main>
         <header className="topbar">
           <button className="mobile-menu" onClick={() => setMobileOpen(true)} aria-label="Open menu"><Menu size={20} /></button>
-          <div className="topbar-title"><span>{active === "settings" ? "Settings & status" : nav.find((item) => item.id === active)?.label}</span><small>{projectContext}</small></div>
+          <div className="topbar-title"><span>{active === "settings" ? "Settings & status" : active === "account" ? "Your activity" : nav.find((item) => item.id === active)?.label}</span><small>{projectContext}</small></div>
           <div className="top-actions">
             <div className={`connection-pill ${hardwareConnected ? "" : "waiting"}`}><span /> {hardwareConnected ? "Hardware connected" : "Hardware offline"}</div>
             <div className={`mode-pill source-${source === "browser" ? "demo" : session.telemetry_mode === "serial" ? "hardware" : "simulator"}`}><Radio size={13} /> {sourceLabel}</div>
@@ -622,6 +624,7 @@ export default function Home() {
     if (active === "guided" || active === "verify") return <GuidedTestView workflow={workflow} recommendation={recommendation} busy={busy} error={testError} onPlan={() => runTestAction("plan")} onStart={() => runTestAction("start")} onCapture={() => runTestAction("capture")} onRemeasure={() => runTestAction("remeasure")} onCancel={() => runTestAction("cancel")} onRecordAction={recordUserAction} />;
     if (active === "history") return <HistoryReportView mode="history" />;
     if (active === "computer") return <ComputerDiagnosticsView />;
+    if (active === "account") return <AccountDashboardView />;
     if (active === "settings") return <SettingsStatusView />;
     return <HistoryReportView mode="reports" />;
   }, [active, session, source, busy, project, profile, probePlan, scenarios, selectedScenario, workflow, recommendation, testError, legacyVerify]);

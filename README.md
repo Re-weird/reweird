@@ -72,9 +72,9 @@ signal returns to its healthy baseline.
 
 | Category | Current state |
 | --- | --- |
-| Working now | Project input/confirmation, static code analysis, SQLite storage, generic signal analysis, guided tests, VERIFY, history, deterministic reports |
+| Working now | Project input and server-controlled confirmation, static code analysis, SQLite storage, generic signal analysis, guided tests, VERIFY, history, deterministic reports |
 | Simulated | Raw P1–P6 electrical scenarios, repair/verification demonstration, eight computer fault scenarios |
-| Optional | Gemini **Vision** for project photos when configured; read-only Windows computer snapshot after opt-in; explicitly approved report Git commit/push after opt-in |
+| Optional | Gemini **Vision** for project photos and Gemini PROBE interpretation when configured; read-only Windows computer snapshot after opt-in; explicitly approved report Git commit/push after opt-in |
 | Not yet hardware-validated | ESP32 firmware and USB serial ingestion compile but need electrical calibration and bench testing |
 | Locked for safety | PATCH active electrical output, autonomous computer repair, unattended Git push |
 
@@ -92,6 +92,7 @@ reweird/
 │   └── api/                 # Go/Fiber API and SQLite persistence
 ├── services/
 │   ├── probe/               # AI reasoning interface boundary
+│   ├── understand/          # Optional code + vision proposal service
 │   ├── signal-analysis/     # Raw telemetry → structured facts boundary
 │   └── vision/              # Image analysis interface boundary
 ├── firmware/esp32/          # Passive probe firmware and PlatformIO project
@@ -102,7 +103,7 @@ reweird/
 └── docs/                    # Architecture, diagnostics, and security notes
 ```
 
-## Run the demo
+## Run locally
 
 ### Prerequisites
 
@@ -150,7 +151,7 @@ different server-side target with `API_INTERNAL_URL`; `NEXT_PUBLIC_API_URL`
 remains available for deployments that intentionally expose a separate API
 origin.
 
-Security boundary: the standalone API now binds to `127.0.0.1` by default.
+Security boundary: the standalone API binds to `127.0.0.1` by default.
 Compose publishes ports 3000/8080/8091 on host loopback only. Do not publish
 this stack to an untrusted network: the UI does not yet have user accounts.
 For direct API clients, setting a 32+ character `REWEIRD_API_TOKEN` requires
@@ -159,21 +160,20 @@ server-side. See [security model](docs/security.md) before changing bind or
 port settings.
 
 Uploads default to `apps/api/data/uploads` when the API is started from that
-directory. Override this with `UPLOAD_DIR`. To enable Gemini Vision and the
-Gemini PROBE adapter (they share the same key and model), keep the key
-server-side:
+directory. Override this with `UPLOAD_DIR`. To enable Gemini Vision, set the
+key in the Go API process environment:
 
 ```powershell
 $env:GEMINI_API_KEY = "your-key"
-$env:GEMINI_MODEL = "gemini-3.5-flash-lite" # optional
 go run ./cmd/server
 ```
 
-Without a key, Python PROBE uses its offline deterministic provider and image
-analysis reports `VISION_SKIPPED`; code analysis, catalog enrichment, profile
-review/confirmation, and probe planning continue normally. Set
-`PROBE_AI_PROVIDER=gemini` only in the PROBE service environment to enable
-Gemini reasoning.
+To enable Gemini PROBE reasoning, set `PROBE_AI_PROVIDER=gemini` and
+`GEMINI_API_KEY` in the **Python PROBE process** as well. `GEMINI_MODEL` can be
+configured per process; their defaults differ. Without a key, Python PROBE
+uses its offline deterministic provider and image analysis reports
+`VISION_SKIPPED`; code analysis, catalog enrichment, profile review,
+confirmation, and probe planning continue normally.
 
 ## Real Project Understanding flow
 
@@ -184,9 +184,15 @@ Gemini reasoning.
    Gemini Vision for suggestions, and generates a draft Project Profile.
 4. Review provenance, edit components and connections, and resolve any code vs.
    vision conflict.
-5. Confirm the profile. Only this user action makes the model authoritative.
+5. Confirm the profile. The backend checks conflicts and creates trusted probe
+   assignments; this local action is not proof of a specific human identity.
 6. Follow the generated GND/P1-P6 placement plan and confirm physical
    connections before opening Live Diagnostics.
+
+The generic `/api/v1/profiles` write routes accept drafts only. Confirmation,
+confirmation metadata, and probe assignments are server-controlled through the
+project-specific workflow. A confirmed profile cannot be overwritten or
+silently re-analyzed; a future revision workflow is required to change it.
 
 The profile screen contains no universal HC-SR04 mapping. The built-in demo is a
 normal seeded profile rendered by the same component.
@@ -232,21 +238,6 @@ docker compose up --build
 
 Then open [http://localhost:3000](http://localhost:3000).
 
-## Demo script
-
-1. Start on **Overview** and note that P1 power and P2 TRIG are healthy while P3
-   ECHO has 12 dropouts per minute.
-2. Open **Diagnosis**. Compare expected, observed, and baseline evidence. The
-   system describes plausible causes but does not claim a loose wire.
-3. Select **Start wiggle test**. The simulator raises the P3 dropout rate to 27
-   while P1 and P2 remain stable.
-4. Review the stronger movement-correlation evidence and select **Simulate
-   repair**.
-5. The app opens **Verify**. P3 now has 0 dropouts per minute and matches the
-   stored healthy baseline.
-6. Open **Reports** to download the structured session snapshot.
-7. Select **Reset demo** on the Verify screen to repeat the flow.
-
 ## How the system works
 
 ```text
@@ -264,17 +255,17 @@ Generic deterministic diagnostic rules
         ↓
 Structured evidence
         ↓
-Python PROBE grounding + hypotheses + deterministic Test Planner
+Go deterministic diagnosis → optional Python PROBE interpretation
         ↓
-Main-compatible Diagnosis (fail-closed to Go deterministic diagnosis)
+Go deterministic Test Planner (PROBE cannot bypass its safety checks)
         ↓
 Guided test → re-measurement → verification
 ```
 
 The frontend consumes only normalized JSON contracts. It does not know whether
-telemetry came from a browser fixture, the Go simulator, serial transport, or a
-real authenticated ESP32. That boundary lets real hardware replace simulation
-without a UI rewrite.
+telemetry came from a browser fixture, the Go simulator, or serial transport.
+Device authentication is not implemented yet. That boundary lets real hardware
+replace simulation without a UI rewrite.
 
 ## API
 
@@ -289,8 +280,8 @@ without a UI rewrite.
 | `POST` | `/api/v1/simulator/scenario` | Select and analyze a simulator scenario |
 | `GET` | `/api/v1/profiles` | Persistent Project Profiles |
 | `GET` | `/api/v1/profiles/:id` | One Project Profile |
-| `POST` | `/api/v1/profiles` | Validate and create a Project Profile |
-| `PUT` | `/api/v1/profiles/:id` | Validate and update a Project Profile |
+| `POST` | `/api/v1/profiles` | Validate and create a standalone draft profile only |
+| `PUT` | `/api/v1/profiles/:id` | Update a standalone draft; cannot change project-backed or confirmed profiles |
 | `POST` | `/api/v1/projects` | Create a persisted project shell |
 | `GET` | `/api/v1/projects` | List persisted projects |
 | `GET` | `/api/v1/projects/:id` | Read a project and its input/analysis metadata |
@@ -308,7 +299,7 @@ without a UI rewrite.
 | `POST` | `/api/v1/demo/reset` | Reset the scenario |
 | `POST` | `/api/v1/patch` | Always returns `423 PATCH_LOCKED` |
 
-State-changing demo transitions are written to SQLite as immutable diagnostic
+Go API demo transitions are written to SQLite as immutable diagnostic
 snapshots.
 
 Open **Fault simulator** to select any scenario and inspect the complete software
@@ -334,6 +325,11 @@ derived from the raw electrical values and the confirmed profile.
   imported, or evaluated. Secret-like filenames and binary content are rejected.
 - Images are content-sniffed as PNG/JPEG, stored under generated names inside a
   dedicated root, and bounded before Gemini input.
+- Project images are limited to 5 MiB each; one current image is retained, with
+  at most two files and 11 MiB image-plus-code storage during replacement.
+  Obsolete images are removed after the new reference is persisted. The optional
+  understanding service also bounds its request body, source-file list, total
+  source text, and decoded image size.
 - Gemini can only suggest `VISION_AI` facts. Conflicts are preserved, and only a
   user can confirm a Project Profile.
 - An inference cannot overwrite measured evidence.
@@ -369,8 +365,9 @@ See [docs/security.md](docs/security.md) for the full trust-boundary checklist.
 - A real Gemini request requires the operator's API key and network access. The
   adapter and structured-response parser are tested with a local fake endpoint,
   not a live paid key in this repository.
-- Authentication, device identity, multi-user access, and production upload
-  scanning are not implemented.
+- Browser user authentication, device identity, multi-user access, and
+  production upload scanning are not implemented. A shared API token is not a
+  browser login; do not expose the stack publicly.
 - The chart uses summarized samples rather than a high-frequency time-series
   store.
 
@@ -395,9 +392,18 @@ See [docs/security.md](docs/security.md) for the full trust-boundary checklist.
 ```bash
 npm run typecheck
 npm run build
+npm audit
 
 cd apps/api
 go test ./...
+go vet ./...
+govulncheck ./...
+
+cd ../../services/probe
+uv run pytest
+
+cd ../understand
+uv run pytest
 
 cd ../../firmware/esp32
 pio run

@@ -78,6 +78,10 @@ P1, P2, P3, ECHO, TRIG, 5.01 V, or 40 kHz.
 Draft analysis and profile confirmation write the project and profile together
 in one SQLite transaction. The built-in ultrasonic simulator remains isolated to
 its demo profile; a non-demo profile waits for matching real telemetry.
+Generic profile writes are draft-only and cannot modify a project-backed or
+confirmed profile. Confirmation metadata and probe assignments are created by
+the project confirmation endpoint after conflict checks; confirmed profiles
+cannot be silently replaced by a new upload or analysis.
 
 ## Trust boundaries
 

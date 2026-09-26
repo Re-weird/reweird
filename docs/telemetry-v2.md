@@ -1,8 +1,8 @@
 # Telemetry v2 contract
 
 Layer 3 hardware integrations implement `TelemetrySource`; they do not call the
-diagnostic engine directly. The simulator and future ESP32 serial transport both
-produce the same bounded `TelemetryEnvelope`.
+diagnostic engine directly. The simulator and implemented ESP32 USB-serial
+transport both produce the same bounded `TelemetryEnvelope`.
 
 ```json
 {

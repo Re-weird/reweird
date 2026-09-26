@@ -22,8 +22,9 @@
   `execution_verified` remains false. Offline demo records are explicitly
   marked `OFFLINE_SIMULATION`.
 - ESP32 firmware configures PATCH as an input and contains no output action path.
-- The UI labels the AI-style interpretation as mocked and keeps it separate from
-  measured values.
+- The UI keeps PROBE interpretation separate from measured values. With the
+  offline provider or browser fixture it is simulated; optional Gemini output
+  remains an interpretation, never a measurement.
 - The simulator and firmware implement the same versioned telemetry contract.
 - Serial JSON rejects unknown fields, unsupported schema versions, duplicate or
   unknown probes, invalid states, non-finite/out-of-range values, oversized

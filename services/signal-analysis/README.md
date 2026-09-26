@@ -8,6 +8,6 @@ events, missing activity, rail stability, simultaneous failures, and
 trusted-baseline deviation. The original frame and derived result are persisted
 together before diagnosis.
 
-Only these structured facts proceed to deterministic rules or the future PROBE
-adapter. This directory remains the extraction point if analysis later becomes a
-separate service.
+Only these structured facts proceed to deterministic rules and the optional
+Python PROBE adapter. This directory remains the extraction point if analysis
+later becomes a separate service.

@@ -57,3 +57,11 @@ func TestDetailedReportDeterministic(t *testing.T) {
 		t.Fatalf("report is nondeterministic")
 	}
 }
+
+func TestConfiguredEnvironmentSecretIsRedacted(t *testing.T) {
+	t.Setenv("REWEIRD_TEST_SECRET", "opaque-value-without-a-pattern")
+	clean, count := SanitizeText("user note: opaque-value-without-a-pattern")
+	if count != 1 || strings.Contains(clean, "opaque-value-without-a-pattern") {
+		t.Fatalf("environment secret escaped redaction: %q (%d)", clean, count)
+	}
+}

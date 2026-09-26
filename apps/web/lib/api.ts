@@ -72,6 +72,7 @@ export const demoApi = {
   repair: () => demoRequest("/api/v1/demo/repair", { method: "POST" }),
   reset: () => demoRequest("/api/v1/demo/reset", { method: "POST" }),
   profile: () => requestJSON<ProjectProfile>("/api/v1/profiles/ultrasonic-demo"),
+  probePlan: () => requestJSON<ProbePlan>("/api/v1/demo/probe-plan"),
   scenarios: () => requestJSON<SimulatorScenarioList>("/api/v1/simulator/scenarios"),
   selectScenario: (scenarioID: string) => requestJSON<DemoSession>("/api/v1/simulator/scenario", {
     method: "POST",
@@ -151,7 +152,7 @@ export const computerApi = {
   status: () => requestJSON<{ real_collection_enabled: boolean; collector: string; simulator_available: boolean; active_operations_enabled: boolean }>("/api/v1/computer/status"),
   scenarios: () => requestJSON<{ scenarios: Array<{ id: string; name: string; description: string }> }>("/api/v1/computer/scenarios"),
   simulate: (scenarioID: string) => requestJSON<ComputerAnalysis>("/api/v1/computer/simulate", { method: "POST", body: JSON.stringify({ scenario_id: scenarioID }) }),
-  collect: (expected: ComputerAnalysis["expectations"]) => requestJSON<ComputerAnalysis>("/api/v1/computer/collect", { method: "POST", body: JSON.stringify(expected) }, 15_000),
+  collect: (expected: ComputerAnalysis["expectations"]) => requestJSON<ComputerAnalysis>("/api/v1/computer/collect", { method: "POST", body: JSON.stringify(expected) }, 30_000),
 };
 
 export interface GitPreview { enabled: boolean; repo_available: boolean; files: Array<{ path: string; bytes: number }>; secret_scan: "clear" | "blocked"; commit_allowed: boolean; push_configured: boolean; detail?: string }
@@ -159,3 +160,6 @@ export const gitApi = {
   preview: (id: string) => requestJSON<GitPreview>(`/api/v1/git/preview/${encodeURIComponent(id)}`),
   commit: (id: string, push = false) => requestJSON<{ commit: string; pushed: boolean }>(`/api/v1/git/commit/${encodeURIComponent(id)}`, { method: "POST", body: JSON.stringify({ approve: true, push }) }, 25_000),
 };
+
+export interface SystemStatus { api: string; database: string; telemetry_mode: string; telemetry: string; esp32: boolean; gemini: string; patch: string; git_sync_enabled: boolean; git_repository_configured: boolean; computer_agent: string; report_retention: string; measurement_window_limit: number }
+export const systemApi = { status: () => requestJSON<SystemStatus>("/api/v1/status") };

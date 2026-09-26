@@ -8,9 +8,14 @@ import (
 
 	"github.com/re-weird/reweird/apps/api/internal/domain"
 	"github.com/re-weird/reweird/apps/api/internal/history"
+	"github.com/re-weird/reweird/apps/api/internal/limits"
 )
 
 const MaxDetailedReportBytes = 1 << 20
+
+func DetailedReportLimit() int {
+	return limits.Bounded("MAX_REPORT_BYTES", MaxDetailedReportBytes, 4096, MaxDetailedReportBytes)
+}
 
 type Fact struct {
 	Probe      string            `json:"probe,omitempty"`
@@ -142,13 +147,22 @@ func BuildDetailed(workflow domain.DiagnosticWorkflow) (DetailedReport, error) {
 	if err != nil {
 		return DetailedReport{}, err
 	}
-	if len(encoded) > MaxDetailedReportBytes {
-		return DetailedReport{}, fmt.Errorf("report exceeds %d-byte export limit", MaxDetailedReportBytes)
+	if len(encoded) > DetailedReportLimit() {
+		return DetailedReport{}, fmt.Errorf("report exceeds %d-byte export limit", DetailedReportLimit())
 	}
 	return sanitized, nil
 }
 
-func JSON(report DetailedReport) ([]byte, error) { return json.MarshalIndent(report, "", "  ") }
+func JSON(report DetailedReport) ([]byte, error) {
+	data, err := json.MarshalIndent(report, "", "  ")
+	if err != nil {
+		return nil, err
+	}
+	if len(data) > DetailedReportLimit() {
+		return nil, fmt.Errorf("JSON report exceeds %d-byte export limit", DetailedReportLimit())
+	}
+	return data, nil
+}
 
 func Markdown(report DetailedReport) string {
 	var output strings.Builder

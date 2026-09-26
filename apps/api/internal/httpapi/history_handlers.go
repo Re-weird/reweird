@@ -126,11 +126,15 @@ func (controller *Controller) detailedReport(ctx *fiber.Ctx) error {
 		return ctx.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "INVALID_REPORT_FORMAT"})
 	}
 	if format == "md" {
+		markdown := reports.Markdown(report)
+		if len(markdown) > reports.DetailedReportLimit() {
+			return ctx.Status(fiber.StatusInsufficientStorage).JSON(fiber.Map{"error": "REPORT_SIZE_LIMIT"})
+		}
 		ctx.Set("Content-Type", "text/markdown; charset=utf-8")
 		if ctx.Query("download") == "1" {
 			ctx.Set("Content-Disposition", fmt.Sprintf("attachment; filename=\"%s.md\"", workflow.ID))
 		}
-		return ctx.SendString(reports.Markdown(report))
+		return ctx.SendString(markdown)
 	}
 	data, err := reports.JSON(report)
 	if err != nil {

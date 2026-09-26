@@ -63,11 +63,12 @@ func NewApp(engine *diagnostics.Engine, repository domain.Repository, source dom
 	}
 
 	app.Get("/health", func(ctx *fiber.Ctx) error {
-		return ctx.JSON(fiber.Map{"status": "ok", "service": "reweird-api", "telemetry_mode": source.Name()})
+		return controller.systemStatus(ctx)
 	})
 
 	api := app.Group("/api/v1")
 	api.Get("/session", controller.current)
+	api.Get("/status", controller.systemStatus)
 	api.Get("/report", controller.report)
 	api.Get("/telemetry/status", controller.telemetryStatus)
 	api.Get("/measurements", controller.listMeasurements)
@@ -110,6 +111,7 @@ func NewApp(engine *diagnostics.Engine, repository domain.Repository, source dom
 
 	// Compatibility routes preserve the original dashboard and hackathon demo.
 	api.Get("/demo/session", controller.current)
+	api.Get("/demo/probe-plan", controller.demoProbePlan)
 	api.Post("/demo/reset", controller.transition(domain.StageDiagnose))
 	api.Post("/demo/wiggle", controller.transition(domain.StageTest))
 	api.Post("/demo/repair", controller.transition(domain.StageVerify))

@@ -53,8 +53,29 @@ signal returns to its healthy baseline.
 - A persisted, generic guided-test planner and before/during/after VERIFY
   workflow covering movement, rails, shared dropouts, activity, timing,
   trusted baselines, and re-measurement ([contract](docs/guided-tests.md))
+- Persisted diagnostic history, deterministic JSON/Markdown reports, and a
+  print-friendly report view with provenance and secret redaction
+- A separate computer-diagnostics simulator and optional read-only Windows
+  collector; computer facts never become physical measurements
+- Approval-gated Git synchronization for generated reports, disabled by default
+- A Settings & status view that reports configuration without showing secrets
 - A browser-side simulator fallback, so the demo still works if the Go API is
   not running
+
+## Capability status
+
+| Category | Current state |
+| --- | --- |
+| Working now | Project input/confirmation, static code analysis, SQLite storage, generic signal analysis, guided tests, VERIFY, history, deterministic reports |
+| Simulated | Raw P1–P6 electrical scenarios, repair/verification demonstration, eight computer fault scenarios |
+| Optional | Gemini **Vision** for project photos when configured; read-only Windows computer snapshot after opt-in; explicitly approved report Git commit/push after opt-in |
+| Not yet hardware-validated | ESP32 firmware and USB serial ingestion compile but need electrical calibration and bench testing |
+| Locked for safety | PATCH active electrical output, autonomous computer repair, unattended Git push |
+
+Gemini PROBE diagnostic reasoning is being developed separately. Without it,
+measured and derived evidence, deterministic rules, guided tests, and VERIFY
+continue to work; the UI must not present a mock interpretation as measured
+fact.
 
 ## Repository map
 
@@ -291,10 +312,11 @@ derived from the raw electrical values and the confirmed profile.
 - An inference cannot overwrite measured evidence.
 - A future PATCH controller must validate pin, voltage, waveform, frequency, and
   duration before requesting explicit user approval.
-- Git synchronization is disabled. A future adapter must scan for secrets,
-  preserve actual authorship, and require user configuration and approval.
-- Uploaded code and media will require type, size, and content validation before
-  production use.
+- Git synchronization is disabled by default. The report adapter scans for
+  secrets and requires local configuration and explicit per-commit approval;
+  remote push needs an additional opt-in and approval.
+- Uploaded code and media have current type, size, and content checks; a
+  production deployment still needs malware scanning and authentication.
 
 See [docs/security.md](docs/security.md) for the full trust-boundary checklist.
 
@@ -327,15 +349,15 @@ See [docs/security.md](docs/security.md) for the full trust-boundary checklist.
 
 - **ESP32:** bench-test and calibrate the passive front end, then add device
   authentication and an optional network transport.
-- **Gemini:** implement the PROBE and vision interfaces. Gemini must consume
-  structured evidence and its response remains interpretation, never measured
-  truth.
+- **Gemini:** integrate the separately owned PROBE diagnostic reasoning layer
+  with structured evidence. Its response remains interpretation, never
+  measured truth; optional Vision understanding already exists.
 - **MongoDB Atlas:** add a repository adapter for Project Profiles, sessions,
   baselines, and reports without changing domain logic.
 - **Time-series storage:** retain raw high-rate samples outside the relational
   session store, then feed summaries into diagnostics.
-- **Git:** add an opt-in, secret-scanned report adapter that records the real
-  change source.
+- **Git:** add authenticated, auditable unattended workflows only after a
+  separate approval and security design. Current report commits are manual.
 
 ## Development checks
 

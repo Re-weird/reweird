@@ -4,6 +4,10 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"os"
+	"strconv"
+	"sync"
 	"time"
 
 	"github.com/re-weird/reweird/apps/api/internal/domain"
@@ -11,7 +15,24 @@ import (
 )
 
 type SQLiteStore struct {
-	db *sql.DB
+	db            *sql.DB
+	measurementMu sync.Mutex
+}
+
+func (store *SQLiteStore) Ping() error { return store.db.Ping() }
+
+func MeasurementWindowLimit() int {
+	value, err := strconv.Atoi(os.Getenv("MAX_MEASUREMENT_WINDOWS"))
+	if err != nil || value < 100 || value > 1000000 {
+		return 50000
+	}
+	return value
+}
+
+func (store *SQLiteStore) MeasurementWindowCount() (int, error) {
+	var count int
+	err := store.db.QueryRow("SELECT COUNT(*) FROM measurement_windows").Scan(&count)
+	return count, err
 }
 
 func Open(path string) (*SQLiteStore, error) {
@@ -116,6 +137,22 @@ func (store *SQLiteStore) LatestSession() (*domain.Session, error) {
 }
 
 func (store *SQLiteStore) SaveMeasurement(window domain.MeasurementWindow) (domain.MeasurementWindow, error) {
+	store.measurementMu.Lock()
+	defer store.measurementMu.Unlock()
+	count, err := store.MeasurementWindowCount()
+	if err != nil {
+		return domain.MeasurementWindow{}, err
+	}
+	if count >= MeasurementWindowLimit() {
+		var existing int64
+		err := store.db.QueryRow(`SELECT id FROM measurement_windows WHERE source = ? AND device_id = ? AND sequence = ? AND captured_at_ms = ?`, window.Source, window.DeviceID, window.Sequence, window.CapturedAtMS).Scan(&existing)
+		if errors.Is(err, sql.ErrNoRows) {
+			return domain.MeasurementWindow{}, fmt.Errorf("measurement retention limit of %d windows reached; export/archive evidence before adding more", MeasurementWindowLimit())
+		}
+		if err != nil {
+			return domain.MeasurementWindow{}, err
+		}
+	}
 	if window.IngestedAtMS == 0 {
 		window.IngestedAtMS = time.Now().UTC().UnixMilli()
 	}

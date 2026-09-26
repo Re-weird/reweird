@@ -11,6 +11,8 @@ actions, and VERIFY outcomes. They omit uploaded code and do not read `.env`
 files or raw credentials. Every string is scanned for common API-key,
 private-key, bearer-token, password, and credential-in-URL patterns before
 export. Matches are replaced with a visible redaction marker and counted.
+The sanitizer also redacts values of configured environment variables whose
+names indicate credentials, without including the environment in reports.
 Generated reports are limited to 1 MiB; oversize reports fail rather than
 being silently cut off. The later Git preview blocks synchronization if a
 potential secret was detected before redaction.

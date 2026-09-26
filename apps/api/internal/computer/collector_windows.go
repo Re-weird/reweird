@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/re-weird/reweird/apps/api/internal/limits"
 	"net"
 	"os"
 	"os/exec"
@@ -57,16 +58,20 @@ func (WindowsCollector) Collect(ctx context.Context, expected Expectations) (Sna
 	if _, err := os.Stat(powershell); err != nil {
 		return Snapshot{}, errors.New("Windows PowerShell collector unavailable")
 	}
-	bounded, cancel := context.WithTimeout(ctx, 7*time.Second)
+	bounded, cancel := context.WithTimeout(ctx, 25*time.Second)
 	defer cancel()
 	command := exec.CommandContext(bounded, powershell, "-NoProfile", "-NonInteractive", "-Command", windowsSnapshotScript)
 	command.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
 	output, err := command.Output()
 	if err != nil {
+		if bounded.Err() != nil {
+			return Snapshot{}, errors.New("read-only Windows inventory timed out")
+		}
 		return Snapshot{}, fmt.Errorf("read-only Windows inventory failed: %w", err)
 	}
-	if len(output) > 1<<20 {
-		return Snapshot{}, errors.New("computer snapshot exceeds 1 MiB")
+	snapshotLimit := limits.Bounded("MAX_COMPUTER_SNAPSHOT_BYTES", 1<<20, 4096, 1<<20)
+	if len(output) > snapshotLimit {
+		return Snapshot{}, fmt.Errorf("computer snapshot exceeds %d-byte limit", snapshotLimit)
 	}
 	var payload windowsPayload
 	if err := json.Unmarshal(output, &payload); err != nil {

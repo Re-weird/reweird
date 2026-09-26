@@ -57,7 +57,7 @@ func Artifacts(report reports.DetailedReport) ([]byte, []byte, error) {
 		return nil, nil, err
 	}
 	markdown := []byte(reports.Markdown(report))
-	if len(jsonData) > reports.MaxDetailedReportBytes || len(markdown) > reports.MaxDetailedReportBytes {
+	if len(jsonData) > reports.DetailedReportLimit() || len(markdown) > reports.DetailedReportLimit() {
 		return nil, nil, errors.New("generated artifact exceeds 1 MiB")
 	}
 	return jsonData, markdown, nil

@@ -2,7 +2,9 @@ package reports
 
 import (
 	"encoding/json"
+	"os"
 	"regexp"
+	"strings"
 )
 
 var secretPatterns = []*regexp.Regexp{
@@ -25,6 +27,20 @@ func ScanSecrets(value string) int {
 
 func SanitizeText(value string) (string, int) {
 	count := 0
+	for _, entry := range os.Environ() {
+		parts := strings.SplitN(entry, "=", 2)
+		if len(parts) != 2 || len(parts[1]) < 8 {
+			continue
+		}
+		key := strings.ToUpper(parts[0])
+		if !strings.Contains(key, "KEY") && !strings.Contains(key, "TOKEN") && !strings.Contains(key, "SECRET") && !strings.Contains(key, "PASSWORD") && !strings.Contains(key, "CREDENTIAL") {
+			continue
+		}
+		if strings.Contains(value, parts[1]) {
+			count += strings.Count(value, parts[1])
+			value = strings.ReplaceAll(value, parts[1], "[REDACTED_SECRET]")
+		}
+	}
 	for _, pattern := range secretPatterns {
 		matches := pattern.FindAllString(value, -1)
 		count += len(matches)

@@ -24,6 +24,23 @@
 - SQLite receives normalized diagnostic snapshots, not arbitrary device commands.
 - CORS allows only local development origins.
 - Git synchronization is off by default.
+- Report exports redact recognized credentials and values of configured secret
+  environment variables. Git preview refuses commits if redaction was needed
+  or a generated artifact still matches a credential pattern. The scanner is
+  not a substitute for human review.
+- Git writes only two new `.reweird/` report artifacts, with path/symlink
+  checks, local-request approval, and no force push. It uses the configured Git
+  author instead of impersonating a teammate.
+- Real computer collection is opt-in, loopback-only, time-bounded, and read
+  only. It does not collect command lines, file contents, or arbitrary logs.
+- Raw measurement storage fails closed at `MAX_MEASUREMENT_WINDOWS` (default
+  50,000, allowed 100–1,000,000); it never silently deletes evidence. Image,
+  code, telemetry-frame, report, and computer-snapshot sizes are also bounded.
+  Operators may lower ceilings with `MAX_IMAGE_BYTES` (≤5 MiB),
+  `MAX_CODE_BYTES` (≤512 KiB), `MAX_TELEMETRY_ANALOG_SAMPLES` (≤256 per
+  probe), `MAX_TELEMETRY_PULSE_SAMPLES` (≤512 per probe), `MAX_REPORT_BYTES`
+  (≤1 MiB), and `MAX_COMPUTER_SNAPSHOT_BYTES` (≤1 MiB). Invalid values fall
+  back to the audited defaults; they cannot raise the hard caps.
 
 ## Required before real hardware
 

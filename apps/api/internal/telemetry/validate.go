@@ -7,6 +7,7 @@ import (
 	"regexp"
 
 	"github.com/re-weird/reweird/apps/api/internal/domain"
+	"github.com/re-weird/reweird/apps/api/internal/limits"
 )
 
 const SchemaVersion = 2
@@ -83,11 +84,13 @@ func validateSample(sample domain.TelemetrySample) error {
 	if sample.Mode != domain.ProbeModeAnalog && sample.Mode != domain.ProbeModeDigital && sample.Mode != domain.ProbeModePulse {
 		return fmt.Errorf("unsupported mode %q", sample.Mode)
 	}
-	if len(sample.AnalogMV) > 256 {
-		return errors.New("analog_mv exceeds 256 samples")
+	analogLimit := limits.Bounded("MAX_TELEMETRY_ANALOG_SAMPLES", 256, 8, 256)
+	pulseLimit := limits.Bounded("MAX_TELEMETRY_PULSE_SAMPLES", 512, 8, 512)
+	if len(sample.AnalogMV) > analogLimit {
+		return fmt.Errorf("analog_mv exceeds %d samples", analogLimit)
 	}
-	if len(sample.PeriodsUS) > 512 || len(sample.HighPulseWidthsUS) > 512 {
-		return errors.New("pulse arrays exceed 512 samples")
+	if len(sample.PeriodsUS) > pulseLimit || len(sample.HighPulseWidthsUS) > pulseLimit {
+		return fmt.Errorf("pulse arrays exceed %d samples", pulseLimit)
 	}
 	if len(sample.ActivityCounts) > 120 {
 		return errors.New("activity_counts exceeds 120 buckets")

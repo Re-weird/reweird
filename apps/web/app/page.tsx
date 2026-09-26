@@ -21,7 +21,6 @@ import {
   Plus,
   Radio,
   RefreshCw,
-  Search,
   Settings,
   ShieldCheck,
   Sparkles,
@@ -46,8 +45,9 @@ import { NewProjectModal, ProbePlanView, ProjectProfileView } from "./project-wo
 import { GuidedTestView } from "./guided-test";
 import { HistoryReportView } from "./history-report";
 import { ComputerDiagnosticsView } from "./computer-diagnostics";
+import { SettingsStatusView } from "./settings-status";
 
-type View = "dashboard" | "profile" | "connect" | "simulator" | "live" | "diagnosis" | "guided" | "verify" | "history" | "reports" | "computer";
+type View = "dashboard" | "profile" | "connect" | "simulator" | "live" | "diagnosis" | "guided" | "verify" | "history" | "reports" | "computer" | "settings";
 
 const nav: { id: View; label: string; icon: typeof Activity }[] = [
   { id: "dashboard", label: "Overview", icon: LayoutDashboard },
@@ -61,6 +61,7 @@ const nav: { id: View; label: string; icon: typeof Activity }[] = [
   { id: "history", label: "History", icon: RefreshCw },
   { id: "reports", label: "Reports", icon: FileBarChart },
   { id: "computer", label: "Computer diagnostics", icon: Cpu },
+  { id: "settings", label: "Settings & status", icon: Settings },
 ];
 
 const stageIndex = { detect: 0, diagnose: 1, test: 2, repair: 2, verify: 3 } as const;
@@ -164,6 +165,7 @@ function AppShell({
   hardwareConnected,
   children,
   onNewProject,
+  onLoadDemo,
 }: {
   active: View;
   setActive: (view: View) => void;
@@ -174,6 +176,7 @@ function AppShell({
   hardwareConnected: boolean;
   children: React.ReactNode;
   onNewProject: () => void;
+  onLoadDemo: () => void;
 }) {
   const [mobileOpen, setMobileOpen] = useState(false);
   return (
@@ -199,9 +202,9 @@ function AppShell({
           })}
         </nav>
         <div className="sidebar-bottom">
-          <button><GitBranch size={17} /> Integrations</button>
-          <button><Settings size={17} /> Settings</button>
-          <div className="operator"><span>RA</span><div><strong>Demo operator</strong><small>Local workspace</small></div></div>
+          <button onClick={() => setActive("reports")}><GitBranch size={17} /> Report sync</button>
+          <button onClick={() => setActive("settings")}><Settings size={17} /> Settings</button>
+          <div className="operator"><span>RW</span><div><strong>Local session</strong><small>No user sign-in</small></div></div>
         </div>
       </aside>
 
@@ -212,7 +215,7 @@ function AppShell({
           <div className="top-actions">
             <div className={`connection-pill ${hardwareConnected ? "" : "waiting"}`}><span /> {hardwareConnected ? "Hardware connected" : "Hardware waiting"}</div>
             <div className="mode-pill"><Radio size={13} /> {source === "api" ? (session.telemetry_mode === "serial" ? "ESP32 serial" : "API simulator") : "Browser simulator"}</div>
-            <button className="icon-button" aria-label="Search"><Search size={18} /></button>
+            <button className="secondary compact" onClick={onLoadDemo}>Load demo</button>
             <button className="primary compact" onClick={onNewProject}><Plus size={16} /> New project</button>
           </div>
         </header>
@@ -237,14 +240,14 @@ function DashboardView({ session, setActive }: { session: DemoSession; setActive
       </section>
 
       <section className="metric-grid">
-        <article className="metric-card"><span className="metric-icon green"><Radio size={18} /></span><div><small>Telemetry</small><strong>{session.hardware_connected ? "Connected" : "Waiting"}</strong><em>{session.raw_telemetry?.device_id ?? session.telemetry_mode ?? "simulator"} · {session.probes.length} probes</em></div></article>
+        <article className="metric-card"><span className="metric-icon green"><Radio size={18} /></span><div><small>Telemetry</small><strong>{session.telemetry_mode === "serial" ? (session.hardware_connected ? "Connected" : "Waiting") : "Simulated"}</strong><em>{session.raw_telemetry?.device_id ?? session.telemetry_mode ?? "simulator"} · {session.probes.length} probes</em></div></article>
         <article className="metric-card"><span className="metric-icon cyan"><Gauge size={18} /></span><div><small>Measurement window</small><strong>{session.raw_telemetry ? `${session.raw_telemetry.window_ms / 1000}s` : "60s"}</strong><em>{session.measurement_id ? `Stored as #${session.measurement_id}` : "Normalized in memory"}</em></div></article>
         <article className="metric-card"><span className={`metric-icon ${alertCount ? "red" : "green"}`}><TriangleAlert size={18} /></span><div><small>Active findings</small><strong>{alertCount}</strong><em>{alertCount ? `${focus?.probe ?? "Signal"} needs attention` : "All signals nominal"}</em></div></article>
         <article className="metric-card"><span className="metric-icon violet"><ShieldCheck size={18} /></span><div><small>Safety state</small><strong>Protected</strong><em>PATCH output locked</em></div></article>
       </section>
 
       <section className="panel workflow-panel">
-        <div className="panel-heading"><div><span className="eyebrow">Current run</span><h2>Detect → Diagnose → Test → Verify</h2></div><span className="session-id">RW-2409-017</span></div>
+        <div className="panel-heading"><div><span className="eyebrow">Current run</span><h2>Detect → Diagnose → Test → Verify</h2></div><span className="session-id">{session.id}</span></div>
         <div className="workflow">
           {session.timeline.map((step, index) => (
             <div className={`workflow-step ${step.complete ? "complete" : ""} ${stageIndex[session.stage] === index ? "current" : ""}`} key={step.id}>
@@ -284,7 +287,7 @@ function LiveView({ session }: { session: DemoSession }) {
   const charted = session.probes.filter((probe) => probe.samples.length).slice(0, 2);
   return (
     <>
-      <section className="page-heading"><div><p className="kicker">Session RW-2409-017</p><h1>Live diagnostics</h1><p>{session.telemetry_mode === "serial" ? "ESP32 serial" : "Simulator"} telemetry is normalized through the same contract used by every transport.</p></div><div className="live-badge"><span /> LIVE · {session.raw_telemetry ? `${(1000 / session.raw_telemetry.window_ms).toFixed(2)} Hz` : "20 Hz"}</div></section>
+      <section className="page-heading"><div><p className="kicker">Session {session.id}</p><h1>Live diagnostics</h1><p>{session.telemetry_mode === "serial" ? "ESP32 serial" : "Simulator"} telemetry is normalized through the same contract used by every transport.</p></div><div className="live-badge"><span /> {session.telemetry_mode === "serial" ? "SERIAL" : "SIMULATED"} · {session.raw_telemetry ? `${(1000 / session.raw_telemetry.window_ms).toFixed(2)} Hz` : "No raw frame"}</div></section>
       <section className="probe-grid">{session.probes.map((probe) => <ProbeCard reading={probe} key={probe.probe} />)}</section>
       <section className="two-column wide-left">
         <div className="panel"><div className="panel-heading"><div><span className="eyebrow">Raw activity buckets</span><h2>Signal activity</h2></div><div className="chart-legend">{charted.map((probe) => <span key={probe.probe}>{probe.probe} {probe.role}</span>)}</div></div><SignalChart session={session} /></div>
@@ -417,6 +420,10 @@ function ProjectLivePending({ project, profile, plan }: { project: Project; prof
   );
 }
 
+function DemoProbePlanView({ plan, onContinue }: { plan: ProbePlan | null; onContinue: () => void }) {
+  return <section><div className="page-heading"><div><span className="eyebrow">BUILT-IN SIMULATOR</span><h1>Demo probe plan</h1><p>This illustrative plan is generated from the confirmed demo profile. No physical probe connection is claimed.</p></div></div>{plan ? <div className="probe-plan-grid">{plan.instructions.map((step) => <article className={`probe-instruction ${step.probe === "GND" ? "ground" : ""}`} key={step.probe}><div className="probe-badge">{step.probe}</div><div><span className="eyebrow">{step.role}</span><h2>{step.target}</h2><p>{step.expected} · {step.signal_type}</p><div className="safety-warning"><ShieldCheck size={13} />{step.safe_warning}</div></div></article>)}</div> : <div className="empty-state panel"><p>Start the API to generate the demo placement plan from the profile.</p></div>}<button className="primary" onClick={onContinue}>Continue to simulator <ChevronRight size={15} /></button></section>;
+}
+
 export default function Home() {
   const [session, setSession] = useState<DemoSession>(() => makeDemoSession());
   const [active, setActive] = useState<View>("dashboard");
@@ -480,6 +487,9 @@ export default function Home() {
 
   const runOriginalDemo = async (action: "wiggle" | "repair" | "reset") => {
     setBusy(true);
+    setProject(null);
+    setProbePlan(null);
+    setProfile(makeDemoProfile());
     const remote = await demoApi[action]();
     const next = remote ?? makeDemoSession(action === "wiggle" ? "test" : action === "repair" ? "verify" : "diagnose");
     setSession(next);
@@ -503,6 +513,9 @@ export default function Home() {
     setBusy(true);
     try {
       const next = await demoApi.selectScenario(selectedScenario);
+      setProject(null);
+      setProbePlan(null);
+      setProfile(makeDemoProfile());
       setSession(next);
       setSource("api");
       setWorkflow(null);
@@ -529,7 +542,13 @@ export default function Home() {
     setShowNewProject(false);
     setProject(null);
     setProbePlan(null);
+    setWorkflow(null);
+    setLegacyVerify(false);
+    const remote = await demoApi.reset();
+    setSession(remote ?? makeDemoSession());
+    setSource(remote ? "api" : "browser");
     try { setProfile(await demoApi.profile()); } catch { setProfile(makeDemoProfile()); }
+    try { setProbePlan(await demoApi.probePlan()); } catch { setProbePlan(null); }
     setActive("profile");
     setToast("Built-in ultrasonic demo loaded");
   };
@@ -566,7 +585,7 @@ export default function Home() {
   const view = useMemo(() => {
     if (active === "dashboard") return <DashboardView session={session} setActive={setActive} />;
     if (active === "profile") return <ProjectProfileView project={project} profile={profile} onSave={saveProfile} onConfirm={confirmProfile} />;
-    if (active === "connect") return <ProbePlanView project={project} plan={probePlan ?? project?.probe_plan ?? null} onConnected={confirmConnections} />;
+    if (active === "connect") return project ? <ProbePlanView project={project} plan={probePlan ?? project?.probe_plan ?? null} onConnected={confirmConnections} /> : <DemoProbePlanView plan={probePlan} onContinue={() => setActive("simulator")} />;
     if (active === "simulator") return <SimulatorView session={session} scenarios={scenarios} selected={selectedScenario} setSelected={setSelectedScenario} onRun={runScenario} onPlan={() => runTestAction("plan")} onDemoTest={() => runOriginalDemo("wiggle")} onDemoRepair={() => runOriginalDemo("repair")} busy={busy} />;
     if (active === "live") {
       if (project && session.profile_id !== profile?.id) return <ProjectLivePending project={project} profile={profile} plan={probePlan} />;
@@ -577,11 +596,12 @@ export default function Home() {
     if (active === "guided" || active === "verify") return <GuidedTestView workflow={workflow} recommendation={recommendation} busy={busy} error={testError} onPlan={() => runTestAction("plan")} onStart={() => runTestAction("start")} onCapture={() => runTestAction("capture")} onRemeasure={() => runTestAction("remeasure")} onCancel={() => runTestAction("cancel")} onRecordAction={recordUserAction} />;
     if (active === "history") return <HistoryReportView mode="history" />;
     if (active === "computer") return <ComputerDiagnosticsView />;
+    if (active === "settings") return <SettingsStatusView />;
     return <HistoryReportView mode="reports" />;
   }, [active, session, busy, project, profile, probePlan, scenarios, selectedScenario, workflow, recommendation, testError, legacyVerify]);
 
   return (
-    <AppShell active={active} setActive={setActive} session={session} source={source} projectName={project?.name ?? session.project_name} projectContext={project ? `${project.controller} · ${project.analysis_status}` : "ESP32 · Built-in demo"} hardwareConnected={!project || session.profile_id === profile?.id ? session.hardware_connected : false} onNewProject={() => setShowNewProject(true)}>
+    <AppShell active={active} setActive={setActive} session={session} source={source} projectName={project?.name ?? session.project_name} projectContext={project ? `${project.controller} · ${project.analysis_status}` : "ESP32 · Built-in demo"} hardwareConnected={source === "api" && session.telemetry_mode === "serial" && (!project || session.profile_id === profile?.id) ? session.hardware_connected : false} onNewProject={() => setShowNewProject(true)} onLoadDemo={loadDemoProject}>
       {view}
       {showNewProject && <NewProjectModal onClose={() => setShowNewProject(false)} onComplete={completeProjectAnalysis} onLoadDemo={loadDemoProject} />}
       {toast && <div className="toast"><CheckCircle2 size={18} />{toast}</div>}

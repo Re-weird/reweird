@@ -29,6 +29,11 @@ func TestSimulatedComputerRules(t *testing.T) {
 			if len(result.Evidence.PhysicalEvidence) != 0 {
 				t.Fatal("computer evidence crossed into physical evidence")
 			}
+			for _, fact := range result.Evidence.ComputerEvidence {
+				if fact.Name == "memory_usage" && fact.Provenance != DerivedSystem {
+					t.Fatal("computed memory percentage mislabeled as measured")
+				}
+			}
 			if item.want == "" && len(result.Findings) != 0 {
 				t.Fatalf("healthy computer findings: %+v", result.Findings)
 			}

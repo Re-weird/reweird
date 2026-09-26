@@ -28,12 +28,19 @@ func Analyze(snapshot Snapshot, expected Expectations) (Analysis, error) {
 		result.Evidence.ComputerEvidence = append(result.Evidence.ComputerEvidence, fact)
 		return fact
 	}
+	addDerived := func(name string, value any, unit string) Fact {
+		fact := Fact{Name: name, Value: value, Unit: unit, Provenance: DerivedSystem}
+		result.Evidence.ComputerEvidence = append(result.Evidence.ComputerEvidence, fact)
+		return fact
+	}
 	add("os", snapshot.System.OS, "")
 	add("architecture", snapshot.System.Architecture, "")
 	add("cpu_usage", snapshot.System.CPUPercent, "%")
 	if snapshot.System.MemoryTotalMB > 0 {
+		add("memory_total", snapshot.System.MemoryTotalMB, "MB")
+		add("memory_used", snapshot.System.MemoryUsedMB, "MB")
 		used := float64(snapshot.System.MemoryUsedMB) / float64(snapshot.System.MemoryTotalMB) * 100
-		fact := add("memory_usage", used, "%")
+		fact := addDerived("memory_usage", used, "%")
 		if used > expected.MemoryThresholdPercent {
 			result.Findings = append(result.Findings, Finding{Code: "HIGH_MEMORY_PRESSURE", Severity: "warning", Summary: fmt.Sprintf("Memory use is %.1f%%, above the configured %.1f%% threshold.", used, expected.MemoryThresholdPercent), Evidence: []Fact{fact}, NextAction: "Inspect memory-intensive processes; no process will be stopped automatically."})
 		}
@@ -43,7 +50,9 @@ func Analyze(snapshot Snapshot, expected Expectations) (Analysis, error) {
 			continue
 		}
 		used := float64(disk.UsedMB) / float64(disk.TotalMB) * 100
-		fact := add("disk_usage_"+disk.Name, used, "%")
+		add("disk_total_"+disk.Name, disk.TotalMB, "MB")
+		add("disk_used_"+disk.Name, disk.UsedMB, "MB")
+		fact := addDerived("disk_usage_"+disk.Name, used, "%")
 		if used > expected.DiskThresholdPercent {
 			result.Findings = append(result.Findings, Finding{Code: "HIGH_DISK_USAGE", Severity: "warning", Summary: fmt.Sprintf("Disk %s is %.1f%% used, above the configured %.1f%% threshold.", disk.Name, used, expected.DiskThresholdPercent), Evidence: []Fact{fact}, NextAction: "Review disk usage manually; ReWeird will not delete files."})
 		}

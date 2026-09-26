@@ -105,6 +105,7 @@ function uploadFile(path: string, file: File): Promise<Project> {
 export const projectApi = {
   createProject: (input: CreateProjectInput) =>
     requestJSON<Project>("/api/v1/projects", { method: "POST", body: JSON.stringify(input) }),
+  listProjects: () => requestJSON<Project[]>("/api/v1/projects"),
   uploadProjectImage: (projectID: string, file: File) => uploadFile(`/api/v1/projects/${projectID}/media`, file),
   uploadProjectCode: (projectID: string, file: File) => uploadFile(`/api/v1/projects/${projectID}/code`, file),
   submitPastedCode: (projectID: string, codeText: string, filename = "pasted-code.ino") =>

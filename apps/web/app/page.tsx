@@ -30,7 +30,6 @@ import {
   TriangleAlert,
   Waves,
   X,
-  Zap,
 } from "lucide-react";
 import {
   Area,
@@ -41,12 +40,13 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import type { AnalyzeProjectResponse, DemoSession, ProbePlan, ProbeReading, Project, ProjectProfile, RuleResult, SimulatorScenario } from "@reweird/shared-types";
-import { demoApi, projectApi } from "@/lib/api";
+import type { AnalyzeProjectResponse, DemoSession, DiagnosticWorkflow, ProbePlan, ProbeReading, Project, ProjectProfile, RuleResult, SimulatorScenario, TestRecommendation } from "@reweird/shared-types";
+import { ApiError, demoApi, projectApi, testApi } from "@/lib/api";
 import { makeDemoProfile, makeDemoSession } from "@/lib/demo";
 import { NewProjectModal, ProbePlanView, ProjectProfileView } from "./project-workflow";
+import { GuidedTestView } from "./guided-test";
 
-type View = "dashboard" | "profile" | "connect" | "simulator" | "live" | "diagnosis" | "verify" | "reports";
+type View = "dashboard" | "profile" | "connect" | "simulator" | "live" | "diagnosis" | "guided" | "verify" | "reports";
 
 const nav: { id: View; label: string; icon: typeof Activity }[] = [
   { id: "dashboard", label: "Overview", icon: LayoutDashboard },
@@ -55,6 +55,7 @@ const nav: { id: View; label: string; icon: typeof Activity }[] = [
   { id: "simulator", label: "Fault simulator", icon: TestTube2 },
   { id: "live", label: "Live diagnostics", icon: Activity },
   { id: "diagnosis", label: "Diagnosis", icon: Microscope },
+  { id: "guided", label: "Guided test", icon: TestTube2 },
   { id: "verify", label: "Verify", icon: CheckCircle2 },
   { id: "reports", label: "Reports", icon: FileBarChart },
 ];
@@ -290,7 +291,7 @@ function LiveView({ session }: { session: DemoSession }) {
   );
 }
 
-function DiagnosisView({ session, onWiggle, onRepair, busy }: { session: DemoSession; onWiggle: () => void; onRepair: () => void; busy: boolean }) {
+function DiagnosisView({ session, onPlan, busy }: { session: DemoSession; onPlan: () => void; busy: boolean }) {
   const tested = session.stage === "test" || session.stage === "repair";
   const focus = session.probes.find((probe) => probe.probe === session.evidence.probe);
   const expected = Object.entries(session.evidence.expected).slice(0, 3);
@@ -320,7 +321,7 @@ function DiagnosisView({ session, onWiggle, onRepair, busy }: { session: DemoSes
       <section className="test-callout">
         <div className="test-icon"><TestTube2 size={24} /></div>
         <div><span className="eyebrow">Recommended next test</span><h2>{session.diagnosis.next_test}</h2><p>{tested ? "The repeated movement correlation provides stronger evidence than the initial anomaly alone." : "This test is user-guided and only monitors input. PATCH output remains disabled."}</p></div>
-        {!tested ? <button className="primary" onClick={onWiggle} disabled={busy}>{busy ? <RefreshCw className="spin" size={17} /> : <Activity size={17} />} Start wiggle test</button> : <button className="primary" onClick={onRepair} disabled={busy}>{busy ? <RefreshCw className="spin" size={17} /> : <Zap size={17} />} Simulate repair</button>}
+        <button className="primary" onClick={onPlan} disabled={busy}>{busy ? <RefreshCw className="spin" size={17} /> : <Activity size={17} />} Open guided test planner</button>
       </section>
     </>
   );
@@ -332,8 +333,9 @@ function SimulatorView({
   selected,
   setSelected,
   onRun,
-  onTest,
-  onVerify,
+  onPlan,
+  onDemoTest,
+  onDemoRepair,
   busy,
 }: {
   session: DemoSession;
@@ -341,8 +343,9 @@ function SimulatorView({
   selected: string;
   setSelected: (id: string) => void;
   onRun: () => void;
-  onTest: () => void;
-  onVerify: () => void;
+  onPlan: () => void;
+  onDemoTest: () => void;
+  onDemoRepair: () => void;
   busy: boolean;
 }) {
   const activeScenario = scenarios.find((scenario) => scenario.id === session.scenario_id);
@@ -384,7 +387,7 @@ function SimulatorView({
             })}
           </div>
           {!!session.analysis?.simultaneous_dropout_groups?.length && <div className="shared-failure"><TriangleAlert size={17} /> Shared failure group: {session.analysis.simultaneous_dropout_groups.map((group) => group.join(" + ")).join(", ")}</div>}
-          <div className="simulator-actions"><button className="secondary" onClick={onTest} disabled={busy || session.stage === "verify"}><Activity size={16} /> Run guided movement test</button><button className="primary" onClick={onVerify} disabled={busy || session.stage === "verify"}><CheckCircle2 size={16} /> Simulate correction &amp; VERIFY</button></div>
+          <div className="simulator-actions"><button className="primary" onClick={onPlan} disabled={busy}><Activity size={16} /> Plan guided test &amp; VERIFY</button><button className="secondary" onClick={onDemoTest} disabled={busy}><TestTube2 size={16} /> Original demo test</button><button className="secondary" onClick={onDemoRepair} disabled={busy}><CheckCircle2 size={16} /> Original demo repair</button></div>
         </div>
       </section>
       <section className="security-note"><ShieldCheck size={20} /><div><strong>Input-only by design</strong><span>The simulator and future ESP32 serial adapter can only supply measurements. The PATCH endpoint remains physically and logically disabled.</span></div></section>
@@ -392,22 +395,13 @@ function SimulatorView({
   );
 }
 
-function VerifyView({ session, onReset, busy }: { session: DemoSession; onReset: () => void; busy: boolean }) {
+function LegacyDemoVerifyView({ session, onReset, busy }: { session: DemoSession; onReset: () => void; busy: boolean }) {
   const verified = session.stage === "verify";
-  return (
-    <>
-      <section className="page-heading"><div><p className="kicker">Repair verification</p><h1>{verified ? "Signal returned to baseline" : "Verification is waiting"}</h1><p>{verified ? "Re-measurement confirms the simulated correction changed the observed behavior." : "Complete the guided test and simulated correction to unlock before/after evidence."}</p></div>{verified && <div className="verified-seal"><CheckCircle2 size={24} /> VERIFIED</div>}</section>
-      <section className={`verification-panel ${verified ? "ready" : "locked"}`}>
-        <div className="before-after">
-          <div><span>Before repair</span><strong>{session.before.dropouts_per_minute}</strong><small>dropouts / minute</small><em className="bad">Intermittent</em></div>
-          <div className="delta-arrow"><ChevronRight size={26} /></div>
-          <div><span>After repair</span><strong>{session.after?.dropouts_per_minute ?? "—"}</strong><small>dropouts / minute</small><em className={verified ? "good" : "pending"}>{session.after?.stability ?? "Pending"}</em></div>
-        </div>
-        <div className="verification-summary"><span className="big-check">{verified ? <Check size={30} /> : <Gauge size={30} />}</span><div><h2>{verified ? "Issue appears resolved" : "No post-repair sample yet"}</h2><p>{verified ? `${session.evidence.probe} ${session.evidence.role} is stable and the new measurement window matches the configured healthy behavior.` : "ReWeird will compare the next measurement window with the original fault evidence."}</p></div></div>
-      </section>
-      {verified && <button className="secondary center-button" onClick={onReset} disabled={busy}><RefreshCw size={16} /> Reset demo</button>}
-    </>
-  );
+  return <>
+    <section className="page-heading"><div><p className="kicker">Original demo · Browser fallback</p><h1>{verified ? "Demo signal returned to baseline" : "Demo verification is waiting"}</h1><p>This is the original simulated HC-SR04 loop, separate from persisted generic guided tests.</p></div>{verified && <div className="verified-seal"><CheckCircle2 size={24} /> DEMO VERIFIED</div>}</section>
+    <section className={`verification-panel ${verified ? "ready" : "locked"}`}><div className="before-after"><div><span>Before demo repair</span><strong>{session.before.dropouts_per_minute}</strong><small>dropouts / minute</small></div><div className="delta-arrow"><ChevronRight size={26} /></div><div><span>After demo repair</span><strong>{session.after?.dropouts_per_minute ?? "—"}</strong><small>dropouts / minute</small></div></div><div className="verification-summary"><div><h2>{verified ? "Original demo correction simulated" : "No demo repair yet"}</h2><p>{verified ? session.diagnosis.summary : "Run the original demo test and repair from the Fault simulator."}</p></div></div></section>
+    {verified && <button className="secondary center-button" onClick={onReset} disabled={busy}><RefreshCw size={16} /> Reset original demo</button>}
+  </>;
 }
 
 function ProjectLivePending({ project, profile, plan }: { project: Project; profile: ProjectProfile | null; plan: ProbePlan | null }) {
@@ -452,6 +446,10 @@ export default function Home() {
   const [probePlan, setProbePlan] = useState<ProbePlan | null>(null);
   const [scenarios, setScenarios] = useState<SimulatorScenario[]>([]);
   const [selectedScenario, setSelectedScenario] = useState("intermittent-connection");
+  const [recommendation, setRecommendation] = useState<TestRecommendation | null>(null);
+  const [workflow, setWorkflow] = useState<DiagnosticWorkflow | null>(null);
+  const [testError, setTestError] = useState<string | null>(null);
+  const [legacyVerify, setLegacyVerify] = useState(false);
 
   useEffect(() => {
     demoApi.load().then((remote) => {
@@ -462,6 +460,8 @@ export default function Home() {
       setScenarios(result.scenarios);
       setSelectedScenario(result.active);
     }).catch(() => undefined);
+    testApi.current().then(setWorkflow).catch(() => undefined);
+    testApi.recommendation().then(setRecommendation).catch(() => undefined);
   }, []);
 
   useEffect(() => {
@@ -470,16 +470,41 @@ export default function Home() {
     return () => clearTimeout(timer);
   }, [toast]);
 
-  const action = async (kind: "wiggle" | "repair" | "reset") => {
+  const runTestAction = async (action: "plan" | "start" | "capture" | "remeasure" | "cancel") => {
+    setLegacyVerify(false);
+    setActive("guided");
+    setTestError(null);
+    if (source !== "api") { setTestError("Start the Go API to capture and persist a real guided workflow; browser demo data is not used."); return; }
+    if (project && profile?.id !== session.profile_id) { setTestError("The active telemetry source does not match this project's confirmed profile."); return; }
     setBusy(true);
-    const remote = await demoApi[kind]();
-    const next = remote ?? makeDemoSession(kind === "wiggle" ? "test" : kind === "repair" ? "verify" : "diagnose");
+    try {
+      let next: DiagnosticWorkflow;
+      if (action === "plan") {
+        const proposed = await testApi.recommendation();
+        setRecommendation(proposed);
+        next = await testApi.create(proposed);
+      } else {
+        if (!workflow) throw new Error("Create a test plan first.");
+        next = await testApi[action](workflow.id);
+      }
+      setWorkflow(next);
+      if (next.verification) setActive("verify");
+      setToast(`Guided test: ${next.status.replaceAll("_", " ").toLowerCase()}`);
+    } catch (error) {
+      setTestError(error instanceof ApiError || error instanceof Error ? error.message : "The guided test could not continue.");
+    } finally { setBusy(false); }
+  };
+
+  const runOriginalDemo = async (action: "wiggle" | "repair" | "reset") => {
+    setBusy(true);
+    const remote = await demoApi[action]();
+    const next = remote ?? makeDemoSession(action === "wiggle" ? "test" : action === "repair" ? "verify" : "diagnose");
     setSession(next);
     setSource(remote ? "api" : "browser");
+    setLegacyVerify(action === "repair");
+    if (action === "repair") setActive("verify");
+    if (action === "reset") setActive("simulator");
     setBusy(false);
-    if (kind === "wiggle") setToast("Wiggle test complete: movement correlation detected");
-    if (kind === "repair") { setToast("Correction verified against the healthy profile and baseline"); setActive("verify"); }
-    if (kind === "reset") { setToast("Demo reset to the initial fault"); setActive("dashboard"); }
   };
 
   const runScenario = async () => {
@@ -488,6 +513,9 @@ export default function Home() {
       const next = await demoApi.selectScenario(selectedScenario);
       setSession(next);
       setSource("api");
+      setWorkflow(null);
+      setLegacyVerify(false);
+      setRecommendation(await testApi.recommendation().catch(() => null));
       setToast(`${scenarios.find((scenario) => scenario.id === selectedScenario)?.name ?? "Scenario"} analyzed from raw telemetry`);
     } catch {
       setToast("The API simulator is unavailable; start the Go backend to run fault scenarios");
@@ -547,15 +575,16 @@ export default function Home() {
     if (active === "dashboard") return <DashboardView session={session} setActive={setActive} />;
     if (active === "profile") return <ProjectProfileView project={project} profile={profile} onSave={saveProfile} onConfirm={confirmProfile} />;
     if (active === "connect") return <ProbePlanView project={project} plan={probePlan ?? project?.probe_plan ?? null} onConnected={confirmConnections} />;
-    if (active === "simulator") return <SimulatorView session={session} scenarios={scenarios} selected={selectedScenario} setSelected={setSelectedScenario} onRun={runScenario} onTest={() => action("wiggle")} onVerify={() => action("repair")} busy={busy} />;
+    if (active === "simulator") return <SimulatorView session={session} scenarios={scenarios} selected={selectedScenario} setSelected={setSelectedScenario} onRun={runScenario} onPlan={() => runTestAction("plan")} onDemoTest={() => runOriginalDemo("wiggle")} onDemoRepair={() => runOriginalDemo("repair")} busy={busy} />;
     if (active === "live") {
       if (project && session.profile_id !== profile?.id) return <ProjectLivePending project={project} profile={profile} plan={probePlan} />;
       return <LiveView session={session} />;
     }
-    if (active === "diagnosis") return <DiagnosisView session={session} onWiggle={() => action("wiggle")} onRepair={() => action("repair")} busy={busy} />;
-    if (active === "verify") return <VerifyView session={session} onReset={() => action("reset")} busy={busy} />;
+    if (active === "diagnosis") return <DiagnosisView session={session} onPlan={() => runTestAction("plan")} busy={busy} />;
+    if (active === "verify" && legacyVerify) return <LegacyDemoVerifyView session={session} onReset={() => runOriginalDemo("reset")} busy={busy} />;
+    if (active === "guided" || active === "verify") return <GuidedTestView workflow={workflow} recommendation={recommendation} busy={busy} error={testError} onPlan={() => runTestAction("plan")} onStart={() => runTestAction("start")} onCapture={() => runTestAction("capture")} onRemeasure={() => runTestAction("remeasure")} onCancel={() => runTestAction("cancel")} />;
     return <ReportsView session={session} />;
-  }, [active, session, busy, project, profile, probePlan, scenarios, selectedScenario]);
+  }, [active, session, busy, project, profile, probePlan, scenarios, selectedScenario, workflow, recommendation, testError, legacyVerify]);
 
   return (
     <AppShell active={active} setActive={setActive} session={session} source={source} projectName={project?.name ?? session.project_name} projectContext={project ? `${project.controller} · ${project.analysis_status}` : "ESP32 · Built-in demo"} hardwareConnected={!project || session.profile_id === profile?.id ? session.hardware_connected : false} onNewProject={() => setShowNewProject(true)}>

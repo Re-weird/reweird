@@ -69,7 +69,13 @@ class ProbeRequest(BaseModel):
     evidence: StructuredEvidence
 
 
-UnknownReason = Literal["NO_EVIDENCE", "CONFLICTING_RULES"]
+UnknownReason = Literal[
+    "NO_EVIDENCE",
+    "CONFLICTING_RULES",
+    "PROVIDER_ERROR",
+    "INVALID_PROVIDER_OUTPUT",
+    "PROVIDER_UNCERTAIN",
+]
 
 
 class ProbeResponse(BaseModel):

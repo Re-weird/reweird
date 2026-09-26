@@ -5,11 +5,13 @@ import Image from "next/image";
 import Link from "next/link";
 import { useParams, usePathname } from "next/navigation";
 import { AnimatePresence, motion } from "framer-motion";
-import { BarChart3, ChevronDown, FolderGit2, Moon, Plus, Settings, Sun, Waves } from "lucide-react";
+import { signOut } from "next-auth/react";
+import { BarChart3, ChevronDown, FolderGit2, LogOut, Moon, Plus, Settings, Sun, Waves } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useAppState } from "@/lib/app-state";
 import { DEMO_PROJECT_ID } from "@/lib/project-routes";
+import { useUser } from "@/lib/auth";
 import { cn } from "@/lib/utils";
 
 type Theme = "light" | "dark";
@@ -41,6 +43,7 @@ function AccountMenu({ onLoadDemo }: { onLoadDemo: () => void }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   const pathname = usePathname();
+  const { isSignedIn, name, email } = useUser();
 
   useEffect(() => { setOpen(false); }, [pathname]);
   useEffect(() => {
@@ -76,14 +79,17 @@ function AccountMenu({ onLoadDemo }: { onLoadDemo: () => void }) {
             className="absolute top-[calc(100%+8px)] right-0 z-50 flex w-60 origin-top-right flex-col rounded-lg border border-border bg-popover p-1.5 shadow-[0_18px_40px_-16px_rgba(0,0,0,0.6)]"
           >
             <div className="mb-1 border-b border-line-soft px-2.5 pt-1.5 pb-2.5">
-              <p className="text-[13px] font-semibold text-foreground">Local session</p>
-              <p className="text-xs text-muted-foreground">No user sign-in yet</p>
+              <p className="text-[13px] font-semibold text-foreground">{isSignedIn ? (name ?? "Signed in") : "Local session"}</p>
+              <p className="text-xs text-muted-foreground">{isSignedIn ? (email ?? "ReWeird account") : "No user sign-in yet"}</p>
             </div>
             <Link href="/dashboard" role="menuitem" className={itemClass}><BarChart3 /> Your dashboard</Link>
             <Link href="/projects" role="menuitem" className={itemClass}><FolderGit2 /> Your projects</Link>
             <Link href="/settings" role="menuitem" className={itemClass}><Settings /> Settings</Link>
             <div className="my-1 h-px bg-line-soft" />
             <button role="menuitem" onClick={() => { setOpen(false); onLoadDemo(); }} className={cn(itemClass, "text-left")}><Waves /> Load demo project</button>
+            {isSignedIn && (
+              <button role="menuitem" onClick={() => signOut({ callbackUrl: "/" })} className={cn(itemClass, "text-left")}><LogOut /> Sign out</button>
+            )}
           </motion.div>
         )}
       </AnimatePresence>

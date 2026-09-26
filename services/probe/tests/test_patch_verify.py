@@ -254,13 +254,13 @@ def test_verify_cannot_happen_before_external_execution() -> None:
 
 
 def test_verify_requires_structured_evidence(client) -> None:
+    from app.repository import get_repository
+
     session = _fresh_session()
     proposal = create_patch_proposal(session, _trig_request(), patch_provider)
-    from app.patch_proposals import get_default_patch_proposal_store
-    from app.sessions import get_default_session_store
-
-    get_default_session_store().save(session)
-    get_default_patch_proposal_store().save(proposal)
+    repository = get_repository()
+    repository.save_session(session)
+    repository.save_patch_proposal(proposal)
 
     response = client.post(
         f"/sessions/{session.session_id}/patch-proposals/{proposal.proposal_id}/verify",

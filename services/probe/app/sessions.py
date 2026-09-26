@@ -196,6 +196,8 @@ class SessionStore(Protocol):
 
     def save(self, session: DiagnosticSession) -> None: ...
 
+    def list_all(self) -> list[DiagnosticSession]: ...
+
 
 class InMemorySessionStore:
     """No database in Milestone 5: a plain in-process dict. Deterministic,
@@ -210,6 +212,9 @@ class InMemorySessionStore:
 
     def save(self, session: DiagnosticSession) -> None:
         self._sessions[session.session_id] = session
+
+    def list_all(self) -> list[DiagnosticSession]:
+        return sorted(self._sessions.values(), key=lambda s: s.created_at_ms)
 
 
 @lru_cache

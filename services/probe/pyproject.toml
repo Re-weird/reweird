@@ -9,6 +9,8 @@ dependencies = [
     "google-genai>=1.0.0",
     "pydantic>=2",
     "uvicorn>=0.54.0",
+    "pymongo>=4.9",
+    "psycopg[binary]>=3.2",
 ]
 
 [dependency-groups]

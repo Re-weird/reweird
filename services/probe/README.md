@@ -269,3 +269,85 @@ opt-in live test exists outside the default suite, in `live_tests/`:
     curl -s -X POST "http://localhost:8091/sessions/$SESSION2_ID/patch-proposals/$PROPOSAL_ID/verify" \
       -H "content-type: application/json" \
       -d "{\"evidence\": $(cat fixtures/hc_sr04_healthy.json)}" | python -m json.tool
+
+    # History + export (Milestone 7):
+    curl -s http://localhost:8091/sessions | python -m json.tool
+    curl -s "http://localhost:8091/sessions/$SESSION2_ID/export" | python -m json.tool
+    curl -s http://localhost:8091/health | python -m json.tool
+
+## History persistence + sponsor integrations (Milestone 7)
+
+`app/repository.py`'s `DiagnosticRepository` protocol replaces M5/M6's
+separate in-memory stores with one storage seam - `InMemorySessionStore`/
+`InMemoryPatchProposalStore` remain available and unchanged underneath it.
+**PROBE's diagnostic correctness never depends on any of the systems below**;
+each one only stores, indexes, or analyzes an already-computed result.
+Nothing here is Intelligence Layer runtime code - a developer can clone this
+repo and run the full test suite with zero network access, using the safe
+defaults (`DIAGNOSTIC_REPOSITORY=memory`, `TELEMETRY_SINK=none`,
+`ANALYTICS_SINK=none`).
+
+| System | Role | Status |
+|---|---|---|
+| **Gemini** | AI reasoning/explanation for hypotheses and patch-proposal drafting (Milestones 2, 6) | **IMPLEMENTED** (default: `fake`, network-free; real client behind `PROBE_AI_PROVIDER=gemini` + `GEMINI_API_KEY`) |
+| **MongoDB Atlas** | Persistent diagnostic session/history documents (`sessions`, `patch_proposals`, `events` collections) | **IMPLEMENTED**, **OPTIONAL** (default: `memory`; real adapter behind `DIAGNOSTIC_REPOSITORY=mongodb` + `MONGODB_URI`) |
+| **Tiger Data** (PostgreSQL-compatible) | Time-series electrical measurement storage, separate from session documents | **IMPLEMENTED**, **OPTIONAL** (default: `none`; real adapter behind `TELEMETRY_SINK=tiger` + `TIGER_DATABASE_URL`) |
+| **Snowflake** | Optional diagnostic analytics/export summaries | **ADAPTER BOUNDARY ONLY** - the real `snowflake-connector-python` SDK is deliberately not vendored (large transitive dependency tree); `ANALYTICS_SINK=snowflake` fails clearly at startup unless that package is installed separately. **CONFIGURED** requires `SNOWFLAKE_ACCOUNT`/`_USER`/`_PASSWORD`/`_DATABASE`/`_WAREHOUSE`; **NOT CONFIGURED** by default |
+| **DigitalOcean** | Hosting/deployment target | **NOT DEPLOYED** - `Dockerfile`/`.dockerignore` here make the service deployment-ready (see below); no DigitalOcean API call exists anywhere in this service |
+| **GoDaddy** | Domain/product registration | **NOT IMPLEMENTED** here, deliberately - domain management is not an Intelligence Layer runtime feature |
+
+None of this ever promotes stored data back into trusted evidence: every
+repository/sink method only ever accepts an already-computed
+`DiagnosticSession`/`PatchProposal`/measurement and stores or forwards it
+unchanged. Loading a database record back as NEW input context is a
+possible future feature, deliberately out of scope here.
+
+### Repository (MongoDB Atlas)
+
+`DIAGNOSTIC_REPOSITORY=memory|mongodb` (default `memory`). Selecting
+`mongodb` without `MONGODB_URI` set fails clearly at startup (`RuntimeError`,
+surfaced by the FastAPI `lifespan` hook), never silently falling back to
+memory. A repository failure during a request (connection lost, write
+error) is a **PRIMARY** failure and is surfaced to the caller as `503`,
+unlike the sinks below.
+
+### Telemetry sink (Tiger Data)
+
+`TELEMETRY_SINK=none|tiger` (default `none`). Extracts only numeric,
+already-provenanced `EvidenceFact`s (`MEASURED`/`DERIVED`/`SPECIFICATION`/
+`BASELINE`/`SOFTWARE`) from each step's evaluated evidence -
+`extract_telemetry_records` never reads `rule_results` or any `Hypothesis`,
+and `record_measurement` refuses (`ValueError`) anything carrying
+`AI_INTERPRETATION` provenance as a defense-in-depth guard. A sink failure
+is logged and swallowed at the API layer - it is optional history, and an
+infrastructure outage must never become diagnostic evidence or alter the
+actual response.
+
+### Analytics sink (Snowflake)
+
+`ANALYTICS_SINK=none|snowflake` (default `none`). `build_session_summary()`
+derives only small, safe aggregate fields (step count, final status, rule
+failure count, whether a patch was proposed, verification outcome,
+duration) - never raw evidence, source code, or images. Like the telemetry
+sink, a failure here is logged and swallowed, never allowed to alter the
+deterministic diagnosis.
+
+### Export
+
+`GET /sessions/{id}/export` returns the full ordered diagnostic timeline
+(evidence, deterministic rules/specification results, hypotheses,
+recommended tests) plus PATCH proposals and VerificationResults, with
+provenance intact - and a defensive `_redact_secrets` pass that replaces any
+dict key matching `api_key|secret|password|token|credential|authorization`
+before the export is ever returned, even though none of the underlying
+models carry such a field today.
+
+### DigitalOcean deployment readiness
+
+    docker build -f services/probe/Dockerfile -t reweird-probe .   # from the repo root
+    docker run --rm -p 8091:8091 reweird-probe
+
+The image boots correctly with zero configuration (`fake`/`memory`/`none`
+defaults baked in as safe `ENV` values, never a secret), exposes `GET
+/health`, and does not touch the root `docker-compose.yml` (owned by another
+subsystem) - this is a standalone, service-local deployment artifact.

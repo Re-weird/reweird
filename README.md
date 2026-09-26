@@ -50,6 +50,9 @@ signal returns to its healthy baseline.
 - Structured evidence that keeps measured values, rules, and interpretation
   separate
 - A user-guided wiggle test and simulated repair flow
+- A persisted, generic guided-test planner and before/during/after VERIFY
+  workflow covering movement, rails, shared dropouts, activity, timing,
+  trusted baselines, and re-measurement ([contract](docs/guided-tests.md))
 - A browser-side simulator fallback, so the demo still works if the Go API is
   not running
 

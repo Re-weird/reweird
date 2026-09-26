@@ -70,6 +70,16 @@ func (store *SQLiteStore) migrate() error {
 		);
 		CREATE INDEX IF NOT EXISTS idx_measurements_profile_captured
 			ON measurement_windows(profile_id, captured_at_ms DESC, id DESC);
+		CREATE TABLE IF NOT EXISTS test_workflows (
+			id TEXT PRIMARY KEY,
+			profile_id TEXT NOT NULL,
+			status TEXT NOT NULL,
+			payload TEXT NOT NULL,
+			created_at_ms INTEGER NOT NULL,
+			updated_at_ms INTEGER NOT NULL
+		);
+		CREATE INDEX IF NOT EXISTS idx_test_workflows_profile_updated
+			ON test_workflows(profile_id, updated_at_ms DESC);
 	`)
 	return err
 }

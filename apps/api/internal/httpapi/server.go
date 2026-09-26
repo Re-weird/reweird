@@ -20,6 +20,7 @@ import (
 
 type Controller struct {
 	mu            sync.RWMutex
+	testMu        sync.Mutex
 	stage         domain.Stage
 	reference     *domain.AnalysisResult
 	engine        *diagnostics.Engine
@@ -70,6 +71,14 @@ func NewApp(engine *diagnostics.Engine, repository domain.Repository, source dom
 	api.Get("/report", controller.report)
 	api.Get("/telemetry/status", controller.telemetryStatus)
 	api.Get("/measurements", controller.listMeasurements)
+	api.Get("/tests/recommendation", controller.recommendTest)
+	api.Get("/tests/current", controller.currentTest)
+	api.Post("/tests", controller.createTest)
+	api.Get("/tests/:id", controller.getTest)
+	api.Post("/tests/:id/start", controller.startTest)
+	api.Post("/tests/:id/capture", controller.captureTest)
+	api.Post("/tests/:id/remeasure", controller.remeasureTest)
+	api.Post("/tests/:id/cancel", controller.cancelTest)
 	api.Get("/simulator/scenarios", controller.listSimulatorScenarios)
 	api.Post("/simulator/scenario", controller.selectSimulatorScenario)
 	api.Get("/profiles", controller.listProfiles)

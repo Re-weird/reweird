@@ -2,11 +2,13 @@ import type {
   AnalyzeProjectResponse,
   ConfirmProfileResponse,
   DemoSession,
+  DiagnosticWorkflow,
   MeasurementWindow,
   ProbePlan,
   Project,
   ProjectProfile,
   SimulatorScenarioList,
+  TestRecommendation,
 } from "@reweird/shared-types";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "";
@@ -109,4 +111,14 @@ export const projectApi = {
   getProbePlan: (projectID: string) => requestJSON<ProbePlan>(`/api/v1/projects/${projectID}/probe-plan`),
   confirmProbeConnections: (projectID: string) =>
     requestJSON<ProbePlan>(`/api/v1/projects/${projectID}/probe-plan/confirm`, { method: "POST" }),
+};
+
+export const testApi = {
+  recommendation: () => requestJSON<TestRecommendation>("/api/v1/tests/recommendation"),
+  current: () => requestJSON<DiagnosticWorkflow>("/api/v1/tests/current"),
+  create: (recommendation: TestRecommendation) => requestJSON<DiagnosticWorkflow>("/api/v1/tests", { method: "POST", body: JSON.stringify(recommendation) }),
+  start: (id: string) => requestJSON<DiagnosticWorkflow>(`/api/v1/tests/${encodeURIComponent(id)}/start`, { method: "POST" }, 15_000),
+  capture: (id: string) => requestJSON<DiagnosticWorkflow>(`/api/v1/tests/${encodeURIComponent(id)}/capture`, { method: "POST" }, 15_000),
+  remeasure: (id: string) => requestJSON<DiagnosticWorkflow>(`/api/v1/tests/${encodeURIComponent(id)}/remeasure`, { method: "POST" }, 15_000),
+  cancel: (id: string) => requestJSON<DiagnosticWorkflow>(`/api/v1/tests/${encodeURIComponent(id)}/cancel`, { method: "POST" }),
 };

@@ -390,3 +390,91 @@ export interface ConfirmProfileResponse {
   profile: ProjectProfile;
   probe_plan: ProbePlan;
 }
+
+export type TestType = "MOVEMENT_CORRELATION" | "POWER_RAIL_STABILITY" | "SIMULTANEOUS_DROPOUT" | "SIGNAL_ACTIVITY" | "BASELINE_COMPARISON" | "FREQUENCY_TIMING" | "REMEASURE";
+export type TestState = "PLANNED" | "READY" | "CAPTURING_BASELINE" | "WAITING_FOR_USER" | "CAPTURING_TEST" | "ANALYZING" | "COMPLETED" | "INCONCLUSIVE" | "CANCELLED" | "FAILED" | "LOCKED" | "VERIFYING" | "RESOLVED" | "UNRESOLVED";
+
+export interface TestRecommendation {
+  id: string;
+  session_id: string;
+  test_type: TestType;
+  target_probes: string[];
+  reason: string;
+  instructions?: string[];
+  duration_seconds: number;
+  requires_user_action: boolean;
+  requires_patch: boolean;
+  status?: string;
+}
+
+export interface TestPlan {
+  id: string;
+  recommendation: TestRecommendation;
+  title: string;
+  instructions: string[];
+  monitoring: string[];
+  metrics: string[];
+  criteria: string;
+  window_ms: number;
+  requires_patch: boolean;
+  unavailable?: string;
+}
+
+export interface TestObservation {
+  probe?: string;
+  metric: string;
+  value: unknown;
+  unit?: string;
+  provenance: EvidenceProvenance | "GUIDED_TEST";
+}
+
+export interface TestResult {
+  test_id: string;
+  test_type: TestType;
+  target_probes: string[];
+  observations: TestObservation[];
+  derived_metrics: Record<string, unknown>;
+  result: string;
+  interpretation: string;
+  confidence: number;
+  evidence_provenance: Array<EvidenceProvenance | "GUIDED_TEST">;
+  timestamp_ms: number;
+}
+
+export interface MetricChange {
+  probe: string;
+  metric: string;
+  before: unknown;
+  after: unknown;
+  unit?: string;
+}
+
+export interface VerificationResult {
+  status: "RESOLVED" | "IMPROVED" | "UNCHANGED" | "WORSE" | "INCONCLUSIVE";
+  improvements: MetricChange[];
+  remaining_issues: string[];
+  changes: MetricChange[];
+  summary: string;
+  before_window_id: number;
+  after_window_id: number;
+  timestamp_ms: number;
+}
+
+export interface DiagnosticWorkflow {
+  id: string;
+  session_id: string;
+  project_id: string;
+  profile_id: string;
+  profile_version: number;
+  scenario_id?: string;
+  status: TestState;
+  plan: TestPlan;
+  baseline?: MeasurementWindow;
+  during?: MeasurementWindow;
+  after?: MeasurementWindow;
+  result?: TestResult;
+  verification?: VerificationResult;
+  error?: string;
+  created_at_ms: number;
+  updated_at_ms: number;
+}

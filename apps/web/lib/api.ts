@@ -80,6 +80,13 @@ export const demoApi = {
   }),
   measurements: (profileID = "ultrasonic-demo", limit = 20) =>
     requestJSON<MeasurementWindow[]>(`/api/v1/measurements?profile_id=${encodeURIComponent(profileID)}&limit=${limit}`),
+  telemetryWebSocketURL: (): string | null => {
+    if (typeof window === "undefined") return null;
+    const base = API_URL || window.location.origin;
+    const url = new URL("/api/v1/ws/telemetry", base);
+    url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
+    return url.toString();
+  },
 };
 
 export interface CreateProjectInput {

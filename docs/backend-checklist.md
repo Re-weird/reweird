@@ -16,7 +16,7 @@ Check items off as you go. Ping me when a section is done — I'll review before
 - [x] Project Profiles store + fetch — `profiles/`
 - [x] Component Catalog loaded into Go — `packages/component-catalog`, wired in `cmd/server/main.go`
 - [x] Measurement/session storage (`SaveSession`/`LatestSession`)
-- [ ] WebSocket endpoint pushing live telemetry to frontend (still polling-based; not yet built)
+- [x] WebSocket endpoint pushing live telemetry to frontend — `GET /api/v1/ws/telemetry` (`internal/httpapi/ws_handlers.go`), consumed in `apps/web/app/page.tsx` (2026-09-26)
 
 ## 2. Device / Serial Layer (Layer 3 hookup) — DONE
 - [x] Serial connection to ESP32 — `internal/transport/serialsource`
@@ -75,7 +75,7 @@ Check items off as you go. Ping me when a section is done — I'll review before
 
 ---
 
-**Next real gap:** WebSocket live push (§1). Everything else in the original ordered list is done.
+All items from the original ordered list are done. Only §5 (real PATCH validator, intentionally deferred) and hardware bench validation remain.
 
 **When you finish a section, tell me which number — I'll check the code against the doc before you continue.**
 
@@ -99,11 +99,13 @@ Check items off as you go. Ping me when a section is done — I'll review before
 ### C. Computer Diagnostics (Layer 10) — DONE, landed on `main` outside this plan
 - [x] `internal/computer` + `httpapi/computer_handlers.go` cover the read-only local collector and deterministic analysis. See §7 — one thing left to verify: whether it merges into the hardware `domain.Evidence` bundle ("Combined Mode") or stays a separate surface.
 
-### D. WebSocket live telemetry push (Layer 4)
-- [ ] `/api/v1/ws/telemetry` endpoint, one connection per active session
-- [ ] Push normalized measurement windows as they land, instead of frontend polling `/api/v1/measurements`
-- [ ] Keep REST endpoints as-is for initial load / reconnect catch-up
-- [ ] Backpressure/close handling if client stalls; no unbounded buffering
+### D. WebSocket live telemetry push (Layer 4) — DONE (2026-09-26)
+- [x] `GET /api/v1/ws/telemetry` endpoint, one push loop per connection — `internal/httpapi/ws_handlers.go`
+- [x] Pushes the full normalized `domain.Session` (not raw telemetry) each time `RawTelemetry.Sequence` changes: uses `domain.FreshTelemetrySource.WaitNext` when the active source supports it (serial), falls back to a bounded 500ms poll otherwise (the demo simulator does not implement `FreshTelemetrySource`)
+- [x] REST endpoints (`/session`, `/measurements`, etc.) untouched — used for initial load / reconnect catch-up; the WS connection sends the current session immediately on connect too
+- [x] Backpressure/close handling: a reader goroutine detects client disconnect/close and cancels the push loop via context; no buffering beyond one in-flight write
+- [x] Frontend wired in `apps/web/app/page.tsx` (opens when `source === "api"`, updates `session` state on each message) via `demoApi.telemetryWebSocketURL()` in `lib/api.ts`
+- [x] Test: `internal/httpapi/ws_handlers_test.go` — dials a real listener, asserts the initial push and a second push after a new frame arrives
 
 ### E. Formal "Approve Test Action" endpoint (Layer 7) — DONE, landed on `main` outside this plan
 - [x] `internal/testplanner` + `httpapi/test_handlers.go` already implement this: `POST /tests` proposes a plan from a `domain.TestRecommendation`, `POST /tests/:id/start` is the persisted approval step, `TestLocked` status blocks anything requiring PATCH. No further work needed here.
@@ -116,7 +118,7 @@ Check items off as you go. Ping me when a section is done — I'll review before
 ### G. Deferred / explicitly not doing yet
 - Real PATCH validator (Layer 8) — stays locked (`423 PATCH_LOCKED`) until hardware output is intentionally re-enabled; do not build early
 - Auth / multi-user / device identity — no plan yet, needed before any production exposure
-- Wi-Fi/WebSocket/MQTT telemetry transports — USB serial only for now
+- Wi-Fi/MQTT telemetry transports — USB serial and the WebSocket *push* to the frontend exist now, but device-side transport is still USB serial only
 - Multi-file project uploads, video, GitHub import, OCR — single image + single source payload only
 
-**Suggested build order:** D → F, with G staying parked. (A, B, C, E all done 2026-09-26 — see §7-§10; most of B/C/E landed independently from other work on `main` while this plan was being executed.) D is the only remaining code gap and finishes the interaction loop; F is hardware time, not code time, and can run in parallel once a board is available.
+**Remaining:** F (hardware bench validation) only, with G staying parked. A-E are all done 2026-09-26 (B/C/E landed independently from other work on `main` while this plan was being executed; A and D were built here). F is hardware time, not code time, and needs a physical board.

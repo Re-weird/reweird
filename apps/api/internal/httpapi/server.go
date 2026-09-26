@@ -67,6 +67,7 @@ func NewApp(engine *diagnostics.Engine, repository domain.Repository, source dom
 	})
 
 	api := app.Group("/api/v1")
+	api.Get("/ws/telemetry", telemetryWebSocketUpgrade, controller.telemetryWebSocket())
 	api.Get("/session", controller.current)
 	api.Get("/status", controller.systemStatus)
 	api.Get("/report", controller.report)

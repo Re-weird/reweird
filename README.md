@@ -260,6 +260,7 @@ without a UI rewrite.
 |---|---|---|
 | `GET` | `/health` | Service health |
 | `GET` | `/api/v1/session` | Current session from the selected telemetry source |
+| `GET` | `/api/v1/ws/telemetry` (WebSocket) | Pushes the current session on connect, then again each time a new telemetry frame lands |
 | `GET` | `/api/v1/telemetry/status` | Device/frame connection state |
 | `GET` | `/api/v1/measurements` | Stored raw and derived measurement windows |
 | `GET` | `/api/v1/simulator/scenarios` | List the nine deterministic raw-sample scenarios |

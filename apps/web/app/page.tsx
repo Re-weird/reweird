@@ -460,6 +460,32 @@ export default function Home() {
     return () => clearTimeout(timer);
   }, [toast]);
 
+  useEffect(() => {
+    if (source !== "api") return;
+    const url = demoApi.telemetryWebSocketURL();
+    if (!url) return;
+    let cancelled = false;
+    let socket: WebSocket | null = null;
+    try {
+      socket = new WebSocket(url);
+    } catch {
+      return;
+    }
+    socket.onmessage = (event) => {
+      if (cancelled) return;
+      try {
+        const next = JSON.parse(event.data) as DemoSession;
+        if (next && next.stage) setSession(next);
+      } catch {
+        // Ignore malformed frames; the next push will self-correct.
+      }
+    };
+    return () => {
+      cancelled = true;
+      socket?.close();
+    };
+  }, [source]);
+
   const runTestAction = async (action: "plan" | "start" | "capture" | "remeasure" | "cancel") => {
     setLegacyVerify(false);
     setActive("guided");

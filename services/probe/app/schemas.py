@@ -147,3 +147,114 @@ class SubmitEvidenceResponse(BaseModel):
     session: DiagnosticSession
     duplicate: bool
     duplicate_of_step: int | None = None
+
+
+# ---------------------------------------------------------------------------
+# Milestone 6: PATCH proposal + VERIFY intelligence
+#
+# A PatchProposal is a proposal only - never a GPIO command, firmware,
+# serial data, or evidence that a patch happened. Python/services/probe
+# never executes hardware actions; Go remains the sole authority for
+# electrical safety, hardware authorization, and actual PATCH execution
+# (apps/api/internal/httpapi/server.go's PATCH_LOCKED gate, untouched).
+# ---------------------------------------------------------------------------
+
+# Intentionally the only supported patch concept in Milestone 6 - not a
+# generic hardware-control language. Extending this Literal is the only way
+# to add a new kind; nothing here can express arbitrary waveform generation
+# or low-level GPIO execution.
+PatchType = Literal["TEMPORARY_SIGNAL_EMULATION"]
+
+PatchProposalStatus = Literal[
+    "PROPOSED",
+    "REJECTED",
+    "APPROVED_EXTERNALLY",
+    "EXECUTED_EXTERNALLY",
+    "VERIFIED",
+    "FAILED_VERIFICATION",
+]
+
+
+class PatchProposal(BaseModel):
+    proposal_id: str
+    session_id: str
+    source_step_number: int
+    target_probe: str
+    target_role: str
+    patch_type: PatchType
+    purpose: str = Field(min_length=1, max_length=500)
+    expected_effect: str = Field(min_length=1, max_length=500)
+    evidence_refs: list[str] = Field(min_length=1)
+    safety_requirements: list[str] = Field(default_factory=list)
+    status: PatchProposalStatus
+    external_reason: str | None = None
+    verification: "VerificationResult | None" = None
+    created_at_ms: int
+    updated_at_ms: int
+
+
+class PatchProposalRequest(BaseModel):
+    source_step_number: int | None = None  # defaults to the session's latest step
+    target_probe: str = Field(min_length=1, max_length=32)
+    target_role: str = Field(min_length=1, max_length=64)
+    patch_type: PatchType
+
+
+class PatchProposalResponse(BaseModel):
+    proposal: PatchProposal
+    reasoning_notes: list[str] = Field(default_factory=list)
+
+
+# External result is operational metadata ONLY - it is never merged into any
+# StructuredEvidence and never treated as measurement evidence. It reuses
+# the same status vocabulary as PatchProposal.status rather than inventing a
+# parallel enum: recording an external result IS a proposal status
+# transition, nothing more.
+ExternalResultStatus = Literal["APPROVED_EXTERNALLY", "REJECTED", "EXECUTED_EXTERNALLY"]
+
+
+class RecordExternalResultRequest(BaseModel):
+    external_status: ExternalResultStatus
+    reason: str | None = Field(default=None, max_length=500)
+
+
+VerificationOutcome = Literal["SUPPORTED", "NOT_SUPPORTED", "INCONCLUSIVE"]
+
+EvidenceChangeKind = Literal["rule_status", "fact_value"]
+
+
+class EvidenceChange(BaseModel):
+    name: str
+    kind: EvidenceChangeKind
+    probe: str | None
+    before: str | None
+    after: str | None
+    change: str
+
+
+class VerificationResult(BaseModel):
+    proposal_id: str
+    session_id: str
+    before_step_number: int
+    after_step_number: int
+    changes: list[EvidenceChange]
+    outcome: VerificationOutcome
+    evidence_refs: list[str]
+    explanation: str
+    remaining_uncertainty: list[str] = Field(default_factory=list)
+    created_at_ms: int
+
+
+PatchProposal.model_rebuild()
+
+
+class VerifyRequest(BaseModel):
+    evidence: StructuredEvidence
+
+
+class VerifyResponse(BaseModel):
+    session: DiagnosticSession
+    proposal: PatchProposal
+    verification: VerificationResult | None
+    duplicate: bool
+    duplicate_of_step: int | None = None

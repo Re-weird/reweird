@@ -1,0 +1,20 @@
+{
+  "probe": "P3",
+  "role": "ECHO",
+  "expected": {},
+  "observed": {},
+  "baseline": { "status": "UNKNOWN" },
+  "measurements": [
+    { "probe": "P3", "name": "pulse_count", "value": 0, "provenance": "MEASURED" }
+  ],
+  "rule_results": [
+    {
+      "id": "missing-signal",
+      "probe": "P2",
+      "status": "fail",
+      "message": "TRIG shows no pulse activity; the trigger path may be open or never commanded by software.",
+      "provenance": "MEASURED"
+    }
+  ],
+  "unresolved_questions": []
+}

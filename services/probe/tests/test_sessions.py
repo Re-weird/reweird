@@ -399,8 +399,12 @@ def test_no_session_endpoint_can_control_hardware() -> None:
     import app.api as api_module
 
     source = open(api_module.__file__).read().lower()
-    for forbidden in ("gpio", "serial.write", "hardware_control", "digitalwrite", "/patch"):
+    for forbidden in ("gpio", "serial.write", "hardware_control", "digitalwrite"):
         assert forbidden not in source
+    # "/patch-proposals" (Milestone 6, intelligence only) is expected and
+    # fine; the literal, EXECUTABLE "/patch" route must never exist.
+    assert '"/patch"' not in source
+    assert "'/patch'" not in source
 
 
 def test_no_patch_route_exists(client) -> None:

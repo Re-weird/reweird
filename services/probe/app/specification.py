@@ -143,7 +143,23 @@ def _evaluate_required_signal(
                 provenance="SPECIFICATION",
             )
         ]
-    return []
+    # Milestone 6 needs a positive counterpart: verifying that a signal was
+    # RESTORED after a patch requires a comparable "missing-signal" entry on
+    # both sides of a before/after comparison, not merely the absence of a
+    # fail rule. Additive only - the fail case above is unchanged, and no
+    # existing test asserts the absence of a pass rule here.
+    return [
+        RuleResult(
+            id="missing-signal",
+            probe=probe,
+            status="pass",
+            message=(
+                f"{role} is required by {catalog_id}'s specification, and '{fact.name}' "
+                f"shows non-zero activity ({value})."
+            ),
+            provenance="SPECIFICATION",
+        )
+    ]
 
 
 def evaluate_component_specification(

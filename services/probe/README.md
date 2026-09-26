@@ -150,6 +150,76 @@ Storage is a small `SessionStore` protocol (`app/sessions.py`) behind a
 plain in-process `InMemorySessionStore` - deterministic, dependency-free,
 and swappable later without touching the API layer.
 
+## PATCH proposal + VERIFY intelligence (Milestone 6)
+
+PROBE can now *propose* a temporary diagnostic patch and *verify* its real-
+world effect - but it never executes anything. Go's `PATCH_LOCKED` gate
+(`apps/api/internal/httpapi/server.go`) remains the sole, unmodified
+authority for actual hardware execution; nothing here is named `/patch` for
+exactly that reason:
+
+    POST /sessions/{id}/patch-proposals                       propose a patch
+    GET  /sessions/{id}/patch-proposals                       list proposals
+    GET  /sessions/{id}/patch-proposals/{pid}                 get one
+    POST /sessions/{id}/patch-proposals/{pid}/result          record an
+                                                               EXTERNAL result
+    POST /sessions/{id}/patch-proposals/{pid}/verify          verify with
+                                                               REAL new evidence
+
+**A `PatchProposal` is only a proposal** - never a GPIO command, firmware,
+serial data, or evidence that a patch happened. `PatchType` is a closed
+`Literal` with exactly one member in this milestone
+(`TEMPORARY_SIGNAL_EMULATION`) - not a generic hardware-control language.
+`app/patch_provider.py`'s `FakePatchProposalProvider` (the only provider
+wired in by default - narrow and network-free, deliberately not a full
+Gemini integration for this milestone) drafts `purpose`/`expected_effect`
+text and *selects* which already-grounded evidence justifies the patch;
+`app/patch_proposals.py.create_patch_proposal()` then re-validates
+everything regardless of which provider produced it - generate-then-
+validate, exactly like every other AI-touched path in this service:
+
+- every `evidence_refs` entry must exist in the source step's own grounded
+  evidence (a hallucinated ref invalidates the whole proposal);
+- at least one cited ref must actually pertain to `target_probe`;
+- free text is scanned for anything resembling an executable hardware
+  instruction (`digitalWrite(`, `GPIO.`, `Serial.write(`, ...) or a claim
+  that execution already happened - a defense-in-depth check, since the
+  primary guarantee is structural (no field on `PatchProposal` can express
+  either one in the first place).
+
+**External execution is operational metadata, never evidence.**
+`POST .../result` moves a proposal through `PROPOSED -> APPROVED_EXTERNALLY
+-> EXECUTED_EXTERNALLY` (or `REJECTED`) - a plain, validated state machine.
+`"executed"` only records that some external subsystem *reports* the patch
+was applied; it is never merged into any `StructuredEvidence` and never
+treated as a measurement.
+
+**VERIFY requires real, new `StructuredEvidence`** - `{"patch_worked": true}`
+is rejected by the schema itself (422), not by convention. Verifying reuses
+Milestone 5's `submit_evidence()` unmodified (append-only history, Milestone
+4's catalog/spec re-evaluation, duplicate detection all apply exactly as
+before), then `app/verification.py`'s pure functions deterministically
+compare the session's own focus probe's rule status **before** the patch
+(the step that justified the proposal) against **after** (the newly
+appended step):
+
+- `SUPPORTED`: every rule that was failing before is passing after, matching
+  the proposal's predicted effect.
+- `NOT_SUPPORTED`: a predicted rule is still failing after.
+- `INCONCLUSIVE`: the after-evidence lacks a comparable measurement for some
+  predicted rule (never silently treated as SUPPORTED), or there was nothing
+  failing before to verify against in the first place.
+
+An `INCONCLUSIVE` result is deliberately **not terminal** - the proposal
+stays `EXECUTED_EXTERNALLY` so a real retry with better evidence is still
+possible; `SUPPORTED`/`NOT_SUPPORTED` move it to `VERIFIED`/
+`FAILED_VERIFICATION`, after which re-verifying is rejected (`409`).
+Only rule-status transitions (already unit-safe, computed once by
+Milestone 4) decide the outcome; a secondary, exact-unit-only fact-value
+diff is included for transparency but never drives the determination
+itself - no unit conversion, no Gemini arithmetic where Python can compare
+values directly.
+
 ## Run
 
     uv sync
@@ -182,3 +252,20 @@ opt-in live test exists outside the default suite, in `live_tests/`:
       -H "content-type: application/json" \
       -d "{\"evidence\": $(cat fixtures/hc_sr04_missing_echo_activity.json)}" | python -m json.tool
     curl -s "http://localhost:8091/sessions/$SESSION_ID" | python -m json.tool
+
+    # PATCH proposal + VERIFY (using the TRIG+ECHO fixture instead):
+    SESSION2=$(curl -s -X POST http://localhost:8091/sessions \
+      -H "content-type: application/json" \
+      -d "{\"evidence\": $(cat fixtures/hc_sr04_trig_and_echo_missing.json), \"component_id\": \"hc-sr04\"}")
+    SESSION2_ID=$(echo "$SESSION2" | python -c "import sys,json;print(json.load(sys.stdin)['session_id'])")
+    PROPOSAL=$(curl -s -X POST "http://localhost:8091/sessions/$SESSION2_ID/patch-proposals" \
+      -H "content-type: application/json" \
+      -d '{"target_probe": "P2", "target_role": "TRIG", "patch_type": "TEMPORARY_SIGNAL_EMULATION"}')
+    PROPOSAL_ID=$(echo "$PROPOSAL" | python -c "import sys,json;print(json.load(sys.stdin)['proposal']['proposal_id'])")
+    curl -s -X POST "http://localhost:8091/sessions/$SESSION2_ID/patch-proposals/$PROPOSAL_ID/result" \
+      -H "content-type: application/json" -d '{"external_status": "APPROVED_EXTERNALLY"}' > /dev/null
+    curl -s -X POST "http://localhost:8091/sessions/$SESSION2_ID/patch-proposals/$PROPOSAL_ID/result" \
+      -H "content-type: application/json" -d '{"external_status": "EXECUTED_EXTERNALLY"}' > /dev/null
+    curl -s -X POST "http://localhost:8091/sessions/$SESSION2_ID/patch-proposals/$PROPOSAL_ID/verify" \
+      -H "content-type: application/json" \
+      -d "{\"evidence\": $(cat fixtures/hc_sr04_healthy.json)}" | python -m json.tool

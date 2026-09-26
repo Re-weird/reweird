@@ -8,18 +8,31 @@ import (
 	"strings"
 
 	"github.com/re-weird/reweird/apps/api/internal/domain"
+	"github.com/re-weird/reweird/apps/api/internal/probe"
 	"github.com/re-weird/reweird/apps/api/internal/signalanalysis"
 )
 
 type Engine struct {
 	analyzer *signalanalysis.Analyzer
+	probe    probe.Provider
 }
 
 func NewEngine(analyzer *signalanalysis.Analyzer) *Engine {
 	if analyzer == nil {
 		analyzer = signalanalysis.New()
 	}
-	return &Engine{analyzer: analyzer}
+	return &Engine{analyzer: analyzer, probe: probe.MockProvider{}}
+}
+
+// NewEngineWithProbe wires a PROBE interpretation provider (e.g. Gemini)
+// into the engine. The provider only rewords the deterministic diagnosis;
+// it never sees raw telemetry and cannot change measured evidence.
+func NewEngineWithProbe(analyzer *signalanalysis.Analyzer, provider probe.Provider) *Engine {
+	engine := NewEngine(analyzer)
+	if provider != nil {
+		engine.probe = provider
+	}
+	return engine
 }
 
 func (engine *Engine) Analyze(
@@ -33,10 +46,11 @@ func (engine *Engine) Analyze(
 	if err != nil {
 		return domain.Session{}, fmt.Errorf("read %s telemetry: %w", source.Name(), err)
 	}
-	return engine.AnalyzeEnvelope(profile, stage, source.Name(), envelope, reference)
+	return engine.AnalyzeEnvelope(ctx, profile, stage, source.Name(), envelope, reference)
 }
 
 func (engine *Engine) AnalyzeEnvelope(
+	ctx context.Context,
 	profile domain.ProjectProfile,
 	stage domain.Stage,
 	telemetryMode string,
@@ -51,6 +65,7 @@ func (engine *Engine) AnalyzeEnvelope(
 	focus := selectFocus(profile, analysis, rules, reference)
 	diagnosis := buildDiagnosis(profile, analysis, rules, focus, stage)
 	evidence := buildEvidence(profile, analysis, rules, focus, stage, reference)
+	diagnosis = engine.probe.Diagnose(ctx, evidence, diagnosis)
 
 	beforeFacts := focus
 	if reference != nil {

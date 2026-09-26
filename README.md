@@ -118,7 +118,8 @@ remains available for deployments that intentionally expose a separate API
 origin.
 
 Uploads default to `apps/api/data/uploads` when the API is started from that
-directory. Override this with `UPLOAD_DIR`. To enable Gemini Vision, keep the key
+directory. Override this with `UPLOAD_DIR`. To enable Gemini Vision and the
+Gemini PROBE adapter (they share the same key and model), keep the key
 server-side:
 
 ```powershell
@@ -126,6 +127,9 @@ $env:GEMINI_API_KEY = "your-key"
 $env:GEMINI_MODEL = "gemini-3.5-flash-lite" # optional
 go run ./cmd/server
 ```
+
+Without a key, PROBE falls back to the deterministic mock diagnosis and
+image analysis reports `VISION_SKIPPED`; both continue to work.
 
 Without a key, image analysis reports `VISION_SKIPPED`; code analysis, catalog
 enrichment, profile review/confirmation, and probe planning continue normally.
@@ -304,8 +308,11 @@ See [docs/security.md](docs/security.md) for the full trust-boundary checklist.
   or electrically bench-tested because no physical board was available.
 - USB serial is the only real transport; Wi-Fi, WebSocket, and MQTT adapters are
   not implemented.
-- PROBE diagnostic interpretation is still a deterministic mock; Gemini is used
-  only for optional project-image understanding in this phase.
+- PROBE diagnostic interpretation has an optional Gemini adapter
+  (`internal/probe`) that rewords the deterministic rule engine's finding
+  in plain English; it never invents new evidence and falls back to the
+  deterministic wording verbatim on any request, transport, or validation
+  failure, and whenever `GEMINI_API_KEY` is unset.
 - The deterministic code analyzer covers common Arduino/ESP32 C/C++ and basic
   MicroPython patterns. It is intentionally not a full compiler and reports
   unsupported or unresolved constructs instead of guessing.
@@ -327,9 +334,10 @@ See [docs/security.md](docs/security.md) for the full trust-boundary checklist.
 
 - **ESP32:** bench-test and calibrate the passive front end, then add device
   authentication and an optional network transport.
-- **Gemini:** implement the PROBE and vision interfaces. Gemini must consume
-  structured evidence and its response remains interpretation, never measured
-  truth.
+- **Gemini:** the vision and PROBE interfaces are both implemented behind
+  the same key-gated swap pattern. Remaining work is prompt tuning against
+  real hardware evidence and a live-key integration test, not the
+  interpretation-only boundary itself.
 - **MongoDB Atlas:** add a repository adapter for Project Profiles, sessions,
   baselines, and reports without changing domain logic.
 - **Time-series storage:** retain raw high-rate samples outside the relational

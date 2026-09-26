@@ -12,6 +12,7 @@ import (
 	"github.com/re-weird/reweird/apps/api/internal/diagnostics"
 	"github.com/re-weird/reweird/apps/api/internal/domain"
 	"github.com/re-weird/reweird/apps/api/internal/httpapi"
+	"github.com/re-weird/reweird/apps/api/internal/probe"
 	"github.com/re-weird/reweird/apps/api/internal/profiles"
 	"github.com/re-weird/reweird/apps/api/internal/projectunderstanding"
 	"github.com/re-weird/reweird/apps/api/internal/signalanalysis"
@@ -59,14 +60,16 @@ func main() {
 		defer closer.Close()
 	}
 
-	engine := diagnostics.NewEngine(signalanalysis.New())
+	geminiAPIKey := os.Getenv("GEMINI_API_KEY")
+	geminiModel := environment("GEMINI_MODEL", "gemini-3.5-flash-lite")
+	engine := diagnostics.NewEngineWithProbe(signalanalysis.New(), probe.NewGemini(geminiAPIKey, geminiModel))
 	catalog, err := componentcatalog.Load()
 	if err != nil {
 		log.Fatalf("load component catalog: %v", err)
 	}
 	understanding := projectunderstanding.New(
 		codeanalysis.New(),
-		vision.NewGemini(os.Getenv("GEMINI_API_KEY"), environment("GEMINI_MODEL", "gemini-3.5-flash-lite")),
+		vision.NewGemini(geminiAPIKey, geminiModel),
 		catalog,
 	)
 	app := httpapi.NewApp(engine, repository, source, profileID, httpapi.ProjectServices{Understanding: understanding, UploadRoot: uploadRoot})

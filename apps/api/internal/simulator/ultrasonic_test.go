@@ -1,6 +1,7 @@
 package simulator
 
 import (
+	"context"
 	"testing"
 
 	"github.com/re-weird/reweird/apps/api/internal/diagnostics"
@@ -34,7 +35,7 @@ func TestEveryScenarioTraversesRawTelemetryToExpectedRule(t *testing.T) {
 			if err := telemetry.ValidateForProfile(envelope, profile); err != nil {
 				t.Fatalf("ValidateForProfile() error = %v", err)
 			}
-			session, err := engine.AnalyzeEnvelope(profile, domain.StageDiagnose, "simulator", envelope, nil)
+			session, err := engine.AnalyzeEnvelope(context.Background(), profile, domain.StageDiagnose, "simulator", envelope, nil)
 			if err != nil {
 				t.Fatalf("AnalyzeEnvelope() error = %v", err)
 			}

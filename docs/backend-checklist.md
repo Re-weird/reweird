@@ -59,11 +59,11 @@ Check items off as you go. Ping me when a section is done — I'll review before
 - [ ] Not approved → local only, no push
 - [ ] Audit log of every diagnostic/test/commit action
 
-## 9. AI Service Integration — DECIDED + MOSTLY DONE
+## 9. AI Service Integration — DONE
 - [x] Architecture decision made (see `docs/architecture.md`): Vision/CodeAnalysis/ProjectUnderstanding live in Go as swappable adapters, not a separate Python service. `services/probe`, `services/signal-analysis`, `services/vision` stay stub READMEs.
 - [x] Vision adapter: Gemini when `GEMINI_API_KEY` set, else `VISION_SKIPPED` — `internal/vision`
 - [x] Code analyzer: deterministic parser, Tree-sitter-ready interface — `internal/codeanalysis`
-- [ ] PROBE (Layer 6): currently a **deterministic mock** inside the diagnostic engine, per `docs/architecture.md`. Real Gemini PROBE adapter (finding/confidence/evidence_ids/next_test JSON, same swap pattern as vision) not built yet.
+- [x] PROBE (Layer 6): `internal/probe` — `GeminiProvider` rewords the deterministic diagnosis (headline/summary/possible_causes/confidence/next_test JSON, same key-gated swap pattern as vision), capped at the deterministic confidence, never touches measured/spec/baseline evidence. Falls back to `MockProvider` (deterministic passthrough) when no key or on any request/parse failure. Wired in `diagnostics.NewEngineWithProbe`, selected in `cmd/server/main.go`. (2026-09-26)
 
 ## 10. Test Planning State (Layer 7, Go half) — DONE
 - [x] Stage state machine exists: Diagnose → Test → Repair → Verify (`domain.Stage`)
@@ -80,14 +80,15 @@ Check items off as you go. Ping me when a section is done — I'll review before
 
 ## Remaining work plan (2026-09-26)
 
-### A. PROBE Gemini adapter (Layer 6) — highest priority gap
-- [ ] Define `PROBEProvider` interface (mirrors existing `VisionProvider` swap pattern in `internal/vision`)
-- [ ] Request shape: serialize `domain.Evidence` (rules + specs + baseline + software facts, each tagged with provenance) into a bounded prompt payload
-- [ ] Response contract: `finding`, `confidence`, `evidence_ids[]`, `next_test` — structured JSON, validated before use (same discipline as vision's structured-response parser)
-- [ ] `GeminiProbeProvider` (real, key-gated) + keep current deterministic mock as `FakeProbeProvider` fallback when `GEMINI_API_KEY` unset
-- [ ] Hard rule: PROBE output is interpretation only — cannot write measured/spec/baseline evidence fields, cannot trigger PATCH
-- [ ] Unit tests against a local fake Gemini endpoint (same pattern as existing vision tests), no live paid key in repo
-- [ ] Wire into `internal/diagnostics/engine.go` as the source of the human-readable diagnosis text currently hardcoded/templated
+### A. PROBE Gemini adapter (Layer 6) — DONE (2026-09-26)
+- [x] `Provider` interface defined — `internal/probe/probe.go` (mirrors `internal/vision`'s swap pattern)
+- [x] Request shape: serializes `domain.Evidence` + the deterministic `domain.Diagnosis` into a bounded prompt, instructed not to invent facts
+- [x] Response contract: `headline`, `summary`, `possible_causes[]`, `confidence`, `next_test` — structured JSON via `responseSchema`, validated before use (empty headline/summary or out-of-range confidence falls back to deterministic)
+- [x] `GeminiProvider` (real, key-gated) + `MockProvider` (deterministic passthrough) when `GEMINI_API_KEY` unset
+- [x] Hard rule enforced in code: confidence capped at the deterministic value, never exceeds it; provider only replaces narrative fields, never measured/spec/baseline evidence; cannot trigger PATCH (no such path exists in the interface)
+- [x] Unit tests against a local fake Gemini endpoint — `internal/probe/probe_test.go` (reword case, transport-failure fallback, empty-headline fallback), no live paid key in repo
+- [x] Wired into `internal/diagnostics/engine.go` (`NewEngineWithProbe`) and selected in `cmd/server/main.go` from the same `GEMINI_API_KEY`/`GEMINI_MODEL` env vars vision uses
+- [ ] Not done: prompt tuning against real hardware evidence and a live-key integration test (needs an operator key, out of scope for this pass)
 
 ### B. Git / Audit layer (Layer 11) — real gap, not started
 - [ ] Secret-scan pass over report/session data before any commit (block on match, no bypass)
@@ -122,4 +123,4 @@ Check items off as you go. Ping me when a section is done — I'll review before
 - Wi-Fi/WebSocket/MQTT telemetry transports — USB serial only for now
 - Multi-file project uploads, video, GitHub import, OCR — single image + single source payload only
 
-**Suggested build order:** A → D → B → C → F, with G staying parked. (E landed on `main` independently 2026-09-26 — see §10.) A unlocks the story's "AI explains it" step; D finishes the interaction loop; B closes the named "real gap"; C is optional; F is hardware time, not code time, and can run in parallel with any of the above once a board is available.
+**Suggested build order:** D → B → C → F, with G staying parked. (A done 2026-09-26 — see §9. E landed on `main` independently 2026-09-26 — see §10.) D finishes the interaction loop; B closes the named "real gap"; C is optional; F is hardware time, not code time, and can run in parallel with any of the above once a board is available.

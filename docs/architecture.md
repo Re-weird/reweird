@@ -42,7 +42,10 @@ ReWeird follows ports-and-adapters boundaries at the points most likely to chang
 
 - `domain.TelemetrySource`: simulator and serial now; Wi-Fi or MQTT later.
 - `domain.Repository`: SQLite now; MongoDB Atlas or another store later.
-- PROBE service: deterministic mock now; Gemini adapter later.
+- PROBE service: deterministic rule engine always computes the finding;
+  an optional Gemini adapter (`internal/probe`) rewords it in plain English
+  and falls back to the deterministic wording unchanged when no key is
+  configured or the request fails.
 - Vision service: Gemini image adapter when configured; explicit skipped status
   otherwise.
 - Code analyzer: portable deterministic parser now; its interface permits a

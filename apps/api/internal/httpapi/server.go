@@ -218,7 +218,7 @@ func (controller *Controller) analyzeAt(ctx context.Context, stage domain.Stage,
 	if err != nil {
 		return domain.Session{}, err
 	}
-	session, err := controller.engine.AnalyzeEnvelope(*profile, stage, controller.source.Name(), envelope, reference)
+	session, err := controller.engine.AnalyzeEnvelope(ctx, *profile, stage, controller.source.Name(), envelope, reference)
 	if err != nil {
 		return domain.Session{}, err
 	}

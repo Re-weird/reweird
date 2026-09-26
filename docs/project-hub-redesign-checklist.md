@@ -25,8 +25,11 @@ is stable — items get checked off during implementation, not before.
   to a default user, or wipe dev data)?
 - [ ] Dashboard project card content: name, controller, last diagnosis
   status, last activity time — confirm exact fields
-- [ ] Per-project page structure: single page with tabs, or separate routes
-  per feature (`/projects/:id/live`, `/projects/:id/diagnosis`, etc.)?
+- [x] Per-project page structure: **top tab bar within the current
+  view-state app** (`projectTabs` in `page.tsx`), not separate Next.js
+  routes yet — no `/projects/:id/...` URLs, just a `View` string and a
+  tab bar shown when a project view is active. Real per-`:id` routing
+  is still open if/when auth needs it.
 - [ ] Combined Mode and PATCH have no UI yet (backend not ready) — confirm
   they stay out of scope for this redesign
 
@@ -68,18 +71,25 @@ is stable — items get checked off during implementation, not before.
   exist; still no auth to scope the list per-user)
 - [x] Account-level activity dashboard — `app/account-dashboard.tsx`
   (real stats/heatmap/outcomes from historyApi + projectApi, no
-  fabricated numbers), added next to Settings in `sidebar-bottom`
+  fabricated numbers), added next to Settings in `sidebar-bottom`,
+  **and made the default landing view**
+- [x] Removed the three redundant "add a project" CTAs (topbar, old
+  sidebar Workspace group, Workbench's own upload panel) - Project
+  Dashboard is now the one place to create a project
 - [ ] Basic account settings (at minimum: logout, maybe email display)
 
-### Restructure existing (already built, move under a project route)
-- [ ] Live/probes view
-- [ ] Diagnosis view (evidence, PROBE explanation, next test)
-- [ ] Guided test view
-- [ ] Computer diagnostics view
-- [ ] History/reports view + git-sync panel
-- [ ] Probe plan view
-- [ ] Project workflow (upload/profile/confirm) — becomes the project's
-  own onboarding, not a modal off the old dashboard
+### Restructure existing (moved under the project top-tab bar)
+- [x] Live/probes view — folded directly into Workbench instead of
+  staying a separate tab (probe grid + signal chart + rule engine)
+- [x] Diagnosis view, Guided test view, Computer diagnostics view,
+  History/reports view + git-sync panel, Probe plan view — all now
+  reached via `projectTabs` (top bar), not the left sidebar
+- [ ] Project workflow (upload/profile/confirm) — still a modal
+  (`NewProjectModal`) triggered from Project Dashboard; not yet a
+  project's own onboarding page
+- [ ] None of this is real per-project routing yet — it's one shared
+  `View` state, so there's still only ever "the current project" in
+  memory, not `/projects/:id` with real per-project isolation
 
 ---
 

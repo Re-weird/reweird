@@ -13,6 +13,11 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     Google({
       clientId: process.env.GOOGLE_CLIENT_ID,
       clientSecret: process.env.GOOGLE_CLIENT_SECRET,
+      // Without this, Google silently reuses whatever account is already
+      // signed into the browser and skips its own picker/consent screen -
+      // "click the button and you're just in" with no chance to choose or
+      // confirm an account. Forcing the picker every time is the fix.
+      authorization: { params: { prompt: "select_account" } },
     }),
   ],
   session: { strategy: "jwt" },

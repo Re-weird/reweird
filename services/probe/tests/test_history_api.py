@@ -81,7 +81,10 @@ def test_m5_closed_loop_behavior_unchanged_through_repository(client) -> None:
     assert rejected.status_code == 409
 
 
-def test_m6_patch_and_verify_behavior_unchanged_through_repository(client) -> None:
+def test_m6_patch_and_verify_behavior_unchanged_through_repository(client, monkeypatch) -> None:
+    monkeypatch.setenv("PROBE_REPORTER_TOKEN", "test-reporter-token-with-32-plus-characters")
+    monkeypatch.setenv("PROBE_REPORTER_ID", "test-operator")
+    reporter_headers = {"Authorization": "Bearer test-reporter-token-with-32-plus-characters"}
     create_response = client.post("/sessions", json=_payload("hc_sr04_trig_and_echo_missing", "hc-sr04"))
     session_id = create_response.json()["session_id"]
 
@@ -92,9 +95,12 @@ def test_m6_patch_and_verify_behavior_unchanged_through_repository(client) -> No
     assert proposal_response.status_code == 200
     proposal_id = proposal_response.json()["proposal"]["proposal_id"]
 
-    client.post(f"/sessions/{session_id}/patch-proposals/{proposal_id}/result", json={"external_status": "APPROVED_EXTERNALLY"})
-    exec_response = client.post(f"/sessions/{session_id}/patch-proposals/{proposal_id}/result", json={"external_status": "EXECUTED_EXTERNALLY"})
+    client.post(f"/sessions/{session_id}/patch-proposals/{proposal_id}/result", json={"external_status": "APPROVED_EXTERNALLY"}, headers=reporter_headers)
+    exec_response = client.post(f"/sessions/{session_id}/patch-proposals/{proposal_id}/result", json={"external_status": "EXECUTED_EXTERNALLY"}, headers=reporter_headers)
     assert exec_response.json()["status"] == "EXECUTED_EXTERNALLY"
+    assert [action["reported_status"] for action in exec_response.json()["action_history"]] == ["APPROVED_EXTERNALLY", "EXECUTED_EXTERNALLY"]
+    assert all(action["actor_id"] == "test-operator" and action["record_source"] == "HUMAN_REPORTED" and action["execution_verified"] is False for action in exec_response.json()["action_history"])
+    assert exec_response.json()["action_history"][-1]["display_label"] == "User reported action completed"
 
     verify_response = client.post(
         f"/sessions/{session_id}/patch-proposals/{proposal_id}/verify",

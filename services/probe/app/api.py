@@ -1,8 +1,11 @@
 import logging
+import os
+import re
+import secrets
 from contextlib import asynccontextmanager
 from functools import lru_cache
 
-from fastapi import Depends, FastAPI, HTTPException
+from fastapi import Depends, FastAPI, HTTPException, Request
 
 from app.analytics_sink import (
     AnalyticsSink,
@@ -413,16 +416,29 @@ def post_record_external_result(
     session_id: str,
     proposal_id: str,
     request: RecordExternalResultRequest,
+    http_request: Request,
     repository: DiagnosticRepository = Depends(get_repository),
 ) -> PatchProposal:
+    token = os.environ.get("PROBE_REPORTER_TOKEN", "")
+    actor_id = os.environ.get("PROBE_REPORTER_ID", "").strip()
+    if len(token) < 32 or re.fullmatch(r"[A-Za-z0-9._-]{1,100}", actor_id) is None:
+        raise HTTPException(status_code=503, detail="Authenticated action reporting is not configured.")
+    supplied = http_request.headers.get("Authorization", "")
+    if not supplied.startswith("Bearer ") or not secrets.compare_digest(supplied[7:].encode(), token.encode()):
+        raise HTTPException(status_code=401, detail="A valid reporter credential is required.", headers={"WWW-Authenticate": "Bearer"})
     _, proposal = _get_proposal_for_session_or_404(repository, session_id, proposal_id)
     try:
-        updated = record_external_result(proposal, request)
+        updated = record_external_result(proposal, request, actor_id=actor_id, record_source="HUMAN_REPORTED")
     except InvalidProposalTransitionError as exc:
         raise HTTPException(status_code=409, detail=str(exc))
     repository.save_patch_proposal(updated)
     repository.append_event(
-        new_event(session_id, "PATCH_EXTERNAL_RESULT", {"proposal_id": proposal_id, "status": updated.status})
+        new_event(session_id, "PATCH_EXTERNAL_RESULT", {
+            "proposal_id": proposal_id, "reported_status": updated.status,
+            "actor_id": actor_id, "record_source": "HUMAN_REPORTED",
+            "recorded_at_ms": updated.action_history[-1].recorded_at_ms,
+            "execution_verified": False,
+        })
     )
     return updated
 

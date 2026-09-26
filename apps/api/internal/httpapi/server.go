@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"log"
+	"os"
 	"strconv"
 	"sync"
 	"time"
@@ -45,7 +46,7 @@ func NewApp(engine *diagnostics.Engine, repository domain.Repository, source dom
 	app.Use(logger.New())
 	app.Use(cors.New(cors.Config{
 		AllowOrigins: "http://localhost:3000,http://127.0.0.1:3000",
-		AllowHeaders: "Origin, Content-Type, Accept",
+		AllowHeaders: "Origin, Content-Type, Accept, Authorization",
 		AllowMethods: "GET,POST,PUT,OPTIONS",
 	}))
 
@@ -66,7 +67,7 @@ func NewApp(engine *diagnostics.Engine, repository domain.Repository, source dom
 		return controller.systemStatus(ctx)
 	})
 
-	api := app.Group("/api/v1")
+	api := app.Group("/api/v1", apiAccessControl(os.Getenv("REWEIRD_API_TOKEN")))
 	api.Get("/ws/telemetry", telemetryWebSocketUpgrade, controller.telemetryWebSocket())
 	api.Get("/session", controller.current)
 	api.Get("/status", controller.systemStatus)

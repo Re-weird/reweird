@@ -1,5 +1,7 @@
 # ReWeird
 
+![ReWeird logo](apps/web/public/images/reweird-logo.png)
+
 **Evidence-first diagnostics for physical electronics projects.**
 
 ReWeird combines real measurements, project context, deterministic engineering
@@ -109,6 +111,38 @@ reweird/
 ```
 
 ## Run locally
+
+The [GitHub `main` branch](https://github.com/Re-weird/reweird) is the shared
+source of truth. It includes the current logo, circuit map, Known Good capture,
+and Device Passport. Feature branches are visible to the team but are not part
+of the shared app until merged. The repository is public to read; contributing
+or changing organization access requires the appropriate GitHub permissions.
+
+`http://localhost:3000` is **only the app running on your own computer**. It
+does not update when someone pushes to GitHub, and it is not a link teammates
+can open on their own devices. To refresh a local copy, stop its old web/API
+processes, run these commands in the checkout you intend to serve, then start
+the stack below:
+
+```bash
+git fetch origin
+git switch main
+git pull --ff-only origin main
+npm install
+```
+
+If `git switch` or `git pull --ff-only` refuses to proceed, preserve your local
+changes and coordinate the merge; do not reset or force-push. If port 3000 is
+already occupied, stop the old Next.js process before starting this checkout.
+On Windows, `Get-NetTCPConnection -LocalPort 3000 -State Listen` identifies its
+PID; inspect that process before stopping it. A hard refresh can clear cached
+browser assets, but it cannot replace a server still running an old checkout.
+
+There is **no public hosted ReWeird app** in this repository. Share the GitHub
+link for code and documentation; each team member can run their own local copy.
+Do not expose the current web/API stack through a public tunnel or host merely
+to share `localhost`: browser user authentication and production upload safety
+are not complete. See [security](docs/security.md).
 
 ### Prerequisites
 

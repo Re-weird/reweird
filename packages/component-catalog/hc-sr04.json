@@ -18,5 +18,44 @@
   "known_signal_types": ["voltage rail", "digital pulse", "pulse width"],
   "sources": [
     { "title": "SparkFun HC-SR04 Datasheet", "url": "https://cdn.sparkfun.com/datasheets/Sensors/Proximity/HCSR04.pdf" }
-  ]
+  ],
+  "specifications": {
+    "VCC": {
+      "pin": "VCC",
+      "signal_type": "power_rail",
+      "is_power_rail": true,
+      "required": true,
+      "voltage": {
+        "min": 4.5,
+        "max": 5.5,
+        "nominal": 5.0,
+        "unit": "V"
+      },
+      "source": "ElecFreaks 'Ultrasonic Ranging Module HC-SR04' datasheet (mirrored by SparkFun Electronics, https://cdn.sparkfun.com/datasheets/Sensors/Proximity/HCSR04.pdf): stated operating voltage range 4.5V-5.5V, nominal 5V DC."
+    },
+    "TRIG": {
+      "pin": "TRIG",
+      "signal_type": "digital_pulse",
+      "mode": "pulse",
+      "required": true,
+      "pulse_width": {
+        "min": 10,
+        "max": 10,
+        "unit": "us"
+      },
+      "source": "Same datasheet: a 10us TTL-level high pulse on TRIG is required to start a ranging cycle."
+    },
+    "ECHO": {
+      "pin": "ECHO",
+      "signal_type": "digital_pulse",
+      "mode": "pulse",
+      "required": true,
+      "pulse_width": {
+        "min": 116,
+        "max": 23200,
+        "unit": "us"
+      },
+      "source": "Derived from the same datasheet's stated ranging distance (2cm-400cm) using its own stated conversion (distance_cm = echo_pulse_width_us / 58): 2cm*58=116us minimum, 400cm*58=23200us maximum. Not a directly-quoted datasheet number; arithmetically derived from two datasheet-quoted values, not invented."
+    }
+  }
 }

@@ -1,0 +1,69 @@
+{
+  "probe": "P1",
+  "role": "POWER",
+  "expected": {
+    "min_voltage": 4.75,
+    "max_voltage": 5.25,
+    "nominal_voltage": 5.0
+  },
+  "observed": {
+    "average_voltage": 0.03
+  },
+  "baseline": {
+    "status": "KNOWN_GOOD_CAPTURE",
+    "trusted": true,
+    "average_voltage": 5.01
+  },
+  "measurements": [
+    {
+      "probe": "P1",
+      "name": "average_voltage",
+      "value": 0.03,
+      "unit": "V",
+      "provenance": "MEASURED"
+    }
+  ],
+  "derived_facts": [
+    {
+      "probe": "P1",
+      "name": "missing_expected_activity",
+      "value": true,
+      "provenance": "DERIVED"
+    },
+    {
+      "probe": "P1",
+      "name": "stable",
+      "value": false,
+      "provenance": "DERIVED"
+    }
+  ],
+  "specification_results": [
+    {
+      "probe": "P1",
+      "name": "voltage_outside_specification",
+      "value": true,
+      "provenance": "SPECIFICATION",
+      "detail": "0.03V is outside the trusted 4.75-5.25V range"
+    }
+  ],
+  "rule_results": [
+    {
+      "id": "missing-signal",
+      "probe": "P1",
+      "status": "fail",
+      "severity": 3,
+      "message": "POWER has no expected activity"
+    },
+    {
+      "id": "voltage-outside-specification",
+      "probe": "P1",
+      "status": "fail",
+      "severity": 3,
+      "message": "POWER is outside its trusted voltage specification at 0.03 V",
+      "provenance": "SPECIFICATION"
+    }
+  ],
+  "unresolved_questions": [
+    "Is the 5V supply connected and powered?"
+  ]
+}

@@ -1,0 +1,46 @@
+{
+  "probe": "P3",
+  "role": "ECHO",
+  "expected": {
+    "min_frequency_hz": 1,
+    "max_frequency_hz": 100,
+    "nominal_frequency_hz": 28.4
+  },
+  "observed": {
+    "pulse_count": 0
+  },
+  "baseline": {
+    "status": "USER_CONFIRMED_HEALTHY",
+    "trusted": true,
+    "frequency_hz": 28.4
+  },
+  "measurements": [
+    {
+      "probe": "P3",
+      "name": "pulse_count",
+      "value": 0,
+      "provenance": "MEASURED"
+    }
+  ],
+  "derived_facts": [
+    {
+      "probe": "P3",
+      "name": "missing_expected_activity",
+      "value": true,
+      "provenance": "DERIVED"
+    }
+  ],
+  "rule_results": [
+    {
+      "id": "missing-signal",
+      "probe": "P3",
+      "status": "fail",
+      "severity": 3,
+      "message": "ECHO has no expected activity"
+    }
+  ],
+  "unresolved_questions": [
+    "Is the ECHO line physically connected to P3?",
+    "Is a level shifter present between the 5V ECHO output and the 3.3V input?"
+  ]
+}

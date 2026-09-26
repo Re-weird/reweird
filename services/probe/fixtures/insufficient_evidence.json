@@ -1,0 +1,13 @@
+{
+  "probe": "P4",
+  "role": "UNASSIGNED",
+  "expected": {},
+  "observed": {},
+  "baseline": {
+    "status": "UNKNOWN"
+  },
+  "rule_results": [],
+  "unresolved_questions": [
+    "No measurement window has been captured for this probe yet."
+  ]
+}

@@ -1,0 +1,10 @@
+{
+  "probe": "P3",
+  "role": "ECHO",
+  "expected": {},
+  "observed": {},
+  "baseline": { "status": "UNKNOWN" },
+  "measurements": [],
+  "rule_results": [],
+  "unresolved_questions": []
+}

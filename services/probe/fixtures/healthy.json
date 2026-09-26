@@ -1,0 +1,57 @@
+{
+  "probe": "P3",
+  "role": "ECHO",
+  "expected": {
+    "min_frequency_hz": 1,
+    "max_frequency_hz": 100,
+    "nominal_frequency_hz": 28.4
+  },
+  "observed": {
+    "frequency_hz": 28.3,
+    "dropout_events": 0
+  },
+  "baseline": {
+    "status": "USER_CONFIRMED_HEALTHY",
+    "trusted": true,
+    "frequency_hz": 28.4
+  },
+  "derived_facts": [
+    {
+      "probe": "P3",
+      "name": "frequency_hz",
+      "value": 28.3,
+      "unit": "pulses/s",
+      "provenance": "DERIVED"
+    },
+    {
+      "probe": "P3",
+      "name": "stable",
+      "value": true,
+      "provenance": "DERIVED"
+    }
+  ],
+  "baseline_comparison": [
+    {
+      "probe": "P3",
+      "name": "baseline_deviation_percent",
+      "value": 0.4,
+      "unit": "%",
+      "provenance": "BASELINE"
+    }
+  ],
+  "rule_results": [
+    {
+      "id": "unexpected-dropout",
+      "probe": "P3",
+      "status": "pass",
+      "message": "ECHO has no unexpected dropouts"
+    },
+    {
+      "id": "baseline-deviation",
+      "probe": "P3",
+      "status": "pass",
+      "message": "ECHO matches its trusted healthy baseline"
+    }
+  ],
+  "unresolved_questions": []
+}

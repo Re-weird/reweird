@@ -1,0 +1,17 @@
+# NOTE: Docker only honors a .dockerignore at the BUILD CONTEXT root. The
+# Dockerfile here must be built with the repository root as context (see
+# Dockerfile's header comment), so this file documents intent for anyone
+# building services/probe in isolation; it is not consulted by the
+# `docker build -f services/probe/Dockerfile .` invocation this milestone
+# actually uses, and a root-level .dockerignore is intentionally not added
+# here (outside this milestone's services/probe/** file boundary).
+.venv
+.pytest_cache
+__pycache__
+*.pyc
+.env
+tests
+live_tests
+fixtures
+uv.lock.bak
+.git

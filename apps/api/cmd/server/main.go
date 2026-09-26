@@ -62,7 +62,7 @@ func main() {
 
 	geminiAPIKey := os.Getenv("GEMINI_API_KEY")
 	geminiModel := environment("GEMINI_MODEL", "gemini-3.5-flash-lite")
-	engine := diagnostics.NewEngineWithProbe(signalanalysis.New(), probe.NewGemini(geminiAPIKey, geminiModel))
+	engine := diagnostics.NewEngineWithProbe(signalanalysis.New(), probe.NewService(os.Getenv("PROBE_SERVICE_URL")))
 	catalog, err := componentcatalog.Load()
 	if err != nil {
 		log.Fatalf("load component catalog: %v", err)

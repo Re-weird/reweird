@@ -48,7 +48,8 @@ signal returns to its healthy baseline.
 - Deterministic checks for stable power, expected activity, dropouts, and
   movement correlation
 - Structured evidence that keeps measured values, rules, and interpretation
-  separate
+  separate, with the Python PROBE service producing grounded hypotheses and a
+  deterministic next-test recommendation through a fail-closed Go adapter
 - A user-guided wiggle test and simulated repair flow
 - A persisted, generic guided-test planner and before/during/after VERIFY
   workflow covering movement, rails, shared dropouts, activity, timing,
@@ -72,10 +73,10 @@ signal returns to its healthy baseline.
 | Not yet hardware-validated | ESP32 firmware and USB serial ingestion compile but need electrical calibration and bench testing |
 | Locked for safety | PATCH active electrical output, autonomous computer repair, unattended Git push |
 
-Gemini PROBE diagnostic reasoning is being developed separately. Without it,
-measured and derived evidence, deterministic rules, guided tests, and VERIFY
-continue to work; the UI must not present a mock interpretation as measured
-fact.
+Python PROBE diagnostic reasoning is integrated through `PROBE_SERVICE_URL`.
+Without that service, or whenever it returns malformed/UNKNOWN output, the Go
+API keeps its deterministic diagnosis unchanged. The UI never presents an AI
+interpretation as measured fact.
 
 ## Repository map
 
@@ -117,15 +118,21 @@ the header shows **Browser simulator** and every demo action still works.
 
 ### Full stack
 
-Run the API in one terminal:
+Run the PROBE service in one terminal:
+
+```bash
+cd services/probe
+uv run uvicorn app.api:app --host 127.0.0.1 --port 8091
+```
+
+Run the API in a second terminal:
 
 ```bash
 cd apps/api
-go mod tidy
-go run ./cmd/server
+PROBE_SERVICE_URL=http://127.0.0.1:8091 go run ./cmd/server
 ```
 
-Run the web app from the repository root in another terminal:
+Run the web app from the repository root in a third terminal:
 
 ```bash
 npm install
@@ -149,11 +156,11 @@ $env:GEMINI_MODEL = "gemini-3.5-flash-lite" # optional
 go run ./cmd/server
 ```
 
-Without a key, PROBE falls back to the deterministic mock diagnosis and
-image analysis reports `VISION_SKIPPED`; both continue to work.
-
-Without a key, image analysis reports `VISION_SKIPPED`; code analysis, catalog
-enrichment, profile review/confirmation, and probe planning continue normally.
+Without a key, Python PROBE uses its offline deterministic provider and image
+analysis reports `VISION_SKIPPED`; code analysis, catalog enrichment, profile
+review/confirmation, and probe planning continue normally. Set
+`PROBE_AI_PROVIDER=gemini` only in the PROBE service environment to enable
+Gemini reasoning.
 
 ## Real Project Understanding flow
 
@@ -244,7 +251,9 @@ Generic deterministic diagnostic rules
         ↓
 Structured evidence
         ↓
-PROBE interpretation (mocked in this MVP)
+Python PROBE grounding + hypotheses + deterministic Test Planner
+        ↓
+Main-compatible Diagnosis (fail-closed to Go deterministic diagnosis)
         ↓
 Guided test → re-measurement → verification
 ```
@@ -331,11 +340,10 @@ See [docs/security.md](docs/security.md) for the full trust-boundary checklist.
   or electrically bench-tested because no physical board was available.
 - USB serial is the only real transport; Wi-Fi, WebSocket, and MQTT adapters are
   not implemented.
-- PROBE diagnostic interpretation has an optional Gemini adapter
-  (`internal/probe`) that rewords the deterministic rule engine's finding
-  in plain English; it never invents new evidence and falls back to the
-  deterministic wording verbatim on any request, transport, or validation
-  failure, and whenever `GEMINI_API_KEY` is unset.
+- PROBE diagnostic interpretation runs in `services/probe` when
+  `PROBE_SERVICE_URL` is configured. The Go adapter submits only structured
+  evidence and the deterministic diagnosis; it falls back to that diagnosis
+  verbatim on any request, transport, UNKNOWN, or validation failure.
 - The deterministic code analyzer covers common Arduino/ESP32 C/C++ and basic
   MicroPython patterns. It is intentionally not a full compiler and reports
   unsupported or unresolved constructs instead of guessing.
@@ -357,10 +365,11 @@ See [docs/security.md](docs/security.md) for the full trust-boundary checklist.
 
 - **ESP32:** bench-test and calibrate the passive front end, then add device
   authentication and an optional network transport.
-- **Gemini:** the vision and PROBE interfaces are both implemented behind
-  the same key-gated swap pattern. Remaining work is prompt tuning against
-  real hardware evidence and a live-key integration test, not the
-  interpretation-only boundary itself.
+- **Gemini:** Vision remains a Go adapter. PROBE's optional Gemini provider is
+  in the Python service behind `PROBE_AI_PROVIDER=gemini`; its output is
+  grounding-validated before main can use the mapped diagnosis. Remaining work
+  is prompt tuning against real hardware evidence and a live-key integration
+  test, not the interpretation-only boundary itself.
 - **MongoDB Atlas:** add a repository adapter for Project Profiles, sessions,
   baselines, and reports without changing domain logic.
 - **Time-series storage:** retain raw high-rate samples outside the relational

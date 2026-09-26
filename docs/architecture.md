@@ -33,8 +33,12 @@ ReWeird follows ports-and-adapters boundaries at the points most likely to chang
    specifications and project baselines.
 11. Structured evidence records measured, derived, specification, baseline,
    software, and future AI provenance separately.
-12. A PROBE adapter may interpret that evidence and recommend a next test.
-13. A test planner chooses an allowed action. Any future PATCH request passes a
+12. The Go PROBE adapter submits that evidence to the Python intelligence
+   service, which validates grounding references, produces evidence-backed
+   hypotheses, and deterministically recommends a next test. UNKNOWN or any
+   service failure preserves the original Go diagnosis unchanged.
+13. Main's persisted test planner chooses an allowed action from that
+   recommendation. Any future PATCH request passes a
    separate safety validator and user-approval boundary.
 14. A new measurement window is compared with the original evidence by VERIFY.
 
@@ -42,10 +46,12 @@ ReWeird follows ports-and-adapters boundaries at the points most likely to chang
 
 - `domain.TelemetrySource`: simulator and serial now; Wi-Fi or MQTT later.
 - `domain.Repository`: SQLite now; MongoDB Atlas or another store later.
-- PROBE service: deterministic rule engine always computes the finding;
-  an optional Gemini adapter (`internal/probe`) rewords it in plain English
-  and falls back to the deterministic wording unchanged when no key is
-  configured or the request fails.
+- PROBE service: the deterministic Go engine always computes the fail-closed
+  diagnosis; `internal/probe.ServiceProvider` sends only `domain.Evidence` and
+  that diagnosis to Python `services/probe`. Python owns grounding, optional
+  Gemini interpretation, and its Test Planner, then maps back to main's existing
+  `Diagnosis` contract. No service URL, UNKNOWN, malformed output, or request
+  failure leaves the deterministic wording unchanged.
 - Vision service: Gemini image adapter when configured; explicit skipped status
   otherwise.
 - Code analyzer: portable deterministic parser now; its interface permits a

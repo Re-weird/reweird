@@ -63,10 +63,17 @@ Check items off as you go. Ping me when a section is done — I'll review before
 - [ ] Fixed today: `inspectRepo` failed on macOS because it compared `filepath.Abs` against git's symlink-resolved `--show-toplevel` without resolving the configured path's own symlinks first (broke under macOS's `/tmp` → `/private/tmp` TMPDIR). See `sync.go: inspectRepo`.
 
 ## 9. AI Service Integration — DONE
-- [x] Architecture decision made (see `docs/architecture.md`): Vision/CodeAnalysis/ProjectUnderstanding live in Go as swappable adapters, not a separate Python service. `services/probe`, `services/signal-analysis`, `services/vision` stay stub READMEs.
+- [x] Vision/CodeAnalysis/ProjectUnderstanding remain authoritative Go
+  adapters. Python `services/probe` owns grounded hypotheses, optional Gemini
+  PROBE reasoning, and complementary next-test recommendations; main owns the
+  structured-evidence and diagnosis contracts.
 - [x] Vision adapter: Gemini when `GEMINI_API_KEY` set, else `VISION_SKIPPED` — `internal/vision`
 - [x] Code analyzer: deterministic parser, Tree-sitter-ready interface — `internal/codeanalysis`
-- [x] PROBE (Layer 6): `internal/probe` — `GeminiProvider` rewords the deterministic diagnosis (headline/summary/possible_causes/confidence/next_test JSON, same key-gated swap pattern as vision), capped at the deterministic confidence, never touches measured/spec/baseline evidence. Falls back to `MockProvider` (deterministic passthrough) when no key or on any request/parse failure. Wired in `diagnostics.NewEngineWithProbe`, selected in `cmd/server/main.go`. (2026-09-26)
+- [x] PROBE (Layer 6): `internal/probe.ServiceProvider` sends main's evidence
+  and deterministic diagnosis to `services/probe`; the Python response maps to
+  the existing diagnosis JSON contract, is confidence-capped, and never touches
+  measured/spec/baseline evidence. Missing service configuration, UNKNOWN, or
+  any request/parse/validation failure falls back to `MockProvider` behavior.
 
 ## 10. Test Planning State (Layer 7, Go half) — DONE
 - [x] Stage state machine exists: Diagnose → Test → Repair → Verify (`domain.Stage`)
@@ -87,10 +94,16 @@ All items from the original ordered list are done. Only §5 (real PATCH validato
 - [x] `Provider` interface defined — `internal/probe/probe.go` (mirrors `internal/vision`'s swap pattern)
 - [x] Request shape: serializes `domain.Evidence` + the deterministic `domain.Diagnosis` into a bounded prompt, instructed not to invent facts
 - [x] Response contract: `headline`, `summary`, `possible_causes[]`, `confidence`, `next_test` — structured JSON via `responseSchema`, validated before use (empty headline/summary or out-of-range confidence falls back to deterministic)
-- [x] `GeminiProvider` (real, key-gated) + `MockProvider` (deterministic passthrough) when `GEMINI_API_KEY` unset
+- [x] Python `GeminiAIProvider` (key-gated) + deterministic
+  `FakeAIProvider`; Go `MockProvider` remains the final passthrough when the
+  service is unavailable or unconfigured
 - [x] Hard rule enforced in code: confidence capped at the deterministic value, never exceeds it; provider only replaces narrative fields, never measured/spec/baseline evidence; cannot trigger PATCH (no such path exists in the interface)
-- [x] Unit tests against a local fake Gemini endpoint — `internal/probe/probe_test.go` (reword case, transport-failure fallback, empty-headline fallback), no live paid key in repo
-- [x] Wired into `internal/diagnostics/engine.go` (`NewEngineWithProbe`) and selected in `cmd/server/main.go` from the same `GEMINI_API_KEY`/`GEMINI_MODEL` env vars vision uses
+- [x] Offline boundary tests cover main-compatible evidence parsing, grounding
+  references, provenance preservation, next-test mapping, confidence caps,
+  malformed-service fallback, and safe UNKNOWN behavior
+- [x] Wired into `internal/diagnostics/engine.go` (`NewEngineWithProbe`) and
+  selected in `cmd/server/main.go` with `PROBE_SERVICE_URL`; Docker Compose
+  starts the Python service with optional Gemini configuration
 - [ ] Not done: prompt tuning against real hardware evidence and a live-key integration test (needs an operator key, out of scope for this pass)
 
 ### B. Git / Audit layer (Layer 11) — DONE, landed on `main` outside this plan

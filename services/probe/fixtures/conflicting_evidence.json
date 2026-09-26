@@ -1,0 +1,50 @@
+{
+  "probe": "P3",
+  "role": "ECHO",
+  "expected": {
+    "min_frequency_hz": 1,
+    "max_frequency_hz": 100,
+    "nominal_frequency_hz": 28.4
+  },
+  "observed": {
+    "frequency_hz": 26.0,
+    "dropout_events": 5
+  },
+  "baseline": {
+    "status": "USER_CONFIRMED_HEALTHY",
+    "trusted": true,
+    "frequency_hz": 28.4
+  },
+  "measurements": [
+    {
+      "probe": "P3",
+      "name": "pulse_count_window_a",
+      "value": 1200,
+      "provenance": "MEASURED"
+    },
+    {
+      "probe": "P3",
+      "name": "pulse_count_window_b",
+      "value": 1490,
+      "provenance": "MEASURED"
+    }
+  ],
+  "rule_results": [
+    {
+      "id": "unexpected-dropout",
+      "probe": "P3",
+      "status": "fail",
+      "severity": 2,
+      "message": "5 unexpected ECHO dropouts detected in window A"
+    },
+    {
+      "id": "unexpected-dropout",
+      "probe": "P3",
+      "status": "pass",
+      "message": "ECHO has no unexpected dropouts in window B"
+    }
+  ],
+  "unresolved_questions": [
+    "Two overlapping analysis windows disagree on ECHO dropout status; which window reflects current wiring?"
+  ]
+}

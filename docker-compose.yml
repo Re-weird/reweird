@@ -7,10 +7,27 @@ services:
       API_PORT: "8080"
       DATABASE_PATH: /data/reweird.db
       UPLOAD_DIR: /data/uploads
+      PROBE_SERVICE_URL: http://probe:8091
     ports:
       - "8080:8080"
     volumes:
       - reweird-data:/data
+    depends_on:
+      - probe
+
+  probe:
+    build:
+      context: .
+      dockerfile: services/probe/Dockerfile
+    environment:
+      PROBE_AI_PROVIDER: ${PROBE_AI_PROVIDER:-fake}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      GEMINI_MODEL: ${GEMINI_MODEL:-gemini-flash-latest}
+      DIAGNOSTIC_REPOSITORY: memory
+      TELEMETRY_SINK: none
+      ANALYTICS_SINK: none
+    ports:
+      - "8091:8091"
 
   web:
     build:

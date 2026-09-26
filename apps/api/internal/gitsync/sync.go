@@ -96,12 +96,19 @@ func inspectRepo(repo string) (string, error) {
 	if !info.IsDir() || info.Mode()&os.ModeSymlink != 0 {
 		return "", errors.New("configured Git root must be a real directory")
 	}
+	// Resolve symlinks before comparing: on macOS the default TMPDIR sits
+	// under /var, which is itself a symlink to /private/var, so git's
+	// symlink-resolved --show-toplevel would otherwise never match abs.
+	resolvedAbs, err := filepath.EvalSymlinks(abs)
+	if err != nil {
+		return "", err
+	}
 	actual, err := git(abs, "rev-parse", "--show-toplevel")
 	if err != nil {
 		return "", err
 	}
 	actualAbs, err := filepath.Abs(strings.TrimSpace(actual))
-	if err != nil || !strings.EqualFold(filepath.Clean(actualAbs), filepath.Clean(abs)) {
+	if err != nil || !strings.EqualFold(filepath.Clean(actualAbs), filepath.Clean(resolvedAbs)) {
 		return "", errors.New("configured path must be the Git worktree root")
 	}
 	return abs, nil

@@ -254,6 +254,19 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--cyan); outline-
 .project-dash-updated { font-size: 10px; color: var(--subtle-text); font-family: "DM Mono", monospace; white-space: nowrap; }
 .project-dash-row > svg { color: var(--subtle-text); flex-shrink: 0; }
 
+.account-dashboard .bench-stats { margin-bottom: 22px; }
+.account-heatmap, .account-outcomes { padding: 18px; margin-bottom: 22px; }
+.heatmap-grid { display: flex; gap: 3px; overflow-x: auto; padding-top: 4px; }
+.heatmap-col { display: flex; flex-direction: column; gap: 3px; }
+.heatmap-cell { width: 11px; height: 11px; border-radius: 2px; background: var(--line-soft); }
+.heatmap-cell[data-active="true"] { background: var(--cyan); }
+.outcome-rows { display: flex; flex-direction: column; gap: 10px; }
+.outcome-row { display: grid; grid-template-columns: 130px 1fr 28px; align-items: center; gap: 12px; }
+.outcome-row .history-status { font-size: 11px; }
+.outcome-bar { height: 6px; border-radius: 3px; background: var(--line-soft); overflow: hidden; }
+.outcome-bar > span { display: block; height: 100%; background: var(--cyan); border-radius: 3px; }
+.outcome-row strong { font-size: 11px; text-align: right; font-family: "DM Mono", monospace; font-weight: 600; }
+
 @media (min-width: 1500px) { .workbench-content { padding: 30px 35px 50px; } .bench-welcome { min-height: 260px; } .welcome-copy { padding: 32px; } }
 @media (max-width: 1250px) {
   .workbench { grid-template-columns: minmax(0, 1.65fr) minmax(285px, 1fr); gap: 14px; }

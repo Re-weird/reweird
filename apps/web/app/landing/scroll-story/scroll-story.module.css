@@ -1,0 +1,284 @@
+.root {
+  background: var(--bg);
+  color: var(--text);
+}
+
+.nav {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 20px 28px;
+  background: var(--topbar-bg);
+  backdrop-filter: blur(14px);
+  border-bottom: 1px solid var(--line-soft);
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--cyan);
+}
+
+.brand span {
+  color: var(--text);
+}
+
+.navLinks {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.navLinks a {
+  color: var(--muted);
+  text-decoration: none;
+}
+
+.navLinks a:hover {
+  color: var(--text);
+}
+
+.navSignInButton {
+  background: none;
+  border: none;
+  padding: 0;
+  font: inherit;
+  color: var(--text);
+  cursor: pointer;
+}
+
+.signIn {
+  color: var(--text) !important;
+}
+
+.themeToggle {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--text);
+  cursor: pointer;
+}
+
+.themeToggle:hover {
+  background: var(--hover-bg);
+}
+
+.storyContainer {
+  position: relative;
+}
+
+.sticky {
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  overflow: hidden;
+}
+
+.sceneWrapper {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+}
+
+.staticIllustration {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  opacity: 0.8;
+}
+
+.textLayer {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+}
+
+.beat {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  max-width: 460px;
+  padding: 0 6vw;
+  opacity: 0;
+  transform: translateY(14px);
+  transition: opacity 420ms ease, transform 420ms ease;
+}
+
+.beatActive {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.beatLeft {
+  align-items: flex-start;
+  text-align: left;
+}
+
+.kicker {
+  font: 10px/1.6 "DM Mono", monospace;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: var(--subtle-text);
+  margin: 0 0 16px;
+}
+
+.heading {
+  font-size: clamp(22px, 3.2vw, 36px);
+  font-weight: 600;
+  line-height: 1.28;
+  letter-spacing: -0.6px;
+  margin: 0 0 14px;
+}
+
+.body {
+  font-size: 14px;
+  line-height: 1.7;
+  color: var(--muted);
+  margin: 0;
+}
+
+.ctaLayer {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 9vh;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  transition: opacity 320ms ease;
+}
+
+.ctas {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+}
+
+.primaryCta,
+.secondaryCta {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  height: 46px;
+  padding: 0 22px;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.primaryCta {
+  background: var(--action);
+  color: #fff;
+  border: 1px solid #ffffff10;
+}
+
+.primaryCta:hover {
+  filter: brightness(1.1);
+}
+
+.secondaryCta {
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--line);
+}
+
+.secondaryCta:hover {
+  background: var(--hover-bg);
+}
+
+.fineprint {
+  font-size: 12px;
+  color: var(--muted);
+  margin: 0;
+}
+
+/* Rendered via drei <Html>, which portals outside this module's scoped tree —
+   these three selectors must stay global so the literal classNames in Board.tsx match. */
+:global(.story-label) {
+  font: 11px/1.3 "DM Mono", monospace;
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  padding: 4px 8px;
+  white-space: nowrap;
+  box-shadow: var(--shadow);
+}
+
+:global(.story-label-sm) {
+  font-size: 9px;
+  padding: 3px 6px;
+}
+
+:global(.story-orbit-card) {
+  font: 10px/1.3 "DM Mono", monospace;
+  letter-spacing: 0.4px;
+  color: var(--cyan);
+  background: var(--cyan-soft);
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  padding: 5px 9px;
+  white-space: nowrap;
+}
+
+@media (max-width: 760px) {
+  .sticky {
+    height: 100svh;
+  }
+
+  .sceneWrapper {
+    inset: 0 0 auto 0;
+    height: 34svh;
+  }
+
+  .beat {
+    max-width: 100%;
+    padding: 0 22px;
+    justify-content: flex-start;
+    padding-top: 38svh;
+  }
+
+  .beatLeft {
+    align-items: center;
+    text-align: center;
+  }
+
+  .ctaLayer {
+    bottom: 6vh;
+  }
+
+  .ctas {
+    flex-direction: column;
+    align-items: stretch;
+    width: 100%;
+    padding: 0 22px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .beat {
+    transition: opacity 250ms ease;
+    transform: none;
+  }
+}

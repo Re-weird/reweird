@@ -67,6 +67,10 @@ export interface DemoSession {
   hardware_connected: boolean;
   telemetry_mode?: "simulator" | "serial" | "browser" | string;
   profile_id?: string;
+  scenario_id?: string;
+  measurement_id?: number;
+  raw_telemetry?: TelemetryEnvelope;
+  analysis?: SignalAnalysis;
   probes: ProbeReading[];
   evidence: StructuredEvidence;
   diagnosis: {
@@ -81,20 +85,109 @@ export interface DemoSession {
   timeline: TimelineEvent[];
 }
 
+export interface TelemetrySample {
+  probe: string;
+  mode: "analog" | "digital" | "pulse";
+  analog_mv?: number[];
+  state?: 0 | 1;
+  edge_count?: number;
+  rising_edges?: number;
+  falling_edges?: number;
+  periods_us?: number[];
+  high_pulse_widths_us?: number[];
+  max_gap_us?: number;
+  activity_counts?: number[];
+}
+
+export interface TelemetryEnvelope {
+  schema_version: 2;
+  device_id: string;
+  profile_id: string;
+  captured_at_ms: number;
+  uptime_ms: number;
+  window_ms: number;
+  sequence: number;
+  samples: TelemetrySample[];
+}
+
+export interface DerivedSignalFacts {
+  probe: string;
+  role: string;
+  mode: "analog" | "digital" | "pulse";
+  average_voltage?: number;
+  minimum_voltage?: number;
+  maximum_voltage?: number;
+  voltage_variation?: number;
+  digital_state?: number;
+  digital_transitions: number;
+  pulse_count: number;
+  frequency_hz?: number;
+  duty_cycle_percent?: number;
+  average_pulse_width_us?: number;
+  minimum_pulse_width_us?: number;
+  maximum_pulse_width_us?: number;
+  jitter_us?: number;
+  maximum_gap_us?: number;
+  dropout_events: number;
+  missing_expected_activity: boolean;
+  stable: boolean;
+  rail_stable?: boolean;
+  failure_buckets?: number[];
+  activity_counts?: number[];
+  baseline_deviation_percent?: number;
+}
+
+export interface SignalAnalysis {
+  schema_version: number;
+  device_id: string;
+  profile_id: string;
+  captured_at_ms: number;
+  window_ms: number;
+  probes: DerivedSignalFacts[];
+  simultaneous_dropout_groups?: string[][];
+}
+
+export interface SimulatorScenario {
+  id: string;
+  name: string;
+  description: string;
+  expected_finding: string;
+}
+
+export interface SimulatorScenarioList {
+  active: string;
+  scenarios: SimulatorScenario[];
+}
+
+export interface MeasurementWindow {
+  id: number;
+  profile_id: string;
+  source: string;
+  device_id: string;
+  sequence: number;
+  captured_at_ms: number;
+  ingested_at_ms: number;
+  raw: TelemetryEnvelope;
+  analysis: SignalAnalysis;
+}
+
 export interface ProjectProfile {
   id: string;
+  project_id?: string;
+  version: number;
   project_name: string;
   controller: string;
   logic_voltage: number;
   confirmed: boolean;
+  confirmed_at_ms?: number;
+  confirmed_by?: string;
   expected_behavior: string;
-  components: Array<{
-    id: string;
-    name: string;
-    manufacturer?: string;
-    properties?: Record<string, number>;
-    source?: string;
-  }>;
+  components: ProfileComponent[];
+  connections?: ProfileConnection[];
+  conflicts?: ProfileConflict[];
+  unresolved_questions?: string[];
+  operating_conditions?: string[];
+  analysis_status?: string;
   probes: Array<{
     probe: string;
     role: string;
@@ -110,4 +203,307 @@ export interface ProjectProfile {
   }>;
   created_at_ms: number;
   updated_at_ms: number;
+}
+
+export type ProjectFactSource =
+  | "CODE_STATIC_ANALYSIS"
+  | "VISION_AI"
+  | "CATALOG"
+  | "USER"
+  | "INFERRED";
+
+export interface ProfileComponent {
+  id: string;
+  name: string;
+  manufacturer?: string;
+  properties?: Record<string, number>;
+  source?: string;
+  sources?: ProjectFactSource[];
+  confidence?: number;
+  confirmed: boolean;
+  interface_type?: string;
+  expected_behavior?: string;
+  safe_measurement_notes?: string[];
+}
+
+export interface ExpectedSignal {
+  signal_type: string;
+  required: boolean;
+  stable: boolean;
+  min_voltage?: number;
+  max_voltage?: number;
+  nominal_voltage?: number;
+  voltage_tolerance_pct?: number;
+  min_frequency_hz?: number;
+  max_frequency_hz?: number;
+  nominal_frequency_hz?: number;
+  max_dropouts: number;
+}
+
+export interface ProfileEvidence {
+  value: string;
+  source: ProjectFactSource;
+  confidence: number;
+}
+
+export interface ProfileConnection {
+  id: string;
+  component_id?: string;
+  component_name: string;
+  role: string;
+  gpio?: number;
+  target: string;
+  direction: string;
+  behavior: string;
+  expected: ExpectedSignal;
+  confidence: number;
+  sources: ProjectFactSource[];
+  evidence?: ProfileEvidence[];
+  required: boolean;
+  confirmed: boolean;
+}
+
+export interface ConflictOption {
+  value: string;
+  source: ProjectFactSource;
+  confidence: number;
+}
+
+export interface ProfileConflict {
+  id: string;
+  connection_id?: string;
+  field: string;
+  options: ConflictOption[];
+  resolution?: string;
+  resolved: boolean;
+  requires_confirmation: boolean;
+}
+
+export interface CodePinFinding {
+  gpio: number;
+  symbol: string;
+  direction: string;
+  behavior: string;
+  confidence: number;
+  source: ProjectFactSource;
+  evidence: string[];
+}
+
+export interface CodeAnalysis {
+  status: string;
+  language: string;
+  parser: string;
+  pins: CodePinFinding[];
+  includes: string[];
+  libraries: string[];
+  timing: string[];
+  warnings: string[];
+}
+
+export interface VisionComponent {
+  catalog_id?: string;
+  name: string;
+  confidence: number;
+  visible_labels?: string[];
+  source: "VISION_AI";
+}
+
+export interface VisionRelationship {
+  from: string;
+  to: string;
+  role: string;
+  gpio?: number;
+  confidence: number;
+  source: "VISION_AI";
+}
+
+export interface ProjectAnalysis {
+  code: CodeAnalysis;
+  vision: {
+    status: string;
+    model?: string;
+    components: VisionComponent[];
+    relationships: VisionRelationship[];
+    warnings: string[];
+  };
+  generated_at_ms: number;
+}
+
+export interface ProjectMedia {
+  storage_ref: string;
+  original_filename: string;
+  content_type: string;
+  size_bytes: number;
+  sha256: string;
+}
+
+export interface ProjectCode {
+  filename: string;
+  language: string;
+  text: string;
+  size_bytes: number;
+  sha256: string;
+}
+
+export interface ProbeInstruction {
+  probe: string;
+  role: string;
+  target: string;
+  expected: string;
+  signal_type: string;
+  safe_warning: string;
+  explanation?: string;
+}
+
+export interface ProbePlan {
+  project_id: string;
+  profile_id: string;
+  instructions: ProbeInstruction[];
+  connected: boolean;
+  connected_at_ms?: number;
+  generated_at_ms: number;
+}
+
+export interface Project {
+  id: string;
+  name: string;
+  description?: string;
+  controller: string;
+  logic_voltage: number;
+  image?: ProjectMedia;
+  code?: ProjectCode;
+  analysis?: ProjectAnalysis;
+  analysis_status: "PENDING" | "PROCESSING" | "DRAFT_READY" | "FAILED" | "CONFIRMED";
+  analysis_error?: string;
+  probe_plan?: ProbePlan;
+  created_at_ms: number;
+  updated_at_ms: number;
+}
+
+export interface AnalyzeProjectResponse {
+  project: Project;
+  analysis: ProjectAnalysis;
+  profile: ProjectProfile;
+}
+
+export interface ConfirmProfileResponse {
+  profile: ProjectProfile;
+  probe_plan: ProbePlan;
+}
+
+export type TestType = "MOVEMENT_CORRELATION" | "POWER_RAIL_STABILITY" | "SIMULTANEOUS_DROPOUT" | "SIGNAL_ACTIVITY" | "BASELINE_COMPARISON" | "FREQUENCY_TIMING" | "REMEASURE";
+export type TestState = "PLANNED" | "READY" | "CAPTURING_BASELINE" | "WAITING_FOR_USER" | "CAPTURING_TEST" | "ANALYZING" | "COMPLETED" | "INCONCLUSIVE" | "CANCELLED" | "FAILED" | "LOCKED" | "VERIFYING" | "RESOLVED" | "UNRESOLVED";
+
+export interface TestRecommendation {
+  id: string;
+  session_id: string;
+  test_type: TestType;
+  target_probes: string[];
+  reason: string;
+  instructions?: string[];
+  duration_seconds: number;
+  requires_user_action: boolean;
+  requires_patch: boolean;
+  status?: string;
+}
+
+export interface TestPlan {
+  id: string;
+  recommendation: TestRecommendation;
+  title: string;
+  instructions: string[];
+  monitoring: string[];
+  metrics: string[];
+  criteria: string;
+  window_ms: number;
+  requires_patch: boolean;
+  unavailable?: string;
+}
+
+export interface TestObservation {
+  probe?: string;
+  metric: string;
+  value: unknown;
+  unit?: string;
+  provenance: EvidenceProvenance | "GUIDED_TEST";
+}
+
+export interface TestResult {
+  test_id: string;
+  test_type: TestType;
+  target_probes: string[];
+  observations: TestObservation[];
+  derived_metrics: Record<string, unknown>;
+  result: string;
+  interpretation: string;
+  confidence: number;
+  evidence_provenance: Array<EvidenceProvenance | "GUIDED_TEST">;
+  timestamp_ms: number;
+}
+
+export interface MetricChange {
+  probe: string;
+  metric: string;
+  before: unknown;
+  after: unknown;
+  unit?: string;
+}
+
+export interface VerificationResult {
+  status: "RESOLVED" | "IMPROVED" | "UNCHANGED" | "WORSE" | "INCONCLUSIVE";
+  improvements: MetricChange[];
+  remaining_issues: string[];
+  changes: MetricChange[];
+  summary: string;
+  before_window_id: number;
+  after_window_id: number;
+  timestamp_ms: number;
+}
+
+export interface DiagnosticWorkflow {
+  id: string;
+  session_id: string;
+  project_id: string;
+  profile_id: string;
+  profile_version: number;
+  profile_snapshot?: ProjectProfile;
+  scenario_id?: string;
+  status: TestState;
+  plan: TestPlan;
+  baseline?: MeasurementWindow;
+  during?: MeasurementWindow;
+  after?: MeasurementWindow;
+  result?: TestResult;
+  verification?: VerificationResult;
+  user_actions?: UserAction[];
+  error?: string;
+  created_at_ms: number;
+  updated_at_ms: number;
+}
+
+export interface UserAction { id: string; description: string; timestamp_ms: number }
+export type HistoryStatus = "OPEN" | "TESTING" | "WAITING_FOR_USER" | "VERIFYING" | "RESOLVED" | "IMPROVED" | "UNRESOLVED" | "CANCELLED" | "INCONCLUSIVE";
+export interface HistorySummary {
+  id: string;
+  project_id: string;
+  project_name: string;
+  session_id: string;
+  profile_id: string;
+  profile_version: number;
+  telemetry_source?: string;
+  original_problem: string;
+  status: HistoryStatus;
+  started_at_ms: number;
+  ended_at_ms?: number;
+}
+export interface HistoryEvent { id: string; timestamp_ms: number; kind: string; description: string; provenance: EvidenceProvenance | "GUIDED_TEST" | "USER"; window_id?: number }
+export interface HistoryDetail { summary: HistorySummary; timeline: HistoryEvent[]; workflow: DiagnosticWorkflow }
+export interface ReportFact { probe?: string; window_id?: number; metric: string; value: unknown; unit?: string; provenance: string }
+export interface DetailedReport {
+  report_id: string; project_id: string; project_name: string; session_id: string; date_ms: number; controller?: string;
+  profile_id: string; profile_revision: number; summary: string; observed_behavior: string; expected_behavior?: string;
+  measured_evidence: ReportFact[]; derived_evidence: ReportFact[]; tests_performed: TestPlan[]; test_results: TestResult[];
+  user_actions: UserAction[]; before_window_id?: number; after_window_id?: number; verify_result?: VerificationResult;
+  final_status: HistoryStatus; unresolved_items: string[]; provenance: string[]; system_information: Record<string, unknown>;
+  security_redaction_count: number;
 }

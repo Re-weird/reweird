@@ -1,0 +1,16 @@
+{
+  "id": "sg90-servo",
+  "name": "SG90-style Micro Servo",
+  "aliases": ["SG90", "micro servo", "servo"],
+  "interface_type": "servo PWM",
+  "operating_voltage": { "minimum": 4.8, "maximum": 6.0, "unit": "V" },
+  "pin_roles": [
+    { "name": "VCC", "direction": "power", "signal_types": ["voltage rail"], "description": "Servo supply." },
+    { "name": "SIGNAL", "direction": "input", "signal_types": ["PWM"], "description": "Position command pulse train." },
+    { "name": "GND", "direction": "reference", "signal_types": ["ground"], "description": "Common circuit reference." }
+  ],
+  "expected_behavior": "Position is commanded by a periodic control pulse; exact timing and current requirements vary by servo variant.",
+  "safe_measurement_notes": ["Measure the control line passively and verify the exact servo datasheet before interpreting supply current or travel limits."],
+  "known_signal_types": ["voltage rail", "PWM"],
+  "sources": [{ "title": "TowerPro SG90 Product Page", "url": "https://towerpro.com.tw/product/sg90-7/" }]
+}

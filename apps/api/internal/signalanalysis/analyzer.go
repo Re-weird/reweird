@@ -21,6 +21,7 @@ func (analyzer *Analyzer) Analyze(envelope domain.TelemetryEnvelope, profile dom
 	result := domain.AnalysisResult{
 		SchemaVersion: envelope.SchemaVersion,
 		DeviceID:      envelope.DeviceID,
+		ProfileID:     envelope.ProfileID,
 		CapturedAtMS:  envelope.CapturedAtMS,
 		WindowMS:      envelope.WindowMS,
 		Probes:        make([]domain.DerivedFacts, 0, len(envelope.Samples)),
@@ -77,11 +78,19 @@ func analyzeSample(sample domain.TelemetrySample, configuration domain.ProbeConf
 	}
 
 	if len(sample.HighPulseWidthsUS) > 0 && len(sample.PeriodsUS) > 0 {
+		minimum, maximum := bounds(sample.HighPulseWidthsUS)
+		average := mean(sample.HighPulseWidthsUS)
+		facts.AveragePulseWidthUS = pointer(average)
+		facts.MinimumPulseWidthUS = pointer(minimum)
+		facts.MaximumPulseWidthUS = pointer(maximum)
 		period := mean(sample.PeriodsUS)
 		if period > 0 {
 			duty := mean(sample.HighPulseWidthsUS) / period * 100
 			facts.DutyCyclePercent = pointer(math.Min(100, duty))
 		}
+	}
+	if sample.MaxGapUS > 0 {
+		facts.MaximumGapUS = pointer(float64(sample.MaxGapUS))
 	}
 
 	for index, activity := range sample.ActivityCounts {
@@ -96,20 +105,29 @@ func analyzeSample(sample domain.TelemetrySample, configuration domain.ProbeConf
 	}
 	facts.MissingExpectedActivity = missingActivity(facts, configuration.Expected)
 	facts.Stable = determineStability(facts, configuration)
+	if configuration.IsPowerRail {
+		stable := facts.Stable
+		facts.RailStable = &stable
+	}
 	facts.BaselineDeviationPercent = baselineDeviation(facts, configuration.Baseline)
 	return facts
 }
 
 func expectedDropouts(sample domain.TelemetrySample, expected domain.ExpectedSignal, windowMS uint32) int {
+	gapDropouts := 0
+	if expected.NominalFrequencyHz != nil && *expected.NominalFrequencyHz > 0 && sample.MaxGapUS > 0 {
+		expectedPeriod := 1_000_000 / *expected.NominalFrequencyHz
+		gapDropouts = int(math.Max(0, math.Floor(float64(sample.MaxGapUS)/expectedPeriod)-1))
+	}
 	if expected.NominalFrequencyHz == nil || windowMS == 0 || !expected.Required {
-		return len(zeroBuckets(sample.ActivityCounts))
+		return maxInt(len(zeroBuckets(sample.ActivityCounts)), gapDropouts)
 	}
 	expectedPulses := int(math.Round(*expected.NominalFrequencyHz * float64(windowMS) / 1000))
 	observedPulses := int(sample.RisingEdges)
 	if observedPulses >= expectedPulses {
-		return 0
+		return gapDropouts
 	}
-	return expectedPulses - observedPulses
+	return maxInt(expectedPulses-observedPulses, gapDropouts)
 }
 
 func missingActivity(facts domain.DerivedFacts, expected domain.ExpectedSignal) bool {
@@ -233,3 +251,10 @@ func standardDeviation(values []float64) float64 {
 }
 
 func pointer(value float64) *float64 { return &value }
+
+func maxInt(left, right int) int {
+	if left > right {
+		return left
+	}
+	return right
+}

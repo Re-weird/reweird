@@ -1,6 +1,7 @@
 package diagnostics
 
 import (
+	"context"
 	"strings"
 	"testing"
 
@@ -62,7 +63,8 @@ func TestGenericRules(t *testing.T) {
 	engine := NewEngine(signalanalysis.New())
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			session, err := engine.AnalyzeEnvelope(test.profile, test.stage, "test", test.envelope, nil)
+			test.envelope.ProfileID = test.profile.ID
+			session, err := engine.AnalyzeEnvelope(context.Background(), test.profile, test.stage, "test", test.envelope, nil)
 			if err != nil {
 				t.Fatalf("AnalyzeEnvelope() error = %v", err)
 			}
@@ -80,7 +82,7 @@ func TestSimultaneousDropoutSuggestsSharedCause(t *testing.T) {
 	envelope := pulseEnvelope(9, []float64{1, 0, 1})
 	envelope.Samples = append(envelope.Samples, pulseSample("P3", 9, []float64{1, 0, 1}))
 
-	session, err := NewEngine(signalanalysis.New()).AnalyzeEnvelope(profile, domain.StageDiagnose, "test", envelope, nil)
+	session, err := NewEngine(signalanalysis.New()).AnalyzeEnvelope(context.Background(), profile, domain.StageDiagnose, "test", envelope, nil)
 	if err != nil {
 		t.Fatalf("AnalyzeEnvelope() error = %v", err)
 	}
@@ -98,7 +100,7 @@ func TestMovementCorrelatedDropout(t *testing.T) {
 		t.Fatalf("analyze reference: %v", err)
 	}
 
-	session, err := engine.AnalyzeEnvelope(profile, domain.StageTest, "test", pulseEnvelope(5, []float64{0, 1, 0, 0}), &before)
+	session, err := engine.AnalyzeEnvelope(context.Background(), profile, domain.StageTest, "test", pulseEnvelope(5, []float64{0, 1, 0, 0}), &before)
 	if err != nil {
 		t.Fatalf("AnalyzeEnvelope() error = %v", err)
 	}
@@ -122,7 +124,7 @@ func TestHealthyBaselineComparison(t *testing.T) {
 
 func TestMissingBaselineDoesNotBecomeEvidence(t *testing.T) {
 	profile := pulseProfile(nil)
-	session, err := NewEngine(signalanalysis.New()).AnalyzeEnvelope(profile, domain.StageDiagnose, "test", pulseEnvelope(7, []float64{1, 0, 1}), nil)
+	session, err := NewEngine(signalanalysis.New()).AnalyzeEnvelope(context.Background(), profile, domain.StageDiagnose, "test", pulseEnvelope(7, []float64{1, 0, 1}), nil)
 	if err != nil {
 		t.Fatalf("AnalyzeEnvelope() error = %v", err)
 	}
@@ -188,8 +190,9 @@ func powerProfile(voltageRange []float64) domain.ProjectProfile {
 
 func pulseEnvelope(rising uint32, activity []float64) domain.TelemetryEnvelope {
 	return domain.TelemetryEnvelope{
-		SchemaVersion: 1,
+		SchemaVersion: 2,
 		DeviceID:      "test-device-001",
+		ProfileID:     "generic-pulse-test",
 		WindowMS:      1000,
 		Samples:       []domain.TelemetrySample{pulseSample("P2", rising, activity)},
 	}
@@ -214,8 +217,9 @@ func pulseSample(probe string, rising uint32, activity []float64) domain.Telemet
 
 func analogEnvelope(millivolts []float64) domain.TelemetryEnvelope {
 	return domain.TelemetryEnvelope{
-		SchemaVersion: 1,
+		SchemaVersion: 2,
 		DeviceID:      "test-device-001",
+		ProfileID:     "power-rail-test",
 		WindowMS:      1000,
 		Samples: []domain.TelemetrySample{{
 			Probe:    "P1",

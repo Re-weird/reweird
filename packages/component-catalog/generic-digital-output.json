@@ -1,0 +1,13 @@
+{
+  "id": "generic-digital-output",
+  "name": "Generic Digital Output",
+  "aliases": ["digital output", "output pin"],
+  "interface_type": "digital output",
+  "pin_roles": [
+    { "name": "SIGNAL", "direction": "input to component", "signal_types": ["digital state", "transition", "pulse"], "description": "Signal driven by a controller output." }
+  ],
+  "expected_behavior": "A controller drives a binary state or pulse sequence.",
+  "safe_measurement_notes": ["ReWeird observes the node passively; it does not source or sink the target signal."],
+  "known_signal_types": ["digital state", "transition", "pulse"],
+  "sources": [{ "title": "Arduino Digital Pins", "url": "https://docs.arduino.cc/learn/microcontrollers/digital-pins/" }]
+}

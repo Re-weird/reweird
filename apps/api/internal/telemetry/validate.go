@@ -7,12 +7,14 @@ import (
 	"regexp"
 
 	"github.com/re-weird/reweird/apps/api/internal/domain"
+	"github.com/re-weird/reweird/apps/api/internal/limits"
 )
 
-const SchemaVersion = 1
+const SchemaVersion = 2
 
 var deviceIDPattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_-]{2,63}$`)
 var probePattern = regexp.MustCompile(`^P[1-6]$`)
+var profileIDPattern = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{2,63}$`)
 
 func Validate(envelope domain.TelemetryEnvelope) error {
 	if envelope.SchemaVersion != SchemaVersion {
@@ -20,6 +22,9 @@ func Validate(envelope domain.TelemetryEnvelope) error {
 	}
 	if !deviceIDPattern.MatchString(envelope.DeviceID) {
 		return errors.New("device_id must be 3-64 letters, digits, underscores, or hyphens")
+	}
+	if !profileIDPattern.MatchString(envelope.ProfileID) {
+		return errors.New("profile_id must be 3-64 lowercase letters, digits, or hyphens")
 	}
 	if envelope.CapturedAtMS < 0 {
 		return errors.New("captured_at_ms cannot be negative")
@@ -54,6 +59,9 @@ func ValidateForProfile(envelope domain.TelemetryEnvelope, profile domain.Projec
 	if !profile.Confirmed {
 		return errors.New("project profile must be user-confirmed before hardware telemetry is accepted")
 	}
+	if envelope.ProfileID != profile.ID {
+		return fmt.Errorf("telemetry profile_id %q does not match active profile %q", envelope.ProfileID, profile.ID)
+	}
 	for _, sample := range envelope.Samples {
 		configuration, ok := profile.Probe(sample.Probe)
 		if !ok {
@@ -76,11 +84,13 @@ func validateSample(sample domain.TelemetrySample) error {
 	if sample.Mode != domain.ProbeModeAnalog && sample.Mode != domain.ProbeModeDigital && sample.Mode != domain.ProbeModePulse {
 		return fmt.Errorf("unsupported mode %q", sample.Mode)
 	}
-	if len(sample.AnalogMV) > 256 {
-		return errors.New("analog_mv exceeds 256 samples")
+	analogLimit := limits.Bounded("MAX_TELEMETRY_ANALOG_SAMPLES", 256, 8, 256)
+	pulseLimit := limits.Bounded("MAX_TELEMETRY_PULSE_SAMPLES", 512, 8, 512)
+	if len(sample.AnalogMV) > analogLimit {
+		return fmt.Errorf("analog_mv exceeds %d samples", analogLimit)
 	}
-	if len(sample.PeriodsUS) > 512 || len(sample.HighPulseWidthsUS) > 512 {
-		return errors.New("pulse arrays exceed 512 samples")
+	if len(sample.PeriodsUS) > pulseLimit || len(sample.HighPulseWidthsUS) > pulseLimit {
+		return fmt.Errorf("pulse arrays exceed %d samples", pulseLimit)
 	}
 	if len(sample.ActivityCounts) > 120 {
 		return errors.New("activity_counts exceeds 120 buckets")

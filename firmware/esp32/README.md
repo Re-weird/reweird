@@ -1,7 +1,7 @@
 # ReWeird ESP32 passive probe firmware
 
 This firmware runs on the **ReWeird diagnostic device**, not the target project.
-It samples six passive probe inputs and emits newline-delimited telemetry v1 JSON
+It samples six passive probe inputs and emits newline-delimited telemetry v2 JSON
 over USB serial. PATCH is deliberately configured as an input and has no output
 code path.
 
@@ -55,7 +55,9 @@ core directories to drive letters.
 
 The monitor should show one compact JSON object per line every second. Each frame
 uses `packages/shared-types/telemetry.schema.json` and includes a schema version,
-device ID, sequence, measurement window, and P1-P6 samples.
+device ID, configured `profile_id`, sequence, measurement window, and P1-P6
+samples. Update `REWEIRD_PROFILE_ID` with the probe configuration so the backend
+can reject accidental cross-project telemetry.
 
 Find the serial port when needed:
 

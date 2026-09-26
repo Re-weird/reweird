@@ -2,6 +2,8 @@
 
 #include <Arduino.h>
 
+static constexpr const char *REWEIRD_PROFILE_ID = "ultrasonic-demo";
+
 enum class ReWeirdProbeMode : uint8_t {
   Analog,
   Digital,

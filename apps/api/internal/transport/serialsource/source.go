@@ -32,6 +32,7 @@ type Source struct {
 type Status struct {
 	Connected  bool      `json:"connected"`
 	DeviceID   string    `json:"device_id,omitempty"`
+	ProfileID  string    `json:"profile_id,omitempty"`
 	Sequence   uint64    `json:"sequence,omitempty"`
 	ReceivedAt time.Time `json:"received_at,omitempty"`
 	LastError  string    `json:"last_error,omitempty"`
@@ -73,6 +74,9 @@ func (source *Source) Run(ctx context.Context) error {
 		source.mu.Lock()
 		if err == nil && source.latest != nil && envelope.DeviceID != source.latest.DeviceID {
 			err = fmt.Errorf("device_id changed from %s to %s on an active serial stream", source.latest.DeviceID, envelope.DeviceID)
+		}
+		if err == nil && source.latest != nil && envelope.ProfileID != source.latest.ProfileID {
+			err = fmt.Errorf("profile_id changed from %s to %s on an active serial stream", source.latest.ProfileID, envelope.ProfileID)
 		}
 		if err == nil && source.latest != nil && envelope.Sequence <= source.latest.Sequence {
 			err = fmt.Errorf("non-increasing telemetry sequence %d after %d", envelope.Sequence, source.latest.Sequence)
@@ -142,6 +146,7 @@ func (source *Source) Status() Status {
 	status := Status{Connected: source.latest != nil, ReceivedAt: source.receivedAt}
 	if source.latest != nil {
 		status.DeviceID = source.latest.DeviceID
+		status.ProfileID = source.latest.ProfileID
 		status.Sequence = source.latest.Sequence
 	}
 	if source.lastError != nil {

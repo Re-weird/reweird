@@ -4,6 +4,10 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"os"
+	"strconv"
+	"sync"
 	"time"
 
 	"github.com/re-weird/reweird/apps/api/internal/domain"
@@ -11,7 +15,24 @@ import (
 )
 
 type SQLiteStore struct {
-	db *sql.DB
+	db            *sql.DB
+	measurementMu sync.Mutex
+}
+
+func (store *SQLiteStore) Ping() error { return store.db.Ping() }
+
+func MeasurementWindowLimit() int {
+	value, err := strconv.Atoi(os.Getenv("MAX_MEASUREMENT_WINDOWS"))
+	if err != nil || value < 100 || value > 1000000 {
+		return 50000
+	}
+	return value
+}
+
+func (store *SQLiteStore) MeasurementWindowCount() (int, error) {
+	var count int
+	err := store.db.QueryRow("SELECT COUNT(*) FROM measurement_windows").Scan(&count)
+	return count, err
 }
 
 func Open(path string) (*SQLiteStore, error) {
@@ -47,6 +68,39 @@ func (store *SQLiteStore) migrate() error {
 		);
 		CREATE INDEX IF NOT EXISTS idx_profiles_updated_at
 			ON project_profiles(updated_at DESC);
+		CREATE TABLE IF NOT EXISTS projects (
+			id TEXT PRIMARY KEY,
+			payload TEXT NOT NULL,
+			analysis_status TEXT NOT NULL,
+			created_at DATETIME NOT NULL,
+			updated_at DATETIME NOT NULL
+		);
+		CREATE INDEX IF NOT EXISTS idx_projects_updated_at
+			ON projects(updated_at DESC);
+		CREATE TABLE IF NOT EXISTS measurement_windows (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			profile_id TEXT NOT NULL,
+			source TEXT NOT NULL,
+			device_id TEXT NOT NULL,
+			sequence INTEGER NOT NULL,
+			captured_at_ms INTEGER NOT NULL,
+			ingested_at_ms INTEGER NOT NULL,
+			raw_payload TEXT NOT NULL,
+			analysis_payload TEXT NOT NULL,
+			UNIQUE(source, device_id, sequence, captured_at_ms)
+		);
+		CREATE INDEX IF NOT EXISTS idx_measurements_profile_captured
+			ON measurement_windows(profile_id, captured_at_ms DESC, id DESC);
+		CREATE TABLE IF NOT EXISTS test_workflows (
+			id TEXT PRIMARY KEY,
+			profile_id TEXT NOT NULL,
+			status TEXT NOT NULL,
+			payload TEXT NOT NULL,
+			created_at_ms INTEGER NOT NULL,
+			updated_at_ms INTEGER NOT NULL
+		);
+		CREATE INDEX IF NOT EXISTS idx_test_workflows_profile_updated
+			ON test_workflows(profile_id, updated_at_ms DESC);
 	`)
 	return err
 }
@@ -82,6 +136,92 @@ func (store *SQLiteStore) LatestSession() (*domain.Session, error) {
 	return &session, nil
 }
 
+func (store *SQLiteStore) SaveMeasurement(window domain.MeasurementWindow) (domain.MeasurementWindow, error) {
+	store.measurementMu.Lock()
+	defer store.measurementMu.Unlock()
+	count, err := store.MeasurementWindowCount()
+	if err != nil {
+		return domain.MeasurementWindow{}, err
+	}
+	if count >= MeasurementWindowLimit() {
+		var existing int64
+		err := store.db.QueryRow(`SELECT id FROM measurement_windows WHERE source = ? AND device_id = ? AND sequence = ? AND captured_at_ms = ?`, window.Source, window.DeviceID, window.Sequence, window.CapturedAtMS).Scan(&existing)
+		if errors.Is(err, sql.ErrNoRows) {
+			return domain.MeasurementWindow{}, fmt.Errorf("measurement retention limit of %d windows reached; export/archive evidence before adding more", MeasurementWindowLimit())
+		}
+		if err != nil {
+			return domain.MeasurementWindow{}, err
+		}
+	}
+	if window.IngestedAtMS == 0 {
+		window.IngestedAtMS = time.Now().UTC().UnixMilli()
+	}
+	rawPayload, err := json.Marshal(window.Raw)
+	if err != nil {
+		return domain.MeasurementWindow{}, err
+	}
+	analysisPayload, err := json.Marshal(window.Analysis)
+	if err != nil {
+		return domain.MeasurementWindow{}, err
+	}
+	result, err := store.db.Exec(`
+		INSERT INTO measurement_windows
+			(profile_id, source, device_id, sequence, captured_at_ms, ingested_at_ms, raw_payload, analysis_payload)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+		ON CONFLICT(source, device_id, sequence, captured_at_ms) DO UPDATE SET
+			profile_id = excluded.profile_id,
+			ingested_at_ms = excluded.ingested_at_ms,
+			raw_payload = excluded.raw_payload,
+			analysis_payload = excluded.analysis_payload
+	`, window.ProfileID, window.Source, window.DeviceID, window.Sequence, window.CapturedAtMS, window.IngestedAtMS, string(rawPayload), string(analysisPayload))
+	if err != nil {
+		return domain.MeasurementWindow{}, err
+	}
+	id, err := result.LastInsertId()
+	if err != nil || id == 0 {
+		err = store.db.QueryRow(`
+			SELECT id FROM measurement_windows
+			WHERE source = ? AND device_id = ? AND sequence = ? AND captured_at_ms = ?
+		`, window.Source, window.DeviceID, window.Sequence, window.CapturedAtMS).Scan(&id)
+		if err != nil {
+			return domain.MeasurementWindow{}, err
+		}
+	}
+	window.ID = id
+	return window, nil
+}
+
+func (store *SQLiteStore) ListMeasurements(profileID string, limit int) ([]domain.MeasurementWindow, error) {
+	if limit < 1 || limit > 200 {
+		limit = 50
+	}
+	rows, err := store.db.Query(`
+		SELECT id, profile_id, source, device_id, sequence, captured_at_ms, ingested_at_ms, raw_payload, analysis_payload
+		FROM measurement_windows WHERE profile_id = ?
+		ORDER BY captured_at_ms DESC, id DESC LIMIT ?
+	`, profileID, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	windows := make([]domain.MeasurementWindow, 0)
+	for rows.Next() {
+		var window domain.MeasurementWindow
+		var rawPayload, analysisPayload string
+		if err := rows.Scan(&window.ID, &window.ProfileID, &window.Source, &window.DeviceID, &window.Sequence, &window.CapturedAtMS, &window.IngestedAtMS, &rawPayload, &analysisPayload); err != nil {
+			return nil, err
+		}
+		if err := json.Unmarshal([]byte(rawPayload), &window.Raw); err != nil {
+			return nil, err
+		}
+		if err := json.Unmarshal([]byte(analysisPayload), &window.Analysis); err != nil {
+			return nil, err
+		}
+		windows = append(windows, window)
+	}
+	return windows, rows.Err()
+}
+
 func (store *SQLiteStore) SaveProfile(profile domain.ProjectProfile) error {
 	now := time.Now().UTC()
 	if profile.CreatedAtMS == 0 {
@@ -105,6 +245,56 @@ func (store *SQLiteStore) SaveProfile(profile domain.ProjectProfile) error {
 			updated_at = excluded.updated_at
 	`, profile.ID, string(payload), confirmed, time.UnixMilli(profile.CreatedAtMS).UTC(), now)
 	return err
+}
+
+func (store *SQLiteStore) SaveProjectProfile(project domain.Project, profile domain.ProjectProfile) error {
+	now := time.Now().UTC()
+	if project.CreatedAtMS == 0 {
+		project.CreatedAtMS = now.UnixMilli()
+	}
+	project.UpdatedAtMS = now.UnixMilli()
+	if profile.CreatedAtMS == 0 {
+		profile.CreatedAtMS = now.UnixMilli()
+	}
+	profile.UpdatedAtMS = now.UnixMilli()
+	projectPayload, err := json.Marshal(project)
+	if err != nil {
+		return err
+	}
+	profilePayload, err := json.Marshal(profile)
+	if err != nil {
+		return err
+	}
+	confirmed := 0
+	if profile.Confirmed {
+		confirmed = 1
+	}
+	tx, err := store.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+	if _, err = tx.Exec(`
+		INSERT INTO project_profiles (id, payload, confirmed, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?)
+		ON CONFLICT(id) DO UPDATE SET
+			payload = excluded.payload,
+			confirmed = excluded.confirmed,
+			updated_at = excluded.updated_at
+	`, profile.ID, string(profilePayload), confirmed, time.UnixMilli(profile.CreatedAtMS).UTC(), now); err != nil {
+		return err
+	}
+	if _, err = tx.Exec(`
+		INSERT INTO projects (id, payload, analysis_status, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?)
+		ON CONFLICT(id) DO UPDATE SET
+			payload = excluded.payload,
+			analysis_status = excluded.analysis_status,
+			updated_at = excluded.updated_at
+	`, project.ID, string(projectPayload), project.AnalysisStatus, time.UnixMilli(project.CreatedAtMS).UTC(), now); err != nil {
+		return err
+	}
+	return tx.Commit()
 }
 
 func (store *SQLiteStore) GetProfile(id string) (*domain.ProjectProfile, error) {
@@ -146,6 +336,64 @@ func (store *SQLiteStore) ListProfiles() ([]domain.ProjectProfile, error) {
 		return nil, err
 	}
 	return profiles, nil
+}
+
+func (store *SQLiteStore) SaveProject(project domain.Project) error {
+	now := time.Now().UTC()
+	if project.CreatedAtMS == 0 {
+		project.CreatedAtMS = now.UnixMilli()
+	}
+	project.UpdatedAtMS = now.UnixMilli()
+	payload, err := json.Marshal(project)
+	if err != nil {
+		return err
+	}
+	_, err = store.db.Exec(`
+		INSERT INTO projects (id, payload, analysis_status, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?)
+		ON CONFLICT(id) DO UPDATE SET
+			payload = excluded.payload,
+			analysis_status = excluded.analysis_status,
+			updated_at = excluded.updated_at
+	`, project.ID, string(payload), project.AnalysisStatus, time.UnixMilli(project.CreatedAtMS).UTC(), now)
+	return err
+}
+
+func (store *SQLiteStore) GetProject(id string) (*domain.Project, error) {
+	var payload string
+	err := store.db.QueryRow("SELECT payload FROM projects WHERE id = ?", id).Scan(&payload)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	var project domain.Project
+	if err := json.Unmarshal([]byte(payload), &project); err != nil {
+		return nil, err
+	}
+	return &project, nil
+}
+
+func (store *SQLiteStore) ListProjects() ([]domain.Project, error) {
+	rows, err := store.db.Query("SELECT payload FROM projects ORDER BY updated_at DESC")
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	projects := make([]domain.Project, 0)
+	for rows.Next() {
+		var payload string
+		if err := rows.Scan(&payload); err != nil {
+			return nil, err
+		}
+		var project domain.Project
+		if err := json.Unmarshal([]byte(payload), &project); err != nil {
+			return nil, err
+		}
+		projects = append(projects, project)
+	}
+	return projects, rows.Err()
 }
 
 func (store *SQLiteStore) Close() error { return store.db.Close() }

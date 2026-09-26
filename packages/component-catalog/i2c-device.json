@@ -1,0 +1,14 @@
+{
+  "id": "i2c-device",
+  "name": "Generic I2C Device",
+  "aliases": ["I2C", "Wire", "SDA", "SCL"],
+  "interface_type": "I2C",
+  "pin_roles": [
+    { "name": "SDA", "direction": "bidirectional open-drain", "signal_types": ["digital bus", "data"], "description": "Serial data line." },
+    { "name": "SCL", "direction": "clock", "signal_types": ["digital bus", "clock"], "description": "Serial clock line." }
+  ],
+  "expected_behavior": "Open-drain clock and data lines communicate with pull-up resistors to the bus logic rail.",
+  "safe_measurement_notes": ["Confirm bus pull-up voltage before connecting a probe."],
+  "known_signal_types": ["digital bus", "clock", "data"],
+  "sources": [{ "title": "NXP I2C-bus Specification UM10204", "url": "https://www.nxp.com/docs/en/user-guide/UM10204.pdf" }]
+}

@@ -13,18 +13,20 @@ type Props = {
   profile: ProjectProfile | null;
   source: "api" | "browser";
   onNavigate: (tab: ProjectTabID) => void;
+  /** Recent sessions are limited to this project's history. */
+  historyProjectID: string;
 };
 
-export function Workbench({ session, project, profile, source, onNavigate }: Props) {
+export function Workbench({ session, project, profile, source, onNavigate, historyProjectID }: Props) {
   const [recent, setRecent] = useState<HistorySummary[]>([]);
   const [historyState, setHistoryState] = useState<"loading" | "ready" | "offline">("loading");
   useEffect(() => {
     let active = true;
-    historyApi.list().then(({ items }) => {
+    historyApi.list({ projectID: historyProjectID }).then(({ items }) => {
       if (active) { setRecent(items.slice(0, 3)); setHistoryState("ready"); }
     }).catch(() => { if (active) setHistoryState("offline"); });
     return () => { active = false; };
-  }, []);
+  }, [historyProjectID]);
   const matchesProject = !project || session.profile_id === profile?.id;
   const failures = session.evidence.rule_results.filter((rule) => rule.status === "fail");
   const activeProbes = session.probes.filter((probe) => probe.status !== "idle");

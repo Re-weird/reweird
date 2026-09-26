@@ -24,6 +24,9 @@ export function projectPath(id: string, tab: ProjectTabID = "workbench"): string
 // (/projects/demo/...) instead of only living in in-memory state.
 export const DEMO_PROJECT_ID = "demo";
 
+// Demo-mode guided tests are recorded under the demo profile's project id.
+export const DEMO_HISTORY_PROJECT_ID = "ultrasonic-demo";
+
 // Components merged from main (circuit map, device passport) navigate with the
 // old single-page view names; map them onto this app's project tabs. "live"
 // lands on Workbench, which now hosts the live signal view.

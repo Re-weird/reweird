@@ -55,8 +55,10 @@ computer-mode summary, git-sync status, PROBE/AI text — all of that is
 per-project, not dashboard-level. See "why" in
 `project-hub-redesign-checklist.md`.
 
-**Open for later:** search/filter by status or controller type — not in v1,
-add only if the list grows long enough to need it.
+**Shipped since this sketch:** name/description search, a controller filter,
+and sort (last updated / name) in a bar above the list, plus a per-project
+public/private toggle. A status filter was tried and removed; the rows no
+longer show analysis-status labels.
 
 ---
 

@@ -1,7 +1,9 @@
 "use client";
 
 import { HistoryReportView } from "../../../history-report";
+import { useAppState } from "@/lib/app-state";
 
 export default function ReportsPage() {
-  return <HistoryReportView mode="reports" />;
+  const { historyProjectID } = useAppState();
+  return <HistoryReportView mode="reports" projectID={historyProjectID} />;
 }

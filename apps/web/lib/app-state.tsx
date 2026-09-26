@@ -5,7 +5,9 @@ import { useRouter } from "next/navigation";
 import type { AnalyzeProjectResponse, DemoSession, DiagnosticWorkflow, ProbePlan, Project, ProjectProfile, SimulatorScenario, TestRecommendation } from "@reweird/shared-types";
 import { ApiError, demoApi, projectApi, testApi } from "@/lib/api";
 import { makeDemoProfile, makeDemoSession } from "@/lib/demo";
-import { DEMO_PROJECT_ID, projectPath } from "@/lib/project-routes";
+import { DEMO_HISTORY_PROJECT_ID, DEMO_PROJECT_ID, projectPath } from "@/lib/project-routes";
+
+export type ProjectLoadResult = "ready" | "missing" | "unavailable";
 
 interface AppState {
   session: DemoSession;
@@ -25,6 +27,8 @@ interface AppState {
   showNewProject: boolean;
   setShowNewProject: (value: boolean) => void;
   currentProjectID: string;
+  /** Project id that this project's diagnostic history is recorded under. */
+  historyProjectID: string;
   /** False until the first API session request settles; before that, `session` is only the local fixture. */
   sessionReady: boolean;
 
@@ -32,7 +36,7 @@ interface AppState {
   runOriginalDemo: (action: "wiggle" | "repair" | "reset") => Promise<void>;
   recordUserAction: (description: string) => Promise<void>;
   runScenario: () => Promise<void>;
-  loadProject: (id: string) => Promise<"ready" | "missing">;
+  loadProject: (id: string) => Promise<ProjectLoadResult>;
   completeProjectAnalysis: (result: AnalyzeProjectResponse) => void;
   loadDemoProject: () => Promise<void>;
   saveProfile: (nextProfile: ProjectProfile) => Promise<ProjectProfile>;
@@ -65,15 +69,25 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
   const [testError, setTestError] = useState<string | null>(null);
   const [legacyVerify, setLegacyVerify] = useState(false);
   const [sessionReady, setSessionReady] = useState(false);
+  // The id most recently asked for. A slower, earlier request must not
+  // overwrite the project the user has since navigated to.
+  const requestedProjectRef = useRef<string | null>(null);
+
 
   const currentProjectID = project?.id ?? DEMO_PROJECT_ID;
+  const historyProjectID = project?.id ?? DEMO_HISTORY_PROJECT_ID;
 
   useEffect(() => {
     demoApi.load().then((remote) => {
       if (remote) { setSession(remote); setSource("api"); }
       setSessionReady(true);
     });
-    demoApi.profile().then(setProfile).catch(() => undefined);
+    // Only while still in demo mode: if a real project URL was opened directly,
+    // this can resolve after loadProject and would overwrite its profile.
+    demoApi.profile().then((demoProfile) => {
+      const requested = requestedProjectRef.current;
+      if (requested === null || requested === DEMO_PROJECT_ID) setProfile(demoProfile);
+    }).catch(() => undefined);
     demoApi.scenarios().then((result) => {
       setScenarios(result.scenarios);
       setSelectedScenario(result.active);
@@ -195,11 +209,7 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
     }
   }, [selectedScenario, scenarios, router]);
 
-  // The id most recently asked for. A slower, earlier request must not
-  // overwrite the project the user has since navigated to.
-  const requestedProjectRef = useRef<string | null>(null);
-
-  const loadProject = useCallback(async (id: string): Promise<"ready" | "missing"> => {
+  const loadProject = useCallback(async (id: string): Promise<ProjectLoadResult> => {
     requestedProjectRef.current = id;
     if (id === DEMO_PROJECT_ID) {
       if (project) {
@@ -223,8 +233,10 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
       setProbePlan(freshPlan);
       setWorkflow(null);
       return "ready";
-    } catch {
-      return "missing";
+    } catch (cause) {
+      // Only a 404 means the project doesn't exist; a timeout or an unreachable
+      // API (status 0) must not be reported as "not found".
+      return cause instanceof ApiError && cause.status === 404 ? "missing" : "unavailable";
     } finally {
       setBusy(false);
     }
@@ -285,7 +297,7 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
 
   const value: AppState = {
     session, source, busy, toast, project, profile, probePlan, scenarios, selectedScenario, setSelectedScenario,
-    recommendation, workflow, testError, legacyVerify, showNewProject, setShowNewProject, currentProjectID, sessionReady,
+    recommendation, workflow, testError, legacyVerify, showNewProject, setShowNewProject, currentProjectID, historyProjectID, sessionReady,
     runTestAction, runOriginalDemo, recordUserAction, runScenario, loadProject, completeProjectAnalysis,
     loadDemoProject, saveProfile, confirmProfile, confirmConnections,
   };

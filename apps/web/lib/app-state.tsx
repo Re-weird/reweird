@@ -76,6 +76,9 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
 
   const currentProjectID = project?.id ?? DEMO_PROJECT_ID;
   const historyProjectID = project?.id ?? DEMO_HISTORY_PROJECT_ID;
+  // The API's "current" workflow is global; only expose it when it belongs to
+  // the project being viewed, so one project's pages never act on another's test.
+  const scopedWorkflow = workflow && workflow.project_id === historyProjectID ? workflow : null;
 
   useEffect(() => {
     demoApi.load().then((remote) => {
@@ -151,8 +154,8 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
         setRecommendation(proposed);
         next = await testApi.create(proposed);
       } else {
-        if (!workflow) throw new Error("Create a test plan first.");
-        next = await testApi[action](workflow.id);
+        if (!scopedWorkflow) throw new Error("Create a test plan first.");
+        next = await testApi[action](scopedWorkflow.id);
       }
       setWorkflow(next);
       if (next.verification) router.push(projectPath(currentProjectID, "verify"));
@@ -160,7 +163,7 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
     } catch (error) {
       setTestError(error instanceof ApiError || error instanceof Error ? error.message : "The guided test could not continue.");
     } finally { setBusy(false); }
-  }, [router, currentProjectID, source, project, profile, session.profile_id, workflow]);
+  }, [router, currentProjectID, source, project, profile, session.profile_id, scopedWorkflow]);
 
   const runOriginalDemo = useCallback(async (action: "wiggle" | "repair" | "reset") => {
     setBusy(true);
@@ -180,13 +183,13 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
   }, [router]);
 
   const recordUserAction = useCallback(async (description: string) => {
-    if (!workflow) return;
+    if (!scopedWorkflow) return;
     setBusy(true);
     setTestError(null);
-    try { setWorkflow(await testApi.recordAction(workflow.id, description)); setToast("User action added to diagnostic history"); }
+    try { setWorkflow(await testApi.recordAction(scopedWorkflow.id, description)); setToast("User action added to diagnostic history"); }
     catch (cause) { setTestError(cause instanceof Error ? cause.message : "The action could not be recorded."); }
     finally { setBusy(false); }
-  }, [workflow]);
+  }, [scopedWorkflow]);
 
   const runScenario = useCallback(async () => {
     setBusy(true);
@@ -297,7 +300,7 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
 
   const value: AppState = {
     session, source, busy, toast, project, profile, probePlan, scenarios, selectedScenario, setSelectedScenario,
-    recommendation, workflow, testError, legacyVerify, showNewProject, setShowNewProject, currentProjectID, historyProjectID, sessionReady,
+    recommendation, workflow: scopedWorkflow, testError, legacyVerify, showNewProject, setShowNewProject, currentProjectID, historyProjectID, sessionReady,
     runTestAction, runOriginalDemo, recordUserAction, runScenario, loadProject, completeProjectAnalysis,
     loadDemoProject, saveProfile, confirmProfile, confirmConnections,
   };

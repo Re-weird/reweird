@@ -118,3 +118,37 @@ func TestRawAndDerivedMeasurementWindowPersists(t *testing.T) {
 		t.Fatalf("measurement after reopen = %#v", windows[0])
 	}
 }
+
+// Projects saved before visibility existed have no "visibility" key in their
+// stored payload; both read paths must report them as private.
+func TestLegacyProjectWithoutVisibilityReadsAsPrivate(t *testing.T) {
+	repository, err := Open(filepath.Join(t.TempDir(), "reweird-legacy.db"))
+	if err != nil {
+		t.Fatalf("Open() error = %v", err)
+	}
+	defer repository.Close()
+
+	legacy := `{"id":"legacy-rig","name":"Legacy rig","controller":"ESP32","logic_voltage":3.3,"analysis_status":"PENDING","created_at_ms":1,"updated_at_ms":1}`
+	if _, err := repository.db.Exec(
+		"INSERT INTO projects (id, payload, analysis_status, created_at, updated_at) VALUES (?, ?, ?, datetime('now'), datetime('now'))",
+		"legacy-rig", legacy, "PENDING",
+	); err != nil {
+		t.Fatalf("insert legacy project: %v", err)
+	}
+
+	project, err := repository.GetProject("legacy-rig")
+	if err != nil || project == nil {
+		t.Fatalf("GetProject() = %v, %v", project, err)
+	}
+	if project.Visibility != domain.VisibilityPrivate {
+		t.Fatalf("GetProject visibility = %q, want private", project.Visibility)
+	}
+
+	listed, err := repository.ListProjects()
+	if err != nil || len(listed) != 1 {
+		t.Fatalf("ListProjects() = %v, %v", listed, err)
+	}
+	if listed[0].Visibility != domain.VisibilityPrivate {
+		t.Fatalf("ListProjects visibility = %q, want private", listed[0].Visibility)
+	}
+}

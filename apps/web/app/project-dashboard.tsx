@@ -103,7 +103,7 @@ const Sparkline = memo(function Sparkline({ series, id }: { series: number[]; id
   );
 });
 
-function VisibilityToggle({ project, onChange }: { project: Project; onChange: (next: Project["visibility"]) => void }) {
+function VisibilityToggle({ project, pending, onChange }: { project: Project; pending: boolean; onChange: (next: Project["visibility"]) => void }) {
   const isPublic = project.visibility === "public";
   const next = isPublic ? "private" : "public";
   return (
@@ -112,9 +112,11 @@ function VisibilityToggle({ project, onChange }: { project: Project; onChange: (
         <button
           type="button"
           onClick={() => onChange(next)}
+          disabled={pending}
+          aria-busy={pending}
           aria-label={`${isPublic ? "Public" : "Private"} project. Make ${next}.`}
           className={cn(
-            "relative z-10 inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[11px] font-medium ring-1 transition-colors duration-300 active:scale-95",
+            "relative z-10 inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[11px] font-medium ring-1 transition-colors duration-300 active:scale-95 disabled:cursor-wait disabled:opacity-60",
             isPublic ? "text-graph ring-graph/50 hover:bg-graph/10" : "text-muted-foreground ring-border hover:bg-accent hover:text-foreground",
           )}
         >
@@ -127,7 +129,7 @@ function VisibilityToggle({ project, onChange }: { project: Project; onChange: (
   );
 }
 
-function ProjectRow({ project, series, onVisibility }: { project: Project; series: number[]; onVisibility: (id: string, next: Project["visibility"]) => void }) {
+function ProjectRow({ project, series, pending, onVisibility }: { project: Project; series: number[]; pending: boolean; onVisibility: (id: string, next: Project["visibility"]) => void }) {
   return (
     <motion.li
       layout
@@ -143,7 +145,7 @@ function ProjectRow({ project, series, onVisibility }: { project: Project; serie
         <div className="pointer-events-none min-w-0">
           <div className="flex flex-wrap items-center gap-3">
             <h3 className="truncate text-[17px] font-bold tracking-tight text-signal group-hover:underline group-hover:underline-offset-4">{project.name}</h3>
-            <span className="pointer-events-auto"><VisibilityToggle project={project} onChange={(next) => onVisibility(project.id, next)} /></span>
+            <span className="pointer-events-auto"><VisibilityToggle project={project} pending={pending} onChange={(next) => onVisibility(project.id, next)} /></span>
           </div>
           <p className="mt-2 line-clamp-1 max-w-[68ch] text-sm leading-relaxed text-muted-foreground">{project.description || "No description provided."}</p>
           <div className="mt-3.5 flex flex-wrap items-center gap-x-6 gap-y-1.5 text-xs text-subtle">
@@ -199,7 +201,13 @@ export function ProjectDashboardView({ onNewProject }: { onNewProject: () => voi
     return () => { live = false; };
   }, []);
 
+  // One visibility request per project at a time; the pill is disabled while
+  // it is in flight, so out-of-order responses can't leave the UI and the
+  // server disagreeing.
+  const [pendingVisibility, setPendingVisibility] = useState<Set<string>>(() => new Set());
   const changeVisibility = async (id: string, next: Project["visibility"]) => {
+    if (pendingVisibility.has(id)) return;
+    setPendingVisibility((current) => new Set(current).add(id));
     const previous = projects?.find((project) => project.id === id)?.visibility;
     setProjects((list) => list?.map((project) => project.id === id ? { ...project, visibility: next } : project) ?? list);
     try {
@@ -208,6 +216,8 @@ export function ProjectDashboardView({ onNewProject }: { onNewProject: () => voi
     } catch (cause) {
       setProjects((list) => list?.map((project) => project.id === id && previous ? { ...project, visibility: previous } : project) ?? list);
       setError(cause instanceof Error ? cause.message : "Visibility could not be changed.");
+    } finally {
+      setPendingVisibility((current) => { const rest = new Set(current); rest.delete(id); return rest; });
     }
   };
 
@@ -293,7 +303,7 @@ export function ProjectDashboardView({ onNewProject }: { onNewProject: () => voi
           ) : (
             <ul>
               <AnimatePresence initial={false} mode="popLayout">
-                {filtered.map((project) => <ProjectRow key={project.id} project={project} series={activity.byProject.get(project.id) ?? emptySeries} onVisibility={changeVisibility} />)}
+                {filtered.map((project) => <ProjectRow key={project.id} project={project} series={activity.byProject.get(project.id) ?? emptySeries} pending={pendingVisibility.has(project.id)} onVisibility={changeVisibility} />)}
               </AnimatePresence>
             </ul>
           )}

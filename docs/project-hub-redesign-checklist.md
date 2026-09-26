@@ -13,8 +13,11 @@ is stable — items get checked off during implementation, not before.
 - [x] **Everything else is per-project.** Live signals, diagnosis, PROBE,
   guided tests, VERIFY, computer diagnostics, git sync, history/reports —
   all live inside a project's own pages, reached from the dashboard.
-- [x] **Real multi-user auth**, not a placeholder. Users log in; each user
-  only sees their own projects.
+- [x] **Real multi-user auth** is the decided direction (users log in; each
+  user only sees their own projects). *Decided, not built:* there is no
+  sign-in yet. Project visibility (public/private) is stored and shown but
+  not enforced until auth exists. The `frontend` branch has Clerk/Google
+  sign-in work that is not on `main` yet.
 
 ## Open — needs a decision before building
 
@@ -26,11 +29,13 @@ is stable — items get checked off during implementation, not before.
 - [ ] Dashboard project card content: name, controller, last diagnosis
   status, last activity time — confirm exact fields
 - [x] Per-project page structure: **real Next.js routes**,
-  `/projects/[id]` + 9 sub-routes, each a real URL with its own
+  `/projects/[id]` + 10 sub-routes (including `passport`, from main), each
+  a real URL with its own
   `page.tsx`. Superseded the earlier view-state tab-bar approach.
-- [x] Left sidebar removed entirely, app-wide — replaced by a single
-  top nav (`global-nav.tsx`: logo, Projects/Account/Settings) plus the
-  per-project tab bar rendered by `app/projects/[id]/layout.tsx`.
+- [x] Left sidebar removed. Top bar: logo, breadcrumb, actions
+  (`global-nav.tsx`). On Dashboard/Projects/Settings a fixed profile rail
+  sits on the left with the tab row beside it (`section-nav.tsx`); inside a
+  project the rail is hidden and the same tab row shows the project tabs.
 - [ ] Combined Mode and PATCH have no UI yet (backend not ready) — confirm
   they stay out of scope for this redesign
 

@@ -66,7 +66,10 @@ longer show analysis-status labels.
 
 TODO once auth session-strategy decision lands in the checklist.
 
-## Project page (placeholder — not sketched yet)
+## Project page
 
-TODO — depends on the still-open "tabs vs separate routes" decision in the
-checklist. Will map features #5-#13 into whichever shape we pick.
+Decided: real routes, `/projects/[id]` plus sub-routes (workbench, overview,
+probe setup, device passport, simulator, diagnosis, next test, verify,
+history, reports, computer checks), shown as a tab row. Inside a project the
+page is full width (no profile rail). The tab contents are still the legacy
+design and are next to be redesigned.

@@ -153,3 +153,9 @@ export const computerApi = {
   simulate: (scenarioID: string) => requestJSON<ComputerAnalysis>("/api/v1/computer/simulate", { method: "POST", body: JSON.stringify({ scenario_id: scenarioID }) }),
   collect: (expected: ComputerAnalysis["expectations"]) => requestJSON<ComputerAnalysis>("/api/v1/computer/collect", { method: "POST", body: JSON.stringify(expected) }, 15_000),
 };
+
+export interface GitPreview { enabled: boolean; repo_available: boolean; files: Array<{ path: string; bytes: number }>; secret_scan: "clear" | "blocked"; commit_allowed: boolean; push_configured: boolean; detail?: string }
+export const gitApi = {
+  preview: (id: string) => requestJSON<GitPreview>(`/api/v1/git/preview/${encodeURIComponent(id)}`),
+  commit: (id: string, push = false) => requestJSON<{ commit: string; pushed: boolean }>(`/api/v1/git/commit/${encodeURIComponent(id)}`, { method: "POST", body: JSON.stringify({ approve: true, push }) }, 25_000),
+};

@@ -616,7 +616,7 @@ export default function Home() {
     if (active === "guided" || active === "verify") return <GuidedTestView workflow={workflow} recommendation={recommendation} busy={busy} error={testError} onPlan={() => runTestAction("plan")} onStart={() => runTestAction("start")} onCapture={() => runTestAction("capture")} onRemeasure={() => runTestAction("remeasure")} onCancel={() => runTestAction("cancel")} onRecordAction={recordUserAction} />;
     if (active === "history") return <HistoryReportView mode="history" />;
     if (active === "computer") return <ComputerDiagnosticsView />;
-    if (active === "account") return <AccountDashboardView />;
+    if (active === "account") return <AccountDashboardView onNavigate={setActive} />;
     if (active === "settings") return <SettingsStatusView />;
     return <HistoryReportView mode="reports" />;
   }, [active, session, source, busy, project, profile, probePlan, scenarios, selectedScenario, workflow, recommendation, testError, legacyVerify]);

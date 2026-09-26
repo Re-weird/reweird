@@ -251,18 +251,22 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--cyan); outline-
 .project-dash-updated { font-size: 10px; color: var(--subtle-text); font-family: "DM Mono", monospace; white-space: nowrap; }
 .project-dash-row > svg { color: var(--subtle-text); flex-shrink: 0; }
 
-.account-dashboard .bench-stats { margin-bottom: 22px; }
-.account-heatmap, .account-outcomes { padding: 18px; margin-bottom: 22px; }
-.heatmap-grid { display: flex; gap: 3px; overflow-x: auto; padding-top: 4px; }
-.heatmap-col { display: flex; flex-direction: column; gap: 3px; }
-.heatmap-cell { width: 11px; height: 11px; border-radius: 2px; background: var(--line-soft); }
-.heatmap-cell[data-active="true"] { background: var(--cyan); }
-.outcome-rows { display: flex; flex-direction: column; gap: 10px; }
-.outcome-row { display: grid; grid-template-columns: 130px 1fr 28px; align-items: center; gap: 12px; }
-.outcome-row .history-status { font-size: 11px; }
-.outcome-bar { height: 6px; border-radius: 3px; background: var(--line-soft); overflow: hidden; }
-.outcome-bar > span { display: block; height: 100%; background: var(--cyan); border-radius: 3px; }
-.outcome-row strong { font-size: 11px; text-align: right; font-family: "DM Mono", monospace; font-weight: 600; }
+.account-layout { display: grid; grid-template-columns: 280px 1fr; gap: 22px; align-items: start; }
+.account-sidebar { display: flex; flex-direction: column; align-items: flex-start; gap: 14px; padding: 22px; background: var(--surface); border: 1px solid var(--line); border-radius: 9px; }
+.account-avatar { width: 64px; height: 64px; border-radius: 50%; background: var(--surface-3); border: 1px solid var(--line); display: flex; align-items: center; justify-content: center; font-size: 22px; font-weight: 600; color: var(--muted); }
+.account-identity strong { display: block; font-size: 14px; font-weight: 600; }
+.account-identity small { color: var(--muted); font-size: 11px; }
+.account-joined { font-size: 11px; color: var(--subtle-text); }
+.account-stat-list { display: flex; flex-direction: column; gap: 10px; width: 100%; padding-top: 14px; border-top: 1px solid var(--line-soft); }
+.account-stat-list > div { display: flex; align-items: baseline; justify-content: space-between; }
+.account-stat-list span { font-size: 11px; color: var(--muted); }
+.account-stat-list strong { font-size: 13px; font-family: "DM Mono", monospace; }
+.account-main { display: flex; flex-direction: column; gap: 18px; min-width: 0; }
+.account-tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--line); }
+.account-tabs button { padding: 0 4px 10px; border: 0; border-bottom: 2px solid transparent; background: transparent; color: var(--muted); font-size: 13px; font-weight: 500; cursor: pointer; }
+.account-tabs button:hover { color: var(--text); }
+.account-tabs button.active { color: var(--text); border-bottom-color: var(--cyan); font-weight: 600; }
+.account-section { padding: 18px; }
 
 @media (min-width: 1500px) { .workbench-content { padding: 30px 35px 50px; } .bench-welcome { min-height: 260px; } .welcome-copy { padding: 32px; } }
 @media (max-width: 1250px) {
@@ -278,7 +282,7 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--cyan); outline-
   .workbench-rail { display: grid; grid-template-columns: 1fr 1fr; }
   .bench-analysis { grid-row: span 2; }
   .bench-safety { grid-column: 1 / -1; }
-  .diagnosis-layout, .profile-grid, .guided-grid, .history-layout, .computer-columns { grid-template-columns: 1fr; }
+  .diagnosis-layout, .profile-grid, .guided-grid, .history-layout, .computer-columns, .account-layout { grid-template-columns: 1fr; }
 }
 @media (max-width: 800px) {
   :root { --sidebar: 0px; }

@@ -29,6 +29,11 @@ export function MakeItWeird({ scenarios, busy, onRun, onBrowserDemo }: {
   }
 
   async function run() {
+    if (choices.length === 0 && choice === "intermittent-connection") {
+      close();
+      await onBrowserDemo();
+      return;
+    }
     const mystery = choice === "mystery";
     const scenario = mystery ? mysteryScenario(scenarios) : choice;
     if (!scenario) return;
@@ -44,13 +49,14 @@ export function MakeItWeird({ scenarios, busy, onRun, onBrowserDemo }: {
     </section>
     <dialog ref={dialog} className="weird-dialog" aria-labelledby="weird-dialog-title" aria-describedby="weird-dialog-description" onClose={() => { setOpen(false); opener.current?.focus(); }} onCancel={() => setOpen(false)}>
       <div className="weird-dialog-head"><div><span className="bench-label">Demo simulation · no physical output</span><h2 id="weird-dialog-title">MAKE IT WEIRD.</h2></div><button className="icon-button" aria-label="Close fault selector" onClick={close}><X size={18} /></button></div>
-      <p id="weird-dialog-description">Pick something to break. ReWeird will analyze existing simulator samples—not control hardware.</p>
+      <p id="weird-dialog-description">Pick a simulated fault. ReWeird will show what changed and why, without controlling hardware.</p>
       <fieldset className="weird-choices"><legend>Choose a simulated fault</legend>
+        {choices.length === 0 && <label className={choice === "intermittent-connection" ? "chosen" : ""}><input type="radio" name="weird-choice" checked={choice === "intermittent-connection"} onChange={() => setChoice("intermittent-connection")} /><span>Loose connection<small>Illustrative browser demo</small></span></label>}
         {choices.map((item) => <label key={item.scenario} className={choice === item.scenario ? "chosen" : ""}><input type="radio" name="weird-choice" checked={choice === item.scenario} onChange={() => setChoice(item.scenario)} /><span>{item.label}</span></label>)}
-        <label className={choice === "mystery" ? "chosen" : ""}><input type="radio" name="weird-choice" checked={choice === "mystery"} onChange={() => setChoice("mystery")} /><span>Mystery fault<small>Revealed only after analysis</small></span></label>
+        {choices.length > 0 && <label className={choice === "mystery" ? "chosen" : ""}><input type="radio" name="weird-choice" checked={choice === "mystery"} onChange={() => setChoice("mystery")} /><span>Mystery fault<small>Revealed only after analysis</small></span></label>}
       </fieldset>
-      {choices.length === 0 && <p role="status">The Go API simulator is unavailable. The original browser demo can still show an illustrative, simulated diagnostic loop.</p>}
-      <div className="weird-dialog-actions"><button className="secondary" onClick={close}>Cancel</button>{choices.length === 0 && <button className="secondary" onClick={async () => { close(); await onBrowserDemo(); }}>Open browser demo</button>}<button className="primary" disabled={!choice || busy || choices.length === 0} onClick={run}>MAKE IT WEIRD <ArrowRight size={15} /></button></div>
+      {choices.length === 0 && <p role="status">The Go API is not running. Loose connection works as an illustrative browser demo; other faults need the API.</p>}
+      <div className="weird-dialog-actions"><button className="secondary" onClick={close}>Cancel</button><button className="primary" disabled={!choice || busy} onClick={run}>MAKE IT WEIRD <ArrowRight size={15} /></button></div>
     </dialog>
   </>;
 }

@@ -58,6 +58,14 @@
 .pipeline-strip div { min-height: 64px; display: flex; align-items: center; justify-content: center; gap: 8px; padding: 10px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); color: #b9c6cc; font-size: 10px; font-weight: 700; text-align: center; position: relative; }
 .pipeline-strip div:not(:last-child)::after { content: "›"; position: absolute; right: -8px; z-index: 2; color: var(--cyan); font-size: 17px; }
 .pipeline-strip span { width: 20px; height: 20px; flex: 0 0 20px; border-radius: 50%; display: grid; place-items: center; background: var(--cyan-soft); color: var(--cyan); font-family: "DM Mono", monospace; font-size: 9px; }
+.simulator-details { margin: 0 0 16px; padding: 12px 14px; border: 1px solid var(--line); border-radius: 9px; color: var(--muted); font-size: 12px; }
+.simulator-details summary { cursor: pointer; color: var(--text); font-weight: 650; }
+.simulator-details > p { line-height: 1.5; }
+.simulator-details .pipeline-strip, .simulator-details .analysis-table { margin-top: 14px; }
+.simulator-summary { margin: 14px 0; padding: 14px; border: 1px solid var(--cyan); border-radius: 9px; background: var(--cyan-soft); }
+.simulator-summary p { margin: 6px 0; line-height: 1.5; }
+.simulator-summary small { color: var(--muted); }
+.simulator-error { padding: 10px; border: 1px solid var(--red); border-radius: 7px; color: var(--red); font-size: 12px; }
 .simulator-layout { display: grid; grid-template-columns: minmax(310px, .8fr) minmax(540px, 1.5fr); gap: 18px; align-items: start; }
 .scenario-panel, .simulator-result { min-width: 0; }
 .scenario-list { display: grid; gap: 7px; margin: 14px 0 18px; }

@@ -43,7 +43,7 @@ export function SectionNav() {
       return { key: tab.id, label: tab.label, href, icon: tabIcons[tab.id], active: pathname === href, dot: tab.id === "diagnosis" && session.stage !== "verify" };
     })
     : [
-      { key: "dashboard", label: "Dashboard", href: "/", icon: BarChart3, active: pathname === "/" },
+      { key: "dashboard", label: "Dashboard", href: "/dashboard", icon: BarChart3, active: pathname === "/dashboard" },
       { key: "projects", label: "Projects", href: "/projects", icon: FolderGit2, active: pathname.startsWith("/projects") },
       { key: "settings", label: "Settings", href: "/settings", icon: Settings, active: pathname === "/settings" },
     ];

@@ -3,6 +3,20 @@
 ## Current controls
 
 - PATCH output is disabled in the MVP.
+- The standalone Go API binds to loopback by default. A non-loopback bind
+  requires either a 32+ character `REWEIRD_API_TOKEN` (Bearer header on all
+  `/api/v1` routes, including WebSocket upgrade) or explicit
+  `API_TRUSTED_NETWORK=true`. The latter is for isolated container networks,
+  never a substitute for authentication on a public interface.
+- Docker Compose publishes web, API, and PROBE ports on host loopback only.
+  Its internal bridge is treated as trusted; it is not a remote-deployment
+  security boundary. Do not expose these ports publicly.
+- PROBE refuses PATCH-result recording unless a 32+ character
+  `PROBE_REPORTER_TOKEN` and server-configured `PROBE_REPORTER_ID` are present.
+  The record contains actor ID, server timestamp, and `HUMAN_REPORTED`
+  provenance. Neither approval nor execution is attested by the hardware;
+  `execution_verified` remains false. Offline demo records are explicitly
+  marked `OFFLINE_SIMULATION`.
 - ESP32 firmware configures PATCH as an input and contains no output action path.
 - The UI labels the AI-style interpretation as mocked and keeps it separate from
   measured values.
@@ -54,6 +68,17 @@
 - Include a hardware current limit and physical output-disable control.
 - Audit whether every action came from a user, deterministic system rule, AI
   recommendation, or hardware event.
+
+## Required before remote deployment
+
+- Add user accounts/sessions and role-based authorization for the browser UI.
+  A shared API bearer token is service access control, not per-user identity;
+  the current browser proxy and WebSocket client do not carry that token.
+- Put the services behind TLS and an authenticated reverse proxy. Keep the
+  Compose host mappings on loopback until that path is implemented and tested.
+- Give each action reporter a distinct credential and rotate/revoke it as
+  needed. A shared `PROBE_REPORTER_ID` identifies the configured credential,
+  not a cryptographically proven human or physical device action.
 
 ## Required before production uploads and integrations
 

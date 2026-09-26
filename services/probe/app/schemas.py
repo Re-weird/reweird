@@ -208,6 +208,8 @@ class PatchProposal(BaseModel):
     safety_requirements: list[str] = Field(default_factory=list)
     status: PatchProposalStatus
     external_reason: str | None = None
+    # A client report is not independent evidence that a physical action ran.
+    action_history: list["PatchActionRecord"] = Field(default_factory=list)
     verification: "VerificationResult | None" = None
     created_at_ms: int
     updated_at_ms: int
@@ -231,6 +233,16 @@ class PatchProposalResponse(BaseModel):
 # parallel enum: recording an external result IS a proposal status
 # transition, nothing more.
 ExternalResultStatus = Literal["APPROVED_EXTERNALLY", "REJECTED", "EXECUTED_EXTERNALLY"]
+
+
+class PatchActionRecord(BaseModel):
+    reported_status: ExternalResultStatus
+    display_label: str
+    actor_id: str
+    record_source: Literal["HUMAN_REPORTED", "OFFLINE_SIMULATION"]
+    recorded_at_ms: int
+    reason: str | None = None
+    execution_verified: Literal[False] = False
 
 
 class RecordExternalResultRequest(BaseModel):

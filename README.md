@@ -145,6 +145,14 @@ different server-side target with `API_INTERNAL_URL`; `NEXT_PUBLIC_API_URL`
 remains available for deployments that intentionally expose a separate API
 origin.
 
+Security boundary: the standalone API now binds to `127.0.0.1` by default.
+Compose publishes ports 3000/8080/8091 on host loopback only. Do not publish
+this stack to an untrusted network: the UI does not yet have user accounts.
+For direct API clients, setting a 32+ character `REWEIRD_API_TOKEN` requires
+`Authorization: Bearer <token>` on `/api/v1` routes; this credential must stay
+server-side. See [security model](docs/security.md) before changing bind or
+port settings.
+
 Uploads default to `apps/api/data/uploads` when the API is started from that
 directory. Override this with `UPLOAD_DIR`. To enable Gemini Vision and the
 Gemini PROBE adapter (they share the same key and model), keep the key

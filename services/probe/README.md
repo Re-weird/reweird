@@ -269,12 +269,17 @@ validate, exactly like every other AI-touched path in this service:
   primary guarantee is structural (no field on `PatchProposal` can express
   either one in the first place).
 
-**External execution is operational metadata, never evidence.**
+**External execution is a user report, never verified hardware evidence.**
 `POST .../result` moves a proposal through `PROPOSED -> APPROVED_EXTERNALLY
 -> EXECUTED_EXTERNALLY` (or `REJECTED`) - a plain, validated state machine.
-`"executed"` only records that some external subsystem *reports* the patch
-was applied; it is never merged into any `StructuredEvidence` and never
-treated as a measurement.
+The route is disabled unless both `PROBE_REPORTER_TOKEN` (32+ characters) and
+`PROBE_REPORTER_ID` are configured. It requires a Bearer token; the actor ID
+comes from server configuration, never the request body. Each transition adds
+an `action_history` entry with actor ID, server timestamp, `HUMAN_REPORTED`
+source, a user-facing `display_label`, and `execution_verified=false`. `"executed"` therefore means only
+**“User reported action completed”**. It is never merged into
+`StructuredEvidence` or treated as a measurement. Offline demo helper calls
+are marked `OFFLINE_SIMULATION` instead.
 
 **VERIFY requires real, new `StructuredEvidence`** - `{"patch_worked": true}`
 is rejected by the schema itself (422), not by convention. Verifying reuses
@@ -345,9 +350,9 @@ opt-in live test exists outside the default suite, in `live_tests/`:
       -d '{"target_probe": "P2", "target_role": "TRIG", "patch_type": "TEMPORARY_SIGNAL_EMULATION"}')
     PROPOSAL_ID=$(echo "$PROPOSAL" | python -c "import sys,json;print(json.load(sys.stdin)['proposal']['proposal_id'])")
     curl -s -X POST "http://localhost:8091/sessions/$SESSION2_ID/patch-proposals/$PROPOSAL_ID/result" \
-      -H "content-type: application/json" -d '{"external_status": "APPROVED_EXTERNALLY"}' > /dev/null
+      -H "content-type: application/json" -H "Authorization: Bearer $PROBE_REPORTER_TOKEN" -d '{"external_status": "APPROVED_EXTERNALLY"}' > /dev/null
     curl -s -X POST "http://localhost:8091/sessions/$SESSION2_ID/patch-proposals/$PROPOSAL_ID/result" \
-      -H "content-type: application/json" -d '{"external_status": "EXECUTED_EXTERNALLY"}' > /dev/null
+      -H "content-type: application/json" -H "Authorization: Bearer $PROBE_REPORTER_TOKEN" -d '{"external_status": "EXECUTED_EXTERNALLY"}' > /dev/null
     curl -s -X POST "http://localhost:8091/sessions/$SESSION2_ID/patch-proposals/$PROPOSAL_ID/verify" \
       -H "content-type: application/json" \
       -d "{\"evidence\": $(cat fixtures/hc_sr04_healthy.json)}" | python -m json.tool

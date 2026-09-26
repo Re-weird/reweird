@@ -13,8 +13,6 @@ import {
   CircleDot,
   Cpu,
   FileBarChart,
-  Gauge,
-  GitBranch,
   LayoutDashboard,
   Menu,
   Microscope,
@@ -30,6 +28,7 @@ import {
   TriangleAlert,
   Waves,
   X,
+  Upload,
 } from "lucide-react";
 import {
   Area,
@@ -48,12 +47,13 @@ import { GuidedTestView } from "./guided-test";
 import { HistoryReportView } from "./history-report";
 import { ComputerDiagnosticsView } from "./computer-diagnostics";
 import { SettingsStatusView } from "./settings-status";
+import { Workbench } from "./workbench";
 
 type View = "dashboard" | "profile" | "connect" | "simulator" | "live" | "diagnosis" | "guided" | "verify" | "history" | "reports" | "computer" | "settings";
 type Theme = "light" | "dark";
 
 const nav: { id: View; label: string; icon: typeof Activity; group: "Workspace" | "Diagnostic flow" | "Records" }[] = [
-  { id: "dashboard", label: "Overview", icon: LayoutDashboard, group: "Workspace" },
+  { id: "dashboard", label: "Workbench", icon: LayoutDashboard, group: "Workspace" },
   { id: "profile", label: "Project overview", icon: Box, group: "Workspace" },
   { id: "connect", label: "Probe setup", icon: Cable, group: "Workspace" },
   { id: "simulator", label: "Simulator", icon: TestTube2, group: "Diagnostic flow" },
@@ -68,14 +68,12 @@ const nav: { id: View; label: string; icon: typeof Activity; group: "Workspace" 
 
 const navGroups = ["Workspace", "Diagnostic flow", "Records"] as const;
 
-const stageIndex = { detect: 0, diagnose: 1, test: 2, repair: 2, verify: 3 } as const;
-
 function StatusDot({ status }: { status: ProbeReading["status"] }) {
   return <span className={`status-dot ${status}`} aria-label={status} />;
 }
 
-function MiniChart({ values, danger = false }: { values: number[]; danger?: boolean }) {
-  if (!values.length) return <div className="mini-empty">No probe assigned</div>;
+function MiniChart({ values, danger = false }: { values: number[] | null; danger?: boolean }) {
+  if (!values?.length) return <div className="mini-empty">No probe assigned</div>;
   const max = Math.max(...values, 1);
   const points = values
     .map((value, index) => `${values.length === 1 ? 60 : (index / (values.length - 1)) * 120},${35 - (value / max) * 29}`)
@@ -125,17 +123,17 @@ function ConfidenceRing({ value }: { value: number }) {
   const degrees = Math.round(value * 360);
   return (
     <div className="confidence-ring" style={{ background: `conic-gradient(var(--cyan) ${degrees}deg, var(--line) 0deg)` }}>
-      <div><strong>{Math.round(value * 100)}%</strong><span>evidence</span></div>
+      <div><strong>{Math.round(value * 100)}%</strong><span>confidence</span></div>
     </div>
   );
 }
 
 function SignalChart({ session }: { session: DemoSession }) {
-  const charted = session.probes.filter((probe) => probe.samples.length).slice(0, 2);
+  const charted = session.probes.filter((probe) => probe.samples?.length).slice(0, 2);
   const rows = (charted[0]?.samples ?? []).map((_, index) => ({
     time: `${index * 5}s`,
-    primary: charted[0]?.samples[index],
-    secondary: charted[1]?.samples[index],
+    primary: charted[0]?.samples?.[index],
+    secondary: charted[1]?.samples?.[index],
   }));
   return (
     <div className="chart-wrap">
@@ -143,16 +141,16 @@ function SignalChart({ session }: { session: DemoSession }) {
         <AreaChart data={rows} margin={{ top: 12, right: 8, left: -25, bottom: 0 }}>
           <defs>
             <linearGradient id="echoGradient" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor="#ff5c7a" stopOpacity={0.32} />
-              <stop offset="100%" stopColor="#ff5c7a" stopOpacity={0} />
+              <stop offset="0%" stopColor="var(--cyan)" stopOpacity={0.12} />
+              <stop offset="100%" stopColor="var(--cyan)" stopOpacity={0} />
             </linearGradient>
           </defs>
           <CartesianGrid stroke="var(--line)" vertical={false} />
           <XAxis dataKey="time" stroke="var(--muted)" fontSize={11} tickLine={false} axisLine={false} />
           <YAxis stroke="var(--muted)" fontSize={11} tickLine={false} axisLine={false} />
           <Tooltip contentStyle={{ background: "var(--surface)", color: "var(--text)", border: "1px solid var(--line)", borderRadius: 10, fontSize: 12 }} />
-          <Area type="monotone" dataKey="primary" stroke="#ff5c7a" strokeWidth={2} fill="url(#echoGradient)" name={charted[0] ? `${charted[0].probe} ${charted[0].role}` : "Signal"} />
-          {charted[1] && <Area type="monotone" dataKey="secondary" stroke="#23d5ab" strokeWidth={2} fill="transparent" name={`${charted[1].probe} ${charted[1].role}`} />}
+          <Area type="linear" dataKey="primary" stroke="var(--cyan)" strokeWidth={1.5} fill="url(#echoGradient)" name={charted[0] ? `${charted[0].probe} ${charted[0].role}` : "Signal"} />
+          {charted[1] && <Area type="linear" dataKey="secondary" stroke="var(--green)" strokeWidth={1.5} fill="transparent" name={`${charted[1].probe} ${charted[1].role}`} />}
         </AreaChart>
       </ResponsiveContainer>
     </div>
@@ -186,7 +184,8 @@ function AppShell({
   const [theme, setTheme] = useState<Theme>("dark");
 
   useEffect(() => {
-    const stored = window.localStorage.getItem("reweird-theme");
+    let stored: string | null = null;
+    try { stored = window.localStorage.getItem("reweird-theme"); } catch { /* Theme still works when browser storage is unavailable. */ }
     const nextTheme: Theme = stored === "light" || stored === "dark"
       ? stored
       : window.matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark";
@@ -198,7 +197,7 @@ function AppShell({
     const nextTheme: Theme = theme === "dark" ? "light" : "dark";
     setTheme(nextTheme);
     document.documentElement.dataset.theme = nextTheme;
-    window.localStorage.setItem("reweird-theme", nextTheme);
+    try { window.localStorage.setItem("reweird-theme", nextTheme); } catch { /* Keep the in-session preference. */ }
   };
 
   const sourceLabel = source === "browser"
@@ -210,11 +209,11 @@ function AppShell({
       <aside className={`sidebar ${mobileOpen ? "mobile-open" : ""}`}>
         <button className="mobile-close" onClick={() => setMobileOpen(false)} aria-label="Close menu"><X size={20} /></button>
         <div className="brand"><span className="brand-mark"><Waves size={22} /></span><span>Re<span>Weird</span></span></div>
-        <div className="project-switcher">
+        <button className="project-switcher" onClick={() => { setActive("profile"); setMobileOpen(false); }}>
           <span className="device-icon"><Cpu size={18} /></span>
           <div><small>Active project</small><strong>{projectName}</strong></div>
           <ChevronRight size={16} />
-        </div>
+        </button>
         <nav aria-label="Primary navigation">
           {navGroups.map((group) => (
             <div className="nav-group" key={group}>
@@ -228,16 +227,17 @@ function AppShell({
                   </button>
                 );
               })}
+              {group === "Workspace" && <button onClick={() => { onNewProject(); setMobileOpen(false); }}><Upload size={17} /><span>Upload project</span></button>}
             </div>
           ))}
         </nav>
         <div className="sidebar-bottom">
-          <button onClick={() => setActive("reports")}><GitBranch size={17} /> Report sync</button>
-          <button onClick={() => setActive("settings")}><Settings size={17} /> Settings</button>
+          <button onClick={() => { setActive("settings"); setMobileOpen(false); }} aria-current={active === "settings" ? "page" : undefined}><Settings size={17} /> Settings & status</button>
           <div className="operator"><span>RW</span><div><strong>Local session</strong><small>No user sign-in</small></div></div>
         </div>
       </aside>
 
+      {mobileOpen && <button className="nav-backdrop" onClick={() => setMobileOpen(false)} aria-label="Dismiss navigation" />}
       <main>
         <header className="topbar">
           <button className="mobile-menu" onClick={() => setMobileOpen(true)} aria-label="Open menu"><Menu size={20} /></button>
@@ -252,72 +252,15 @@ function AppShell({
             <button className="primary compact" onClick={onNewProject}><Plus size={16} /> New project</button>
           </div>
         </header>
-        <div className="content">{children}</div>
+        <div className={`content ${active === "dashboard" ? "workbench-content" : ""}`}>{children}</div>
       </main>
     </div>
   );
 }
 
-function DashboardView({ session, setActive }: { session: DemoSession; setActive: (view: View) => void }) {
-  const alertCount = session.evidence.rule_results.filter((rule) => rule.status === "fail").length;
-  const focus = session.probes.find((probe) => probe.probe === session.evidence.probe) ?? session.probes[0];
-  return (
-    <>
-      <section className="hero-row">
-        <div>
-          <p className="kicker">Evidence-first hardware diagnostics</p>
-          <h1>Find the fault. Prove the fix.</h1>
-          <p>Follow one clear path from project context and measured signals to diagnosis, the next safe test, and verification.</p>
-        </div>
-        <button className="secondary" onClick={() => setActive("live")}><Activity size={17} /> Open live session</button>
-      </section>
-
-      <section className="metric-grid">
-        <article className="metric-card"><span className="metric-icon green"><Radio size={18} /></span><div><small>Telemetry</small><strong>{session.telemetry_mode === "serial" ? (session.hardware_connected ? "Connected" : "Waiting") : "Simulated"}</strong><em>{session.raw_telemetry?.device_id ?? session.telemetry_mode ?? "simulator"} · {session.probes.length} probes</em></div></article>
-        <article className="metric-card"><span className="metric-icon cyan"><Gauge size={18} /></span><div><small>Measurement window</small><strong>{session.raw_telemetry ? `${session.raw_telemetry.window_ms / 1000}s` : "60s"}</strong><em>{session.measurement_id ? `Stored as #${session.measurement_id}` : "Normalized in memory"}</em></div></article>
-        <article className="metric-card"><span className={`metric-icon ${alertCount ? "red" : "green"}`}><TriangleAlert size={18} /></span><div><small>Active findings</small><strong>{alertCount}</strong><em>{alertCount ? `${focus?.probe ?? "Signal"} needs attention` : "All signals nominal"}</em></div></article>
-        <article className="metric-card"><span className="metric-icon violet"><ShieldCheck size={18} /></span><div><small>Safety state</small><strong>Protected</strong><em>PATCH output locked</em></div></article>
-      </section>
-
-      <section className="panel workflow-panel">
-        <div className="panel-heading"><div><span className="eyebrow">Current run</span><h2>Detect → Diagnose → Test → Verify</h2></div><span className="session-id">{session.id}</span></div>
-        <div className="workflow">
-          {session.timeline.map((step, index) => (
-            <div className={`workflow-step ${step.complete ? "complete" : ""} ${stageIndex[session.stage] === index ? "current" : ""}`} key={step.id}>
-              <div className="step-marker">{step.complete ? <Check size={16} /> : index + 1}</div>
-              <div><strong>{step.label}</strong><span>{step.detail}</span></div>
-              {index < session.timeline.length - 1 && <div className="step-line" />}
-            </div>
-          ))}
-        </div>
-      </section>
-
-      <section className="two-column">
-        <div className="panel">
-          <div className="panel-heading"><div><span className="eyebrow">Live signals</span><h2>Probe overview</h2></div><button className="text-button" onClick={() => setActive("live")}>View all <ChevronRight size={15} /></button></div>
-          <div className="compact-probes">
-            {session.probes.slice(0, 3).map((probe) => (
-              <div className="compact-probe" key={probe.probe}>
-                <span className="probe-name"><StatusDot status={probe.status} /><b>{probe.probe}</b> {probe.role}</span>
-                <MiniChart values={probe.samples} danger={probe.status === "intermittent"} />
-                <strong>{probe.value?.toFixed(probe.unit === "V" ? 2 : 1)} <small>{probe.unit}</small></strong>
-              </div>
-            ))}
-          </div>
-        </div>
-        <div className={`panel finding-card ${session.stage === "verify" ? "resolved" : ""}`}>
-          <div className="finding-title"><span><Sparkles size={18} /></span><div><small>Latest finding</small><h2>{session.diagnosis.headline}</h2></div></div>
-          <p>{session.diagnosis.summary}</p>
-          <div className="evidence-chips"><span><Check size={13} /> Profile {session.profile_id ?? "matched"}</span><span><Check size={13} /> Raw frame validated</span><span className={focus?.dropouts ? "danger-chip" : ""}>{focus?.dropouts ?? 0} dropouts</span></div>
-          <button className="primary full" onClick={() => setActive(session.stage === "verify" ? "verify" : "diagnosis")}>{session.stage === "verify" ? "View verification" : "Review diagnosis"}<ChevronRight size={17} /></button>
-        </div>
-      </section>
-    </>
-  );
-}
 
 function LiveView({ session }: { session: DemoSession }) {
-  const charted = session.probes.filter((probe) => probe.samples.length).slice(0, 2);
+  const charted = session.probes.filter((probe) => probe.samples?.length).slice(0, 2);
   return (
     <>
       <section className="page-heading"><div><p className="kicker">Session {session.id}</p><h1>Live diagnostics</h1><p>{session.telemetry_mode === "serial" ? "ESP32 serial" : "Simulator"} telemetry is normalized through the same contract used by every transport.</p></div><div className="live-badge"><span /> {session.telemetry_mode === "serial" ? "SERIAL" : "SIMULATED"} · {session.raw_telemetry ? `${(1000 / session.raw_telemetry.window_ms).toFixed(2)} Hz` : "No raw frame"}</div></section>
@@ -330,7 +273,7 @@ function LiveView({ session }: { session: DemoSession }) {
   );
 }
 
-function DiagnosisView({ session, onPlan, busy }: { session: DemoSession; onPlan: () => void; busy: boolean }) {
+function DiagnosisView({ session, source, onPlan, busy }: { session: DemoSession; source: "api" | "browser"; onPlan: () => void; busy: boolean }) {
   const tested = session.stage === "test" || session.stage === "repair";
   const focus = session.probes.find((probe) => probe.probe === session.evidence.probe);
   const expected = Object.entries(session.evidence.expected).slice(0, 3);
@@ -351,7 +294,7 @@ function DiagnosisView({ session, onPlan, busy }: { session: DemoSession; onPlan
           <div className="rules-list">{session.evidence.rule_results.map((rule) => <RuleRow rule={rule} key={rule.id} />)}</div>
         </div>
         <div className="panel interpretation-card">
-          <div className="interpretation-label"><Sparkles size={16} /> PROBE interpretation <span>mocked</span></div>
+          <div className="interpretation-label"><Microscope size={16} /> PROBE interpretation <span>{source === "browser" ? "Demo" : session.telemetry_mode === "serial" ? "Serial evidence" : "Simulated evidence"}</span></div>
           <h2>{session.diagnosis.summary}</h2>
           <p>Possible causes, ranked but not asserted as measured truth:</p>
           <ol>{session.diagnosis.possible_causes.map((cause, index) => <li key={cause}><span>{index + 1}</span>{cause}</li>)}</ol>
@@ -642,7 +585,7 @@ export default function Home() {
   };
 
   const view = useMemo(() => {
-    if (active === "dashboard") return <DashboardView session={session} setActive={setActive} />;
+    if (active === "dashboard") return <Workbench session={session} project={project} profile={profile} source={source} onNavigate={setActive} onUpload={() => setShowNewProject(true)} />;
     if (active === "profile") return <ProjectProfileView project={project} profile={profile} onSave={saveProfile} onConfirm={confirmProfile} />;
     if (active === "connect") return project ? <ProbePlanView project={project} plan={probePlan ?? project?.probe_plan ?? null} onConnected={confirmConnections} /> : <DemoProbePlanView plan={probePlan} onContinue={() => setActive("simulator")} />;
     if (active === "simulator") return <SimulatorView session={session} scenarios={scenarios} selected={selectedScenario} setSelected={setSelectedScenario} onRun={runScenario} onPlan={() => runTestAction("plan")} onDemoTest={() => runOriginalDemo("wiggle")} onDemoRepair={() => runOriginalDemo("repair")} busy={busy} />;
@@ -650,20 +593,22 @@ export default function Home() {
       if (project && session.profile_id !== profile?.id) return <ProjectLivePending project={project} profile={profile} plan={probePlan} />;
       return <LiveView session={session} />;
     }
-    if (active === "diagnosis") return <DiagnosisView session={session} onPlan={() => runTestAction("plan")} busy={busy} />;
+    if (active === "diagnosis") return project && session.profile_id !== profile?.id
+      ? <ProjectLivePending project={project} profile={profile} plan={probePlan} />
+      : <DiagnosisView session={session} source={source} onPlan={() => runTestAction("plan")} busy={busy} />;
     if (active === "verify" && legacyVerify) return <LegacyDemoVerifyView session={session} onReset={() => runOriginalDemo("reset")} busy={busy} />;
     if (active === "guided" || active === "verify") return <GuidedTestView workflow={workflow} recommendation={recommendation} busy={busy} error={testError} onPlan={() => runTestAction("plan")} onStart={() => runTestAction("start")} onCapture={() => runTestAction("capture")} onRemeasure={() => runTestAction("remeasure")} onCancel={() => runTestAction("cancel")} onRecordAction={recordUserAction} />;
     if (active === "history") return <HistoryReportView mode="history" />;
     if (active === "computer") return <ComputerDiagnosticsView />;
     if (active === "settings") return <SettingsStatusView />;
     return <HistoryReportView mode="reports" />;
-  }, [active, session, busy, project, profile, probePlan, scenarios, selectedScenario, workflow, recommendation, testError, legacyVerify]);
+  }, [active, session, source, busy, project, profile, probePlan, scenarios, selectedScenario, workflow, recommendation, testError, legacyVerify]);
 
   return (
     <AppShell active={active} setActive={setActive} session={session} source={source} projectName={project?.name ?? session.project_name} projectContext={project ? `${project.controller} · ${project.analysis_status}` : "ESP32 · Built-in demo"} hardwareConnected={source === "api" && session.telemetry_mode === "serial" && (!project || session.profile_id === profile?.id) ? session.hardware_connected : false} onNewProject={() => setShowNewProject(true)} onLoadDemo={loadDemoProject}>
       {view}
       {showNewProject && <NewProjectModal onClose={() => setShowNewProject(false)} onComplete={completeProjectAnalysis} onLoadDemo={loadDemoProject} />}
-      {toast && <div className="toast"><CheckCircle2 size={18} />{toast}</div>}
+      {toast && <div className="toast" role="status"><CheckCircle2 size={18} />{toast}</div>}
     </AppShell>
   );
 }

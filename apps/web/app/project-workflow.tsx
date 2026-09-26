@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   AlertTriangle,
   Cable,
@@ -67,6 +67,29 @@ export function NewProjectModal({
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState("");
   const [error, setError] = useState("");
+  const formRef = useRef<HTMLFormElement>(null);
+
+  useEffect(() => {
+    const previousFocus = document.activeElement as HTMLElement | null;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    formRef.current?.querySelector<HTMLInputElement>('input[required]')?.focus();
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      previousFocus?.focus();
+    };
+  }, []);
+
+  function handleDialogKey(event: React.KeyboardEvent<HTMLFormElement>) {
+    if (event.key === "Escape" && !busy) { event.preventDefault(); onClose(); }
+    if (event.key !== "Tab") return;
+    const controls = formRef.current?.querySelectorAll<HTMLElement>('button:not(:disabled), input:not(:disabled), textarea:not(:disabled), select:not(:disabled)');
+    if (!controls?.length) return;
+    const first = controls[0];
+    const last = controls[controls.length - 1];
+    if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
+    else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
+  }
 
   async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -110,9 +133,9 @@ export function NewProjectModal({
 
   return (
     <div className="modal-backdrop" role="presentation" onMouseDown={busy ? undefined : onClose}>
-      <form className="modal project-modal" onSubmit={submit} onMouseDown={(event) => event.stopPropagation()}>
+      <form ref={formRef} className="modal project-modal" role="dialog" aria-modal="true" aria-labelledby="upload-project-title" onKeyDown={handleDialogKey} onSubmit={submit} onMouseDown={(event) => event.stopPropagation()}>
         <div className="modal-head">
-          <div><span className="eyebrow">Layer 1 · Real input</span><h2>Create and analyze a project</h2></div>
+          <div><span className="eyebrow">01 / Project input</span><h2 id="upload-project-title">Create and analyze a project</h2></div>
           <button type="button" className="icon-button" onClick={onClose} disabled={busy} aria-label="Close"><X size={18} /></button>
         </div>
         <label>Project name<input required value={name} maxLength={120} onChange={(event) => setName(event.target.value)} /></label>

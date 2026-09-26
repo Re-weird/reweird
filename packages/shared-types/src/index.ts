@@ -9,7 +9,7 @@ export interface ProbeReading {
   unit: string;
   status: ProbeStatus;
   dropouts: number;
-  samples: number[];
+  samples: number[] | null;
 }
 
 export interface RuleResult {

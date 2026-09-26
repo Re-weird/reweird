@@ -25,13 +25,14 @@ test("source label distinguishes browser, API simulator, and serial", () => {
 
 test("physical break state requires matching real capture and confirmed setup", () => {
   const session = { hardware_connected: true, telemetry_mode: "serial", profile_id: "p", raw_telemetry: { profile_id: "p" }, measurement_id: 8 };
-  const profile = { id: "p", confirmed: true };
+  const profile = { id: "p", confirmed: true, probes: [{ role: "ECHO" }] };
   const plan = { profile_id: "p", connected: true };
   assert.equal(realBreakReady(session, "api", profile, plan), true);
   assert.equal(realBreakReady({ ...session, telemetry_mode: "simulator" }, "api", profile, plan), false);
   assert.equal(realBreakReady(session, "browser", profile, plan), false);
   assert.equal(realBreakReady(session, "api", profile, { ...plan, connected: false }), false);
   assert.equal(realBreakReady({ ...session, raw_telemetry: { profile_id: "other" } }, "api", profile, plan), false);
+  assert.equal(realBreakReady(session, "api", { ...profile, probes: [{ role: "POWER" }] }, plan), false);
 });
 
 test("success copy is gated on resolved deterministic VERIFY", () => {

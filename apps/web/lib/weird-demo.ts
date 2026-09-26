@@ -25,7 +25,8 @@ export function telemetryLabel(session: DemoSession, source: "api" | "browser"):
 export function realBreakReady(session: DemoSession, source: "api" | "browser", profile: ProjectProfile | null, plan: ProbePlan | null): boolean {
   return source === "api" && session.telemetry_mode === "serial" && session.hardware_connected === true &&
     Boolean(profile?.confirmed && plan?.connected && plan.profile_id === profile.id && session.profile_id === profile.id &&
-      session.raw_telemetry?.profile_id === profile.id && session.measurement_id);
+      session.raw_telemetry?.profile_id === profile.id && session.measurement_id &&
+      profile.probes?.some((probe) => /echo/i.test(probe.role)));
 }
 
 export function verifyHeadline(workflow: DiagnosticWorkflow | null): string | null {

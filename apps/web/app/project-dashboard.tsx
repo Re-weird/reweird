@@ -98,7 +98,7 @@ const ActivityBars = memo(function ActivityBars({ series }: { series: number[] }
           return (
             <div key={index} className="group relative flex h-full flex-1 items-end">
               <motion.span
-                className={cn("block w-full origin-bottom rounded-[3px]", value === 0 ? "bg-line-soft" : "bg-signal/80 group-hover:bg-signal")}
+                className={cn("block w-full origin-bottom rounded-[3px]", value === 0 ? "bg-graph/25" : "bg-graph/85 group-hover:bg-graph")}
                 style={{ height }}
                 initial={reduce ? false : { scaleY: 0 }}
                 animate={{ scaleY: 1 }}
@@ -120,45 +120,49 @@ const ActivityBars = memo(function ActivityBars({ series }: { series: number[] }
   );
 });
 
-/* GitHub-repo-list-style sparkline for one project. */
+/* GitHub-style activity graph for one project, in the contrasting graph color. */
 const Sparkline = memo(function Sparkline({ series, id }: { series: number[]; id: string }) {
   const reduce = useReducedMotion();
-  const width = 168;
-  const height = 38;
+  const width = 200;
+  const height = 44;
   const total = series.reduce((sum, value) => sum + value, 0);
   const max = Math.max(...series, 1);
   const step = width / (series.length - 1);
-  const points = series.map((value, index) => [index * step, height - 4 - (value / max) * (height - 10)] as const);
+  const points = series.map((value, index) => [index * step, height - 5 - (value / max) * (height - 12)] as const);
   const line = points.map(([x, y], index) => `${index ? "L" : "M"}${x.toFixed(1)},${y.toFixed(1)}`).join(" ");
   const area = `${line} L${width},${height} L0,${height} Z`;
   const gradient = `spark-${id}`;
+  const last = points[points.length - 1];
 
   return (
     <div className="flex flex-col items-end gap-1.5">
       <svg width={width} height={height} viewBox={`0 0 ${width} ${height}`} className="overflow-visible" role="img" aria-label={`${total} diagnostic sessions in the last ${WEEKS} weeks`}>
         <defs>
           <linearGradient id={gradient} x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="var(--cyan)" stopOpacity="0.28" />
-            <stop offset="100%" stopColor="var(--cyan)" stopOpacity="0" />
+            <stop offset="0%" stopColor="var(--graph)" stopOpacity={total > 0 ? 0.35 : 0.14} />
+            <stop offset="100%" stopColor="var(--graph)" stopOpacity="0" />
           </linearGradient>
         </defs>
-        {points.map(([x]) => <line key={x} x1={x} x2={x} y1={height - 3} y2={height} className="stroke-line-soft" strokeWidth="1" />)}
-        <line x1="0" x2={width} y1={height - 0.5} y2={height - 0.5} className="stroke-line-soft" strokeWidth="1" />
-        {total > 0 && <motion.path d={area} fill={`url(#${gradient})`} initial={reduce ? false : { opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.8, delay: 0.3, ease: EASE }} />}
+        <motion.path d={area} fill={`url(#${gradient})`} initial={reduce ? false : { opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.8, delay: 0.3, ease: EASE }} />
         <motion.path
           d={line}
           fill="none"
-          className={total > 0 ? "stroke-signal" : "stroke-border"}
-          strokeWidth="1.5"
+          className={total > 0 ? "stroke-graph" : "stroke-graph/60"}
+          strokeWidth="2"
           strokeLinecap="round"
           strokeLinejoin="round"
           initial={reduce ? false : { pathLength: 0 }}
           animate={{ pathLength: 1 }}
           transition={{ duration: 1, ease: EASE }}
         />
-        {total > 0 && <circle cx={points[points.length - 1][0]} cy={points[points.length - 1][1]} r="2.75" className="fill-signal stroke-chrome" strokeWidth="1.5" />}
+        {points.map(([x, y], index) => (
+          <circle key={index} cx={x} cy={y} r={index === points.length - 1 ? 3.25 : 1.6} className={index === points.length - 1 ? "fill-graph stroke-chrome" : "fill-graph/55"} strokeWidth={index === points.length - 1 ? 1.5 : 0} />
+        ))}
+        {total > 0 && !reduce && (
+          <motion.circle cx={last[0]} cy={last[1]} r="3.25" className="fill-graph" animate={{ r: [3.25, 9], opacity: [0.45, 0] }} transition={{ duration: 2.2, repeat: Infinity, ease: "easeOut" }} />
+        )}
       </svg>
-      <span className="font-mono text-[10px] text-subtle">{total === 0 ? "No sessions" : `${total} session${total === 1 ? "" : "s"}`} · {WEEKS} wk</span>
+      <span className="font-mono text-[10px] text-subtle"><span className="text-foreground">{total}</span> session{total === 1 ? "" : "s"} · {WEEKS} wk</span>
     </div>
   );
 });
@@ -277,8 +281,7 @@ export function ProjectDashboardView({ onNewProject }: { onNewProject: () => voi
       {/* Heading */}
       <motion.div variants={reveal} className="flex flex-col gap-6 pt-4 md:flex-row md:items-end md:justify-between">
         <div>
-          <span className="inline-flex rounded-full px-3 py-1 font-mono text-[10px] font-medium tracking-[0.2em] text-muted-foreground uppercase ring-1 ring-border">Workspace</span>
-          <h1 className="mt-4 flex items-baseline gap-3 text-3xl font-semibold tracking-tight text-foreground">
+          <h1 className="flex items-baseline gap-3 text-3xl font-semibold tracking-tight text-foreground">
             Projects
             <span className="font-mono text-base font-normal tabular-nums text-subtle">{projects ? counts.all : "—"}</span>
           </h1>

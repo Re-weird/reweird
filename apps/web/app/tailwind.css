@@ -65,6 +65,7 @@
   --color-ring: var(--cyan);
 
   --color-signal: var(--cyan);
+  --color-graph: var(--graph);
   --color-signal-soft: var(--cyan-soft);
   --color-pass: var(--green);
   --color-warn: var(--amber);

@@ -61,7 +61,8 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--cyan); outline-
 .brand { padding: 0 7px 24px; font-size: 21px; font-weight: 700; }
 .brand > span:last-child > span { color: var(--text); }
 .brand-mark { position: relative; overflow: hidden; flex: none; background: transparent; border: 0; width: 66px; height: 34px; border-radius: 0; }
-.brand-logo-image { position: absolute; left: -3px; top: -22px; width: 72px; height: 72px; max-width: none; }
+.brand-logo-image { position: absolute; left: -3px; top: -22px; width: 72px; height: 72px; max-width: none; filter: contrast(.55) brightness(1.3); }
+:root[data-theme="light"] .brand-logo-image { filter: none; }
 .project-switcher { width: 100%; cursor: pointer; text-align: left; border-radius: 8px; padding: 10px 7px; gap: 6px; margin-bottom: 25px; }
 .project-switcher small { text-transform: none; letter-spacing: 0; font-size: 10px; }
 .project-switcher strong { font-size: 11px; }

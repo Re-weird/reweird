@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import "./tailwind.css";
+import { Providers } from "./providers";
 import { AppStateProvider } from "@/lib/app-state";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { GlobalNav } from "./global-nav";
@@ -15,12 +16,14 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
   return (
     <html lang="en">
       <body>
-        <AppStateProvider>
-          <TooltipProvider delayDuration={150}>
-            <GlobalNav />
-            <AppChrome>{children}</AppChrome>
-          </TooltipProvider>
-        </AppStateProvider>
+        <Providers>
+          <AppStateProvider>
+            <TooltipProvider delayDuration={150}>
+              <GlobalNav />
+              <AppChrome>{children}</AppChrome>
+            </TooltipProvider>
+          </AppStateProvider>
+        </Providers>
       </body>
     </html>
   );

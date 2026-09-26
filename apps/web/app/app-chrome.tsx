@@ -1,6 +1,6 @@
 "use client";
 
-import { useParams } from "next/navigation";
+import { usePathname, useParams } from "next/navigation";
 import { CheckCircle2 } from "lucide-react";
 import { useAppState } from "@/lib/app-state";
 import { NewProjectModal } from "./project-workflow";
@@ -16,6 +16,10 @@ export function AppChrome({ children }: { children: React.ReactNode }) {
   const { showNewProject, setShowNewProject, completeProjectAnalysis, loadDemoProject, toast } = useAppState();
   // Inside a project the page takes the full width: no profile rail.
   const inProject = Boolean(useParams<{ id?: string }>()?.id);
+  // The public landing page and the legacy single-page workbench render
+  // their own full-page shells; don't wrap them in this app's chrome too.
+  const pathname = usePathname() ?? "/";
+  if (pathname === "/" || pathname.startsWith("/app")) return <>{children}</>;
   return (
     <main>
       <div className="content">

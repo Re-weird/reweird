@@ -413,6 +413,8 @@ export interface ProbePlan {
 
 export interface Project {
   id: string;
+  /** The verified Google account id that created this project; empty for anonymous/Demo Mode projects. */
+  owner_id?: string;
   name: string;
   description?: string;
   controller: string;

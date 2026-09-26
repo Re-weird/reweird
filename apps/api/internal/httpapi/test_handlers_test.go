@@ -126,7 +126,7 @@ func TestGuidedWorkflowRecoversAfterRestartAndPatchRemainsLocked(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer reopened.Close()
-	restarted := NewApp(diagnostics.NewEngine(signalanalysis.New()), reopened, simulator.NewUltrasonicSource(), "ultrasonic-demo", ProjectServices{})
+	restarted := NewApp(diagnostics.NewEngine(signalanalysis.New()), reopened, simulator.NewUltrasonicSource(), "ultrasonic-demo", ProjectServices{}, false)
 	response = doJSON(t, restarted, http.MethodGet, "/api/v1/tests/current", nil)
 	var recovered domain.DiagnosticWorkflow
 	decodeBody(t, response, &recovered)

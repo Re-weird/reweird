@@ -84,7 +84,7 @@ func TestHistoryAndDetailedReportPersistAfterRestart(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer reopened.Close()
-	restarted := NewApp(diagnostics.NewEngine(signalanalysis.New()), reopened, simulator.NewUltrasonicSource(), "ultrasonic-demo", ProjectServices{})
+	restarted := NewApp(diagnostics.NewEngine(signalanalysis.New()), reopened, simulator.NewUltrasonicSource(), "ultrasonic-demo", ProjectServices{}, false)
 	response = doJSON(t, restarted, http.MethodGet, "/api/v1/history/"+workflow.ID, nil)
 	decodeBody(t, response, &detail)
 	if detail.Summary.Status != domain.HistoryResolved || len(detail.Workflow.UserActions) != 2 {

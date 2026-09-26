@@ -72,6 +72,8 @@ func main() {
 		defer closer.Close()
 	}
 
+	authTokenSecret := os.Getenv("AUTH_TOKEN_SECRET")
+
 	geminiAPIKey := os.Getenv("GEMINI_API_KEY")
 	geminiModel := environment("GEMINI_MODEL", "gemini-3.5-flash-lite")
 	engine := diagnostics.NewEngineWithProbe(signalanalysis.New(), probe.NewService(os.Getenv("PROBE_SERVICE_URL")))
@@ -84,9 +86,9 @@ func main() {
 		vision.NewGemini(geminiAPIKey, geminiModel),
 		catalog,
 	)
-	app := httpapi.NewApp(engine, repository, source, profileID, httpapi.ProjectServices{Understanding: understanding, UploadRoot: uploadRoot})
+	app := httpapi.NewApp(engine, repository, source, profileID, httpapi.ProjectServices{Understanding: understanding, UploadRoot: uploadRoot}, authTokenSecret != "")
 
-	log.Printf("ReWeird API listening on %s (telemetry=%s, profile=%s, PATCH=locked)", net.JoinHostPort(host, port), source.Name(), profileID)
+	log.Printf("ReWeird API listening on %s (telemetry=%s, profile=%s, auth=%s, PATCH=locked)", net.JoinHostPort(host, port), source.Name(), profileID, authStatus(authTokenSecret != ""))
 	if err := app.Listen(net.JoinHostPort(host, port)); err != nil {
 		log.Fatal(err)
 	}
@@ -129,6 +131,13 @@ func seedDemoProfile(repository domain.Repository) error {
 		return err
 	}
 	return repository.SaveProfile(profile)
+}
+
+func authStatus(configured bool) string {
+	if configured {
+		return "google"
+	}
+	return "anonymous-only"
 }
 
 func environment(key, fallback string) string {

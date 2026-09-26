@@ -5,7 +5,10 @@ const nextConfig: NextConfig = {
   transpilePackages: ["@reweird/shared-types"],
   async rewrites() {
     const api = process.env.API_INTERNAL_URL ?? "http://127.0.0.1:8080";
-    return [{ source: "/api/:path*", destination: `${api}/api/:path*` }];
+    // Excludes /api/auth/* so NextAuth's own route handlers (app/api/auth/**)
+    // handle those requests instead of being proxied to the Go backend, which
+    // has no routes for them.
+    return [{ source: "/api/:path((?!auth/).*)", destination: `${api}/api/:path` }];
   },
 };
 

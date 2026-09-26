@@ -29,7 +29,7 @@ func (controller *Controller) createProject(ctx *fiber.Ctx) error {
 	if err != nil {
 		return internalError(ctx, err)
 	}
-	project := domain.Project{ID: id, Name: strings.TrimSpace(input.Name), Description: strings.TrimSpace(input.Description), Controller: strings.TrimSpace(input.Controller), LogicVoltage: input.LogicVoltage, AnalysisStatus: domain.AnalysisPending, Visibility: domain.VisibilityPrivate}
+	project := domain.Project{ID: id, OwnerID: ownerID(ctx), Name: strings.TrimSpace(input.Name), Description: strings.TrimSpace(input.Description), Controller: strings.TrimSpace(input.Controller), LogicVoltage: input.LogicVoltage, AnalysisStatus: domain.AnalysisPending, Visibility: domain.VisibilityPrivate}
 	if err := projects.Validate(project); err != nil {
 		return apiError(ctx, fiber.StatusUnprocessableEntity, "INVALID_PROJECT", err.Error())
 	}
@@ -58,7 +58,7 @@ func (controller *Controller) updateProjectVisibility(ctx *fiber.Ctx) error {
 	// a visibility read before this change.
 	controller.profileMu.Lock()
 	defer controller.profileMu.Unlock()
-	project, err := controller.findProject(ctx.Params("id"))
+	project, err := controller.findProject(ctx, ctx.Params("id"))
 	if err != nil {
 		return internalError(ctx, err)
 	}
@@ -80,11 +80,18 @@ func (controller *Controller) listProjects(ctx *fiber.Ctx) error {
 	if err != nil {
 		return internalError(ctx, err)
 	}
-	return ctx.JSON(items)
+	owner := ownerID(ctx)
+	visible := make([]domain.Project, 0, len(items))
+	for _, item := range items {
+		if item.OwnerID == owner {
+			visible = append(visible, item)
+		}
+	}
+	return ctx.JSON(visible)
 }
 
 func (controller *Controller) getProject(ctx *fiber.Ctx) error {
-	project, err := controller.findProject(ctx.Params("id"))
+	project, err := controller.findProject(ctx, ctx.Params("id"))
 	if err != nil {
 		return internalError(ctx, err)
 	}
@@ -97,7 +104,7 @@ func (controller *Controller) getProject(ctx *fiber.Ctx) error {
 func (controller *Controller) uploadProjectImage(ctx *fiber.Ctx) error {
 	controller.profileMu.Lock()
 	defer controller.profileMu.Unlock()
-	project, err := controller.findProject(ctx.Params("id"))
+	project, err := controller.findProject(ctx, ctx.Params("id"))
 	if err != nil {
 		return internalError(ctx, err)
 	}
@@ -154,7 +161,7 @@ func (controller *Controller) uploadProjectImage(ctx *fiber.Ctx) error {
 func (controller *Controller) uploadProjectCode(ctx *fiber.Ctx) error {
 	controller.profileMu.Lock()
 	defer controller.profileMu.Unlock()
-	project, err := controller.findProject(ctx.Params("id"))
+	project, err := controller.findProject(ctx, ctx.Params("id"))
 	if err != nil {
 		return internalError(ctx, err)
 	}
@@ -217,7 +224,7 @@ func (controller *Controller) analyzeProject(ctx *fiber.Ctx) error {
 	if controller.understanding == nil {
 		return apiError(ctx, fiber.StatusServiceUnavailable, "ANALYSIS_UNAVAILABLE", "Project understanding is not configured.")
 	}
-	project, err := controller.findProject(ctx.Params("id"))
+	project, err := controller.findProject(ctx, ctx.Params("id"))
 	if err != nil {
 		return internalError(ctx, err)
 	}
@@ -270,7 +277,7 @@ func (controller *Controller) analyzeProject(ctx *fiber.Ctx) error {
 }
 
 func (controller *Controller) getProjectProfile(ctx *fiber.Ctx) error {
-	if project, err := controller.findProject(ctx.Params("id")); err != nil {
+	if project, err := controller.findProject(ctx, ctx.Params("id")); err != nil {
 		return internalError(ctx, err)
 	} else if project == nil {
 		return apiError(ctx, fiber.StatusNotFound, "PROJECT_NOT_FOUND", "The requested project does not exist.")
@@ -288,7 +295,7 @@ func (controller *Controller) getProjectProfile(ctx *fiber.Ctx) error {
 func (controller *Controller) updateProjectProfile(ctx *fiber.Ctx) error {
 	controller.profileMu.Lock()
 	defer controller.profileMu.Unlock()
-	project, err := controller.findProject(ctx.Params("id"))
+	project, err := controller.findProject(ctx, ctx.Params("id"))
 	if err != nil {
 		return internalError(ctx, err)
 	}
@@ -346,7 +353,7 @@ func (controller *Controller) updateProjectProfile(ctx *fiber.Ctx) error {
 func (controller *Controller) confirmProjectProfile(ctx *fiber.Ctx) error {
 	controller.profileMu.Lock()
 	defer controller.profileMu.Unlock()
-	project, err := controller.findProject(ctx.Params("id"))
+	project, err := controller.findProject(ctx, ctx.Params("id"))
 	if err != nil {
 		return internalError(ctx, err)
 	}
@@ -400,7 +407,7 @@ func (controller *Controller) confirmProjectProfile(ctx *fiber.Ctx) error {
 }
 
 func (controller *Controller) getProbePlan(ctx *fiber.Ctx) error {
-	project, err := controller.findProject(ctx.Params("id"))
+	project, err := controller.findProject(ctx, ctx.Params("id"))
 	if err != nil {
 		return internalError(ctx, err)
 	}
@@ -420,7 +427,7 @@ func (controller *Controller) getProbePlan(ctx *fiber.Ctx) error {
 func (controller *Controller) confirmProbePlan(ctx *fiber.Ctx) error {
 	controller.profileMu.Lock()
 	defer controller.profileMu.Unlock()
-	project, err := controller.findProject(ctx.Params("id"))
+	project, err := controller.findProject(ctx, ctx.Params("id"))
 	if err != nil {
 		return internalError(ctx, err)
 	}
@@ -455,11 +462,23 @@ func (controller *Controller) confirmProbePlan(ctx *fiber.Ctx) error {
 	return ctx.JSON(project.ProbePlan)
 }
 
-func (controller *Controller) findProject(id string) (*domain.Project, error) {
+// findProject fetches a project and enforces ownership: a project with an
+// OwnerID is only ever returned to the matching verified caller. A mismatch
+// returns (nil, nil) — the same "not found" response as a missing ID — so a
+// non-owner (including an anonymous Demo Mode caller) can't distinguish
+// "doesn't exist" from "exists but isn't yours."
+func (controller *Controller) findProject(ctx *fiber.Ctx, id string) (*domain.Project, error) {
 	if strings.TrimSpace(id) == "" {
 		return nil, errors.New("project id is required")
 	}
-	return controller.repository.GetProject(id)
+	project, err := controller.repository.GetProject(id)
+	if err != nil || project == nil {
+		return project, err
+	}
+	if project.OwnerID != ownerID(ctx) {
+		return nil, nil
+	}
+	return project, nil
 }
 
 func (controller *Controller) projectProfileConfirmed(projectID string) (bool, error) {

@@ -1,5 +1,11 @@
-import { AccountDashboardView } from "./account-dashboard";
+import type { Metadata } from "next";
+import { LandingPage } from "./landing/LandingPage";
 
-export default function AccountPage() {
-  return <AccountDashboardView />;
+export const metadata: Metadata = {
+  title: "ReWeird — Hardware diagnostics, guided by evidence",
+  description: "Understand your project, measure what's actually happening, find the fault, verify the fix.",
+};
+
+export default function Page() {
+  return <LandingPage />;
 }

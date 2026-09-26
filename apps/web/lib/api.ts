@@ -16,6 +16,7 @@ import type {
   SimulatorScenarioList,
   TestRecommendation,
 } from "@reweird/shared-types";
+import { getAuthToken } from "./auth-token";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "";
 
@@ -38,6 +39,8 @@ async function requestJSON<T>(path: string, init?: RequestInit, timeoutMS = 8_00
     if (!(init?.body instanceof FormData) && init?.body && !headers.has("Content-Type")) {
       headers.set("Content-Type", "application/json");
     }
+    const token = await getAuthToken();
+    if (token) headers.set("Authorization", `Bearer ${token}`);
     const response = await fetch(`${API_URL}${path}`, {
       ...init,
       headers,

@@ -5,6 +5,7 @@ go 1.25.0
 require (
 	github.com/gofiber/fiber/v2 v2.52.13
 	github.com/gofiber/websocket/v2 v2.2.1
+	github.com/golang-jwt/jwt/v5 v5.3.1
 	github.com/gorilla/websocket v1.5.3
 	github.com/re-weird/reweird/packages/component-catalog v0.0.0
 	go.bug.st/serial v1.8.0

@@ -6,6 +6,7 @@ import (
 	"log"
 	"os"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -22,6 +23,7 @@ import (
 type Controller struct {
 	mu            sync.RWMutex
 	testMu        sync.Mutex
+	profileMu     sync.Mutex
 	stage         domain.Stage
 	reference     *domain.AnalysisResult
 	engine        *diagnostics.Engine
@@ -352,6 +354,8 @@ func (controller *Controller) getProfile(ctx *fiber.Ctx) error {
 }
 
 func (controller *Controller) saveProfile(ctx *fiber.Ctx) error {
+	controller.profileMu.Lock()
+	defer controller.profileMu.Unlock()
 	var profile domain.ProjectProfile
 	if err := ctx.BodyParser(&profile); err != nil {
 		return ctx.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "INVALID_JSON", "detail": err.Error()})
@@ -359,6 +363,51 @@ func (controller *Controller) saveProfile(ctx *fiber.Ctx) error {
 	if routeID := ctx.Params("id"); routeID != "" && routeID != profile.ID {
 		return ctx.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "PROFILE_ID_MISMATCH"})
 	}
+	// This legacy endpoint is draft-only. Project profiles must use the
+	// project-specific correction and confirmation workflow so clients cannot
+	// bypass conflict resolution or manufacture trusted probe mappings.
+	if profile.Confirmed || profile.ConfirmedAtMS != 0 || profile.ConfirmedBy != "" ||
+		strings.EqualFold(profile.AnalysisStatus, "CONFIRMED") || len(profile.Probes) != 0 {
+		return apiError(ctx, fiber.StatusConflict, "CONFIRMATION_REQUIRED", "Confirmation and probe configuration are server-controlled; use the project confirmation workflow.")
+	}
+	for _, component := range profile.Components {
+		if component.Confirmed {
+			return apiError(ctx, fiber.StatusConflict, "CONFIRMATION_REQUIRED", "Component confirmation is server-controlled.")
+		}
+	}
+	for _, connection := range profile.Connections {
+		if connection.Confirmed {
+			return apiError(ctx, fiber.StatusConflict, "CONFIRMATION_REQUIRED", "Connection confirmation is server-controlled.")
+		}
+	}
+	existing, err := controller.repository.GetProfile(profile.ID)
+	if err != nil {
+		return internalError(ctx, err)
+	}
+	if existing != nil && existing.Confirmed {
+		return apiError(ctx, fiber.StatusConflict, "PROFILE_CONFIRMED", "Confirmed profiles cannot be changed through draft routes.")
+	}
+	project, err := controller.repository.GetProject(profile.ID)
+	if err != nil {
+		return internalError(ctx, err)
+	}
+	if project != nil || profile.ProjectID != "" && profile.ProjectID != profile.ID {
+		return apiError(ctx, fiber.StatusConflict, "PROJECT_PROFILE_WORKFLOW_REQUIRED", "Use the project profile correction workflow for project-backed profiles.")
+	}
+	profile.Confirmed = false
+	profile.ConfirmedBy = ""
+	profile.ConfirmedAtMS = 0
+	profile.Probes = nil
+	profile.AnalysisStatus = "DRAFT"
+	profile.ProjectID = ""
+	if existing != nil {
+		profile.CreatedAtMS = existing.CreatedAtMS
+		profile.Version = existing.Version + 1
+	} else {
+		profile.CreatedAtMS = 0
+		profile.Version = 1
+	}
+	profile.UpdatedAtMS = 0
 	if err := profiles.Validate(profile); err != nil {
 		return ctx.Status(fiber.StatusUnprocessableEntity).JSON(fiber.Map{"error": "INVALID_PROFILE", "detail": err.Error()})
 	}

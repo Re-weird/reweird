@@ -17,6 +17,7 @@ import (
 	"github.com/re-weird/reweird/apps/api/internal/diagnostics"
 	"github.com/re-weird/reweird/apps/api/internal/domain"
 	"github.com/re-weird/reweird/apps/api/internal/profiles"
+	"github.com/re-weird/reweird/apps/api/internal/projects"
 	"github.com/re-weird/reweird/apps/api/internal/projectunderstanding"
 	"github.com/re-weird/reweird/apps/api/internal/signalanalysis"
 	"github.com/re-weird/reweird/apps/api/internal/simulator"
@@ -49,8 +50,19 @@ func TestProjectUploadAnalyzeCorrectConfirmAndProbePlan(t *testing.T) {
 	if len(analyzed.Analysis.Code.Pins) != 2 || len(analyzed.Profile.Connections) != 2 || analyzed.Profile.Confirmed {
 		t.Fatalf("analysis = %#v profile = %#v", analyzed.Analysis, analyzed.Profile)
 	}
+	beforePlan := doJSON(t, app, http.MethodGet, "/api/v1/projects/"+project.ID+"/probe-plan", nil)
+	if beforePlan.StatusCode != http.StatusConflict {
+		t.Fatalf("draft probe plan status = %d body=%s", beforePlan.StatusCode, readBody(t, beforePlan))
+	}
 
 	analyzed.Profile.ExpectedBehavior = "Measure distance and warn below 20 cm."
+	analyzed.Profile.Confirmed = true
+	analyzed.Profile.ConfirmedAtMS = 12345
+	analyzed.Profile.ConfirmedBy = "attacker"
+	analyzed.Profile.AnalysisStatus = "CONFIRMED"
+	analyzed.Profile.Probes = profiles.UltrasonicDemo().Probes
+	analyzed.Profile.Components[0].Confirmed = true
+	analyzed.Profile.Connections[0].Confirmed = true
 	correctedResponse := doJSON(t, app, http.MethodPut, "/api/v1/projects/"+project.ID+"/profile", analyzed.Profile)
 	if correctedResponse.StatusCode != http.StatusOK {
 		t.Fatalf("correct status = %d body=%s", correctedResponse.StatusCode, readBody(t, correctedResponse))
@@ -59,6 +71,9 @@ func TestProjectUploadAnalyzeCorrectConfirmAndProbePlan(t *testing.T) {
 	decodeBody(t, correctedResponse, &corrected)
 	if corrected.ExpectedBehavior != "Measure distance and warn below 20 cm." {
 		t.Fatalf("correction was not persisted: %#v", corrected)
+	}
+	if corrected.Confirmed || corrected.ConfirmedAtMS != 0 || corrected.ConfirmedBy != "" || len(corrected.Probes) != 0 || corrected.Components[0].Confirmed || corrected.Connections[0].Confirmed {
+		t.Fatalf("client-controlled confirmation fields survived draft correction: %#v", corrected)
 	}
 
 	confirmResponse := doJSON(t, app, http.MethodPost, "/api/v1/projects/"+project.ID+"/profile/confirm", nil)
@@ -73,6 +88,10 @@ func TestProjectUploadAnalyzeCorrectConfirmAndProbePlan(t *testing.T) {
 	if !confirmation.Profile.Confirmed || confirmation.Profile.ConfirmedBy != "user" || len(confirmation.ProbePlan.Instructions) != 3 {
 		t.Fatalf("confirmation = %#v", confirmation)
 	}
+	afterPlan := doJSON(t, app, http.MethodGet, "/api/v1/projects/"+project.ID+"/probe-plan", nil)
+	if afterPlan.StatusCode != http.StatusOK {
+		t.Fatalf("confirmed probe plan status = %d body=%s", afterPlan.StatusCode, readBody(t, afterPlan))
+	}
 
 	connectedResponse := doJSON(t, app, http.MethodPost, "/api/v1/projects/"+project.ID+"/probe-plan/confirm", nil)
 	if connectedResponse.StatusCode != http.StatusOK {
@@ -84,8 +103,111 @@ func TestProjectUploadAnalyzeCorrectConfirmAndProbePlan(t *testing.T) {
 	}
 }
 
+func TestGenericProfileRoutesCannotManufactureOrOverwriteConfirmation(t *testing.T) {
+	app, repository := testApp(t)
+	forged := profiles.UltrasonicDemo()
+	forged.ID = "forged-profile"
+	forged.ProjectID = ""
+	forged.ConfirmedBy = "attacker"
+	response := doJSON(t, app, http.MethodPost, "/api/v1/profiles", forged)
+	if response.StatusCode != http.StatusConflict {
+		t.Fatalf("forged POST status = %d body=%s", response.StatusCode, readBody(t, response))
+	}
+	stored, err := repository.GetProfile(forged.ID)
+	if err != nil || stored != nil {
+		t.Fatalf("forged profile stored = %#v err=%v", stored, err)
+	}
+
+	forged.Confirmed = false
+	forged.ConfirmedAtMS = 0
+	forged.ConfirmedBy = ""
+	forged.AnalysisStatus = "DRAFT"
+	forged.Probes = nil
+	for index := range forged.Components {
+		forged.Components[index].Confirmed = false
+	}
+	for index := range forged.Connections {
+		forged.Connections[index].Confirmed = false
+	}
+	response = doJSON(t, app, http.MethodPost, "/api/v1/profiles", forged)
+	if response.StatusCode != http.StatusCreated {
+		t.Fatalf("draft POST status = %d body=%s", response.StatusCode, readBody(t, response))
+	}
+	var draft domain.ProjectProfile
+	decodeBody(t, response, &draft)
+	if draft.Confirmed || draft.ConfirmedAtMS != 0 || draft.ConfirmedBy != "" || len(draft.Probes) != 0 {
+		t.Fatalf("draft has trusted state: %#v", draft)
+	}
+
+	forged.Confirmed = true
+	forged.ConfirmedAtMS = 12345
+	forged.ConfirmedBy = "attacker"
+	forged.Probes = profiles.UltrasonicDemo().Probes
+	response = doJSON(t, app, http.MethodPut, "/api/v1/profiles/"+forged.ID, forged)
+	if response.StatusCode != http.StatusConflict {
+		t.Fatalf("forged PUT status = %d body=%s", response.StatusCode, readBody(t, response))
+	}
+	stored, err = repository.GetProfile(forged.ID)
+	if err != nil || stored == nil || stored.Confirmed {
+		t.Fatalf("forged PUT changed draft = %#v err=%v", stored, err)
+	}
+
+	confirmed := profiles.UltrasonicDemo()
+	confirmed.Confirmed = false
+	confirmed.ConfirmedBy = ""
+	confirmed.ConfirmedAtMS = 0
+	confirmed.Probes = nil
+	response = doJSON(t, app, http.MethodPut, "/api/v1/profiles/ultrasonic-demo", confirmed)
+	if response.StatusCode != http.StatusConflict {
+		t.Fatalf("confirmed overwrite status = %d body=%s", response.StatusCode, readBody(t, response))
+	}
+	stored, err = repository.GetProfile("ultrasonic-demo")
+	if err != nil || stored == nil || !stored.Confirmed || len(stored.Probes) == 0 {
+		t.Fatalf("confirmed profile was downgraded: %#v err=%v", stored, err)
+	}
+}
+
+func TestProjectProfileCannotBeChangedOutsideDraftWorkflow(t *testing.T) {
+	app, repository := testApp(t)
+	project := createTestProject(t, app)
+	code := doJSON(t, app, http.MethodPost, "/api/v1/projects/"+project.ID+"/code", map[string]any{
+		"filename": "distance.ino", "code_text": "#define TRIG 5\n#define ECHO 18\nvoid setup(){pinMode(TRIG, OUTPUT);pinMode(ECHO, INPUT);}",
+	})
+	if code.StatusCode != http.StatusOK {
+		t.Fatalf("code status = %d body=%s", code.StatusCode, readBody(t, code))
+	}
+	analysis := doJSON(t, app, http.MethodPost, "/api/v1/projects/"+project.ID+"/analyze", nil)
+	if analysis.StatusCode != http.StatusOK {
+		t.Fatalf("analysis status = %d body=%s", analysis.StatusCode, readBody(t, analysis))
+	}
+	var analyzed struct {
+		Profile domain.ProjectProfile `json:"profile"`
+	}
+	decodeBody(t, analysis, &analyzed)
+	forged := analyzed.Profile
+	forged.Conflicts = nil
+	response := doJSON(t, app, http.MethodPut, "/api/v1/profiles/"+project.ID, forged)
+	if response.StatusCode != http.StatusConflict {
+		t.Fatalf("generic project-profile PUT status = %d body=%s", response.StatusCode, readBody(t, response))
+	}
+	confirm := doJSON(t, app, http.MethodPost, "/api/v1/projects/"+project.ID+"/profile/confirm", nil)
+	if confirm.StatusCode != http.StatusOK {
+		t.Fatalf("confirmation status = %d body=%s", confirm.StatusCode, readBody(t, confirm))
+	}
+	for _, path := range []string{"/code", "/analyze"} {
+		response = doJSON(t, app, http.MethodPost, "/api/v1/projects/"+project.ID+path, nil)
+		if response.StatusCode != http.StatusConflict {
+			t.Fatalf("confirmed project %s status = %d body=%s", path, response.StatusCode, readBody(t, response))
+		}
+	}
+	stored, err := repository.GetProfile(project.ID)
+	if err != nil || stored == nil || !stored.Confirmed {
+		t.Fatalf("confirmed project was downgraded: %#v err=%v", stored, err)
+	}
+}
+
 func TestImageMetadataAndInvalidCodeUpload(t *testing.T) {
-	app, _ := testApp(t)
+	app, _, _, uploadRoot := testAppWithVision(t, vision.SkippedAnalyzer{})
 	project := createTestProject(t, app)
 	png := append([]byte{0x89, 'P', 'N', 'G', '\r', '\n', 0x1a, '\n'}, make([]byte, 504)...)
 	imageResponse := doMultipart(t, app, "/api/v1/projects/"+project.ID+"/media", "file", "board.png", png)
@@ -97,9 +219,29 @@ func TestImageMetadataAndInvalidCodeUpload(t *testing.T) {
 	if withImage.Image == nil || withImage.Image.ContentType != "image/png" || withImage.Image.StorageRef == "" {
 		t.Fatalf("image metadata = %#v", withImage.Image)
 	}
+	replacement := append([]byte{0x89, 'P', 'N', 'G', '\r', '\n', 0x1a, '\n', 1}, make([]byte, 503)...)
+	replaceResponse := doMultipart(t, app, "/api/v1/projects/"+project.ID+"/media", "file", "replacement.png", replacement)
+	if replaceResponse.StatusCode != http.StatusOK {
+		t.Fatalf("replace image status = %d body=%s", replaceResponse.StatusCode, readBody(t, replaceResponse))
+	}
+	var replaced domain.Project
+	decodeBody(t, replaceResponse, &replaced)
+	entries, err := os.ReadDir(filepath.Join(uploadRoot, project.ID))
+	if err != nil || len(entries) != 1 || replaced.Image == nil || replaced.Image.StorageRef == withImage.Image.StorageRef {
+		t.Fatalf("image cleanup: entries=%v project=%#v err=%v", entries, replaced, err)
+	}
+	oversized := append([]byte{0x89, 'P', 'N', 'G', '\r', '\n', 0x1a, '\n'}, make([]byte, projects.MaxImageBytes)...)
+	largeResponse := doMultipart(t, app, "/api/v1/projects/"+project.ID+"/media", "file", "large.png", oversized)
+	if largeResponse.StatusCode != http.StatusRequestEntityTooLarge {
+		t.Fatalf("oversized image status = %d body=%s", largeResponse.StatusCode, readBody(t, largeResponse))
+	}
 	badResponse := doMultipart(t, app, "/api/v1/projects/"+project.ID+"/code", "file", "firmware.bin", []byte{0, 1, 2})
 	if badResponse.StatusCode != http.StatusUnsupportedMediaType {
 		t.Fatalf("binary code status = %d body=%s", badResponse.StatusCode, readBody(t, badResponse))
+	}
+	largeCode := doJSON(t, app, http.MethodPost, "/api/v1/projects/"+project.ID+"/code", map[string]any{"filename": "large.ino", "code_text": strings.Repeat("x", projects.MaxCodeBytes+1)})
+	if largeCode.StatusCode != http.StatusRequestEntityTooLarge {
+		t.Fatalf("oversized code status = %d body=%s", largeCode.StatusCode, readBody(t, largeCode))
 	}
 }
 

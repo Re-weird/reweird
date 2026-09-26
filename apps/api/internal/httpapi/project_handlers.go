@@ -63,12 +63,21 @@ func (controller *Controller) getProject(ctx *fiber.Ctx) error {
 }
 
 func (controller *Controller) uploadProjectImage(ctx *fiber.Ctx) error {
+	controller.profileMu.Lock()
+	defer controller.profileMu.Unlock()
 	project, err := controller.findProject(ctx.Params("id"))
 	if err != nil {
 		return internalError(ctx, err)
 	}
 	if project == nil {
 		return apiError(ctx, fiber.StatusNotFound, "PROJECT_NOT_FOUND", "Create the project before uploading an image.")
+	}
+	confirmed, err := controller.projectProfileConfirmed(project.ID)
+	if err != nil {
+		return internalError(ctx, err)
+	}
+	if confirmed {
+		return apiError(ctx, fiber.StatusConflict, "PROFILE_CONFIRMED", "Confirmed profiles are immutable; create an explicit revision before replacing project inputs.")
 	}
 	header, err := ctx.FormFile("file")
 	if err != nil {
@@ -79,13 +88,28 @@ func (controller *Controller) uploadProjectImage(ctx *fiber.Ctx) error {
 		return apiError(ctx, fiber.StatusBadRequest, "IMAGE_READ_FAILED", "The uploaded image could not be read.")
 	}
 	defer file.Close()
-	media, err := projects.SaveImage(controller.uploadRoot, project.ID, header.Filename, file)
+	if project.Image != nil {
+		if err := projects.PruneObsoleteImages(controller.uploadRoot, project.ID, project.Image.StorageRef); err != nil {
+			return internalError(ctx, err)
+		}
+	}
+	codeBytes := int64(0)
+	if project.Code != nil {
+		codeBytes = project.Code.SizeBytes
+	}
+	media, err := projects.SaveImage(controller.uploadRoot, project.ID, header.Filename, codeBytes, file)
 	if err != nil {
+		if errors.Is(err, projects.ErrStorageLimit) || errors.Is(err, projects.ErrPayloadTooLarge) {
+			return apiError(ctx, fiber.StatusRequestEntityTooLarge, "UPLOAD_LIMIT_EXCEEDED", err.Error())
+		}
 		return apiError(ctx, fiber.StatusUnsupportedMediaType, "INVALID_IMAGE", err.Error())
 	}
 	project.Image = media
 	resetProjectAnalysis(project)
 	if err := controller.repository.SaveProject(*project); err != nil {
+		return internalError(ctx, err)
+	}
+	if err := projects.PruneObsoleteImages(controller.uploadRoot, project.ID, media.StorageRef); err != nil {
 		return internalError(ctx, err)
 	}
 	stored, err := controller.repository.GetProject(project.ID)
@@ -96,12 +120,21 @@ func (controller *Controller) uploadProjectImage(ctx *fiber.Ctx) error {
 }
 
 func (controller *Controller) uploadProjectCode(ctx *fiber.Ctx) error {
+	controller.profileMu.Lock()
+	defer controller.profileMu.Unlock()
 	project, err := controller.findProject(ctx.Params("id"))
 	if err != nil {
 		return internalError(ctx, err)
 	}
 	if project == nil {
 		return apiError(ctx, fiber.StatusNotFound, "PROJECT_NOT_FOUND", "Create the project before uploading code.")
+	}
+	confirmed, err := controller.projectProfileConfirmed(project.ID)
+	if err != nil {
+		return internalError(ctx, err)
+	}
+	if confirmed {
+		return apiError(ctx, fiber.StatusConflict, "PROFILE_CONFIRMED", "Confirmed profiles are immutable; create an explicit revision before replacing project inputs.")
 	}
 	var code *domain.ProjectCode
 	if strings.Contains(strings.ToLower(ctx.Get("Content-Type")), "multipart/form-data") {
@@ -129,6 +162,9 @@ func (controller *Controller) uploadProjectCode(ctx *fiber.Ctx) error {
 		code, err = projects.ReadCode(input.Filename, strings.NewReader(input.CodeText))
 	}
 	if err != nil {
+		if errors.Is(err, projects.ErrPayloadTooLarge) {
+			return apiError(ctx, fiber.StatusRequestEntityTooLarge, "UPLOAD_LIMIT_EXCEEDED", err.Error())
+		}
 		return apiError(ctx, fiber.StatusUnsupportedMediaType, "INVALID_CODE", err.Error())
 	}
 	project.Code = code
@@ -144,6 +180,8 @@ func (controller *Controller) uploadProjectCode(ctx *fiber.Ctx) error {
 }
 
 func (controller *Controller) analyzeProject(ctx *fiber.Ctx) error {
+	controller.profileMu.Lock()
+	defer controller.profileMu.Unlock()
 	if controller.understanding == nil {
 		return apiError(ctx, fiber.StatusServiceUnavailable, "ANALYSIS_UNAVAILABLE", "Project understanding is not configured.")
 	}
@@ -153,6 +191,13 @@ func (controller *Controller) analyzeProject(ctx *fiber.Ctx) error {
 	}
 	if project == nil {
 		return apiError(ctx, fiber.StatusNotFound, "PROJECT_NOT_FOUND", "The requested project does not exist.")
+	}
+	confirmed, err := controller.projectProfileConfirmed(project.ID)
+	if err != nil {
+		return internalError(ctx, err)
+	}
+	if confirmed {
+		return apiError(ctx, fiber.StatusConflict, "PROFILE_CONFIRMED", "Confirmed profiles are immutable; create an explicit revision before replacing project inputs.")
 	}
 	if project.Image == nil && project.Code == nil {
 		return apiError(ctx, fiber.StatusUnprocessableEntity, "EMPTY_PROJECT", "Upload an image or provide project code before analysis.")
@@ -209,6 +254,8 @@ func (controller *Controller) getProjectProfile(ctx *fiber.Ctx) error {
 }
 
 func (controller *Controller) updateProjectProfile(ctx *fiber.Ctx) error {
+	controller.profileMu.Lock()
+	defer controller.profileMu.Unlock()
 	project, err := controller.findProject(ctx.Params("id"))
 	if err != nil {
 		return internalError(ctx, err)
@@ -236,10 +283,17 @@ func (controller *Controller) updateProjectProfile(ctx *fiber.Ctx) error {
 	submitted.Confirmed = false
 	submitted.ConfirmedAtMS = 0
 	submitted.ConfirmedBy = ""
+	submitted.AnalysisStatus = "DRAFT"
 	submitted.CreatedAtMS = existing.CreatedAtMS
 	submitted.UpdatedAtMS = existing.UpdatedAtMS
 	submitted.Probes = nil
 	markUserCorrections(&submitted, *existing)
+	for index := range submitted.Components {
+		submitted.Components[index].Confirmed = false
+	}
+	for index := range submitted.Connections {
+		submitted.Connections[index].Confirmed = false
+	}
 	if profileDraftChanged(submitted, *existing) {
 		submitted.Version++
 	}
@@ -258,6 +312,8 @@ func (controller *Controller) updateProjectProfile(ctx *fiber.Ctx) error {
 }
 
 func (controller *Controller) confirmProjectProfile(ctx *fiber.Ctx) error {
+	controller.profileMu.Lock()
+	defer controller.profileMu.Unlock()
 	project, err := controller.findProject(ctx.Params("id"))
 	if err != nil {
 		return internalError(ctx, err)
@@ -273,6 +329,9 @@ func (controller *Controller) confirmProjectProfile(ctx *fiber.Ctx) error {
 		return apiError(ctx, fiber.StatusNotFound, "PROFILE_NOT_FOUND", "Analyze the project before confirming its profile.")
 	}
 	if profile.Confirmed {
+		if project.ProbePlan == nil || project.ProbePlan.ProfileID != profile.ID {
+			return apiError(ctx, fiber.StatusConflict, "PROBE_PLAN_NOT_READY", "Confirmed profile is missing its generated probe plan; manual review is required.")
+		}
 		return ctx.JSON(fiber.Map{"profile": profile, "probe_plan": project.ProbePlan})
 	}
 	if err := profiles.ValidateConfirmable(*profile); err != nil {
@@ -316,13 +375,19 @@ func (controller *Controller) getProbePlan(ctx *fiber.Ctx) error {
 	if project == nil {
 		return apiError(ctx, fiber.StatusNotFound, "PROJECT_NOT_FOUND", "The requested project does not exist.")
 	}
-	if project.ProbePlan == nil {
+	profile, err := controller.repository.GetProfile(project.ID)
+	if err != nil {
+		return internalError(ctx, err)
+	}
+	if profile == nil || !profile.Confirmed || project.ProbePlan == nil || project.ProbePlan.ProfileID != profile.ID {
 		return apiError(ctx, fiber.StatusConflict, "PROBE_PLAN_NOT_READY", "Confirm the Project Profile before requesting probe placement.")
 	}
 	return ctx.JSON(project.ProbePlan)
 }
 
 func (controller *Controller) confirmProbePlan(ctx *fiber.Ctx) error {
+	controller.profileMu.Lock()
+	defer controller.profileMu.Unlock()
 	project, err := controller.findProject(ctx.Params("id"))
 	if err != nil {
 		return internalError(ctx, err)
@@ -330,7 +395,11 @@ func (controller *Controller) confirmProbePlan(ctx *fiber.Ctx) error {
 	if project == nil {
 		return apiError(ctx, fiber.StatusNotFound, "PROJECT_NOT_FOUND", "The requested project does not exist.")
 	}
-	if project.ProbePlan == nil {
+	profile, err := controller.repository.GetProfile(project.ID)
+	if err != nil {
+		return internalError(ctx, err)
+	}
+	if profile == nil || !profile.Confirmed || project.ProbePlan == nil || project.ProbePlan.ProfileID != profile.ID {
 		return apiError(ctx, fiber.StatusConflict, "PROBE_PLAN_NOT_READY", "Confirm the Project Profile before confirming probe connections.")
 	}
 	project.ProbePlan.Connected = true
@@ -359,6 +428,14 @@ func (controller *Controller) findProject(id string) (*domain.Project, error) {
 		return nil, errors.New("project id is required")
 	}
 	return controller.repository.GetProject(id)
+}
+
+func (controller *Controller) projectProfileConfirmed(projectID string) (bool, error) {
+	profile, err := controller.repository.GetProfile(projectID)
+	if err != nil {
+		return false, err
+	}
+	return profile != nil && profile.Confirmed, nil
 }
 
 func resetProjectAnalysis(project *domain.Project) {

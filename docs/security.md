@@ -1,5 +1,9 @@
 # Security model
 
+> **Not safe for public deployment.** ReWeird currently assumes a local or
+> explicitly trusted hackathon network. Keep all published ports on loopback;
+> the shared API token is not an end-to-end browser login or per-user identity.
+
 ## Current controls
 
 - PATCH output is disabled in the MVP.
@@ -28,6 +32,18 @@
   content sniffing identifies PNG or JPEG. Code is limited to 512 KiB, restricted
   to supported text extensions, validated as UTF-8/non-binary, and never
   compiled, imported, evaluated, or executed.
+- Generic `/api/v1/profiles` writes accept drafts only, cannot change
+  project-backed or confirmed profiles, and cannot set confirmation metadata
+  or generated probe configurations. Only the project confirmation endpoint
+  can confirm a profile after conflict checks and probe-plan generation.
+- Each project keeps one current image. A second image may exist only during
+  replacement; after the new reference is saved, obsolete project images are
+  removed. At most two image files and 11 MiB of image-plus-code storage are
+  allowed during replacement; the current image is still limited to 5 MiB and
+  code to 512 KiB. Existing diagnostic records are not deleted by image cleanup.
+- The optional understanding service limits `/understand` requests to 8 MiB,
+  eight source files, 512 KiB per source file, 1 MiB total source text, and
+  a 5 MiB decoded image. Oversized requests return 413 or validation 422.
 - Original filenames are reduced to safe basenames. Media is stored under a
   generated content-hash name inside the configured upload root, with path
   containment checks and exclusive file creation.

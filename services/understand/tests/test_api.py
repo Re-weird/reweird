@@ -116,3 +116,26 @@ def test_post_understand_unsupported_language_only_is_insufficient_information(
 def test_post_understand_malformed_request_body_returns_422(client: TestClient) -> None:
     response = client.post("/understand", json={})
     assert response.status_code == 422
+
+
+def test_post_understand_rejects_too_many_source_files(client: TestClient) -> None:
+    response = client.post(
+        "/understand",
+        json={"files": [{"path": f"file-{index}.ino", "content": "x"} for index in range(9)]},
+    )
+    assert response.status_code == 422
+
+
+def test_post_understand_rejects_oversized_and_malformed_images(client: TestClient) -> None:
+    import base64
+
+    oversized = base64.b64encode(b"x" * (5 * 1024 * 1024 + 1)).decode()
+    response = client.post("/understand", json={"files": [], "image": {"mime_type": "image/png", "data_base64": oversized}})
+    assert response.status_code == 422
+    response = client.post("/understand", json={"files": [], "image": {"mime_type": "image/png", "data_base64": "not-base64"}})
+    assert response.status_code == 422
+
+
+def test_post_understand_rejects_body_over_8_mib(client: TestClient) -> None:
+    response = client.post("/understand", content=b"x" * (8 * 1024 * 1024 + 1))
+    assert response.status_code == 413

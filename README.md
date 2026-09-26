@@ -6,6 +6,11 @@ ReWeird combines real measurements, project context, deterministic engineering
 rules, guided follow-up tests, and repair verification. It is deliberately not a
 chatbot that guesses at hardware failures.
 
+> **Local/trusted demo only.** Do not expose the web app, Go API, PROBE, or
+> optional understanding service directly to an untrusted or public network.
+> The optional shared `REWEIRD_API_TOKEN` does not provide browser user
+> authentication. See [the security model](docs/security.md).
+
 The included hackathon MVP demonstrates the complete loop:
 
 > **Detect → Diagnose → Test → Verify**

@@ -1,0 +1,87 @@
+# Project Hub Redesign — Checklist
+
+Living doc. Keep adding decisions as they're finalized. Build starts once this
+is stable — items get checked off during implementation, not before.
+
+---
+
+## Finalized decisions
+
+- [x] **Dashboard = project hub, not a working diagnostic surface.** GitHub-style:
+  list of projects, create new project. No live probe cards, no charts on
+  the dashboard itself.
+- [x] **Everything else is per-project.** Live signals, diagnosis, PROBE,
+  guided tests, VERIFY, computer diagnostics, git sync, history/reports —
+  all live inside a project's own pages, reached from the dashboard.
+- [x] **Real multi-user auth**, not a placeholder. Users log in; each user
+  only sees their own projects.
+
+## Open — needs a decision before building
+
+- [ ] Session strategy: cookie+server-side session vs JWT
+- [ ] Signup flow: open signup, invite-only, or single-admin-seeds-users?
+- [ ] Password requirements / hashing lib (Go: bcrypt/argon2)
+- [ ] What happens to existing un-owned projects already in the DB (migrate
+  to a default user, or wipe dev data)?
+- [ ] Dashboard project card content: name, controller, last diagnosis
+  status, last activity time — confirm exact fields
+- [ ] Per-project page structure: single page with tabs, or separate routes
+  per feature (`/projects/:id/live`, `/projects/:id/diagnosis`, etc.)?
+- [ ] Combined Mode and PATCH have no UI yet (backend not ready) — confirm
+  they stay out of scope for this redesign
+
+---
+
+## BACKEND
+
+### Auth (new)
+- [ ] `users` table migration: id, email, password_hash, created_at
+- [ ] Signup endpoint
+- [ ] Login endpoint (issues session/token per decision above)
+- [ ] Logout endpoint
+- [ ] Auth middleware on all `/api/v1/*` routes
+- [ ] `owner_id` column on `projects` table + migration
+- [ ] Scope every project-related endpoint to the authenticated user's
+  `owner_id` (list, get, media, code, analyze, profile, probe-plan, tests,
+  history, reports, git — anything keyed by project id)
+- [ ] Decide + implement handling of existing unowned dev-data projects
+
+### Existing (already built, just needs project-scoping wired through)
+- [x] `GET/POST /api/v1/projects`, `GET /api/v1/projects/:id`
+- [x] Project media/code upload + analyze
+- [x] Project profile get/update/confirm
+- [x] Probe plan get/confirm
+- [x] Diagnostics, PROBE, tests, VERIFY, computer diagnostics, git sync,
+  history/reports — all already project- or session-scoped at the data
+  level, just need the owner check added
+
+## FRONTEND
+
+### New
+- [ ] Login page
+- [ ] Signup page
+- [ ] Auth state (logged in/out) + redirect-to-login guard on all routes
+- [ ] Logout action
+- [ ] Dashboard rebuilt as project list ("my projects") + "new project"
+  action — replace current `DashboardView` probe-card layout
+- [ ] Basic account settings (at minimum: logout, maybe email display)
+
+### Restructure existing (already built, move under a project route)
+- [ ] Live/probes view
+- [ ] Diagnosis view (evidence, PROBE explanation, next test)
+- [ ] Guided test view
+- [ ] Computer diagnostics view
+- [ ] History/reports view + git-sync panel
+- [ ] Probe plan view
+- [ ] Project workflow (upload/profile/confirm) — becomes the project's
+  own onboarding, not a modal off the old dashboard
+
+---
+
+## Explicitly out of scope for this pass
+
+- Video upload (backend doesn't support it yet)
+- Combined Mode UI (backend evidence not wired yet)
+- PATCH UI (locked, no hardware output path yet)
+- Hardware bench validation (separate physical-layer work, unrelated to
+  this redesign)

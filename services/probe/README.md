@@ -25,6 +25,81 @@ PROBE never writes measurements or addresses hardware directly. It has no
 `/patch` route and never will — hardware control is a separate, permanently
 locked boundary in the Go API (`HTTP 423`).
 
+## ReWire Intelligence Layer — overview (Milestone 8)
+
+> **The LLM reasons about evidence. It does not create evidence.**
+
+### What it does
+
+- Turns a user's own source code (and optionally a photo) into a proposed,
+  **unconfirmed** `ProjectProfileProposal` (`services/understand`, M3).
+- Turns a component catalog entry into a deterministic, datasheet-sourced
+  electrical specification (M4).
+- Runs deterministic rules against submitted `StructuredEvidence`, then asks
+  Gemini (or a deterministic fake) to explain/rank hypotheses grounded in
+  that evidence, plus a deterministically recommended next test (M1/M2).
+- Runs that loop repeatedly as an auditable, append-only `DiagnosticSession`
+  as real new evidence arrives (M5).
+- Lets Gemini/Python **propose** a narrow, named kind of temporary
+  diagnostic patch, and **verifies** its real effect from new evidence with
+  a deterministic before/after comparison (M6).
+- Persists/exports that whole history, and optionally records
+  measurements/summaries to sponsor storage/analytics systems (M7).
+
+### What it does NOT do
+
+- It does not execute anything on hardware. There is no `/patch` route, no
+  GPIO/serial code, no waveform generation, and no firmware access anywhere
+  in this service. Go's `PATCH_LOCKED` gate is the sole, unmodified
+  authority for hardware execution.
+- It does not let Gemini invent a measurement, a specification value, or a
+  rule's pass/fail status. Every `MEASURED`/`DERIVED`/`SPECIFICATION`/
+  `BASELINE`/`SOFTWARE` fact is deterministic Python; Gemini's own output is
+  always tagged `AI_INTERPRETATION` and is structurally incapable of
+  becoming any of the other five.
+- It does not treat a stored/external record (Mongo, Tiger, Snowflake, a
+  prior hypothesis, an "executed" flag) as new diagnostic evidence.
+- It does not confirm a `ProjectProfileProposal`, assign a `P1`-`P6` probe
+  channel, or submit anything to the Go API - those remain separate, later,
+  human steps.
+
+### Offline golden demo
+
+    cd services/probe
+    uv run python demo/golden_demo.py
+
+Requires no API keys, no cloud credentials, no hardware, no network, and no
+frontend - it uses the exact same safe defaults (`fake`/`memory`/`none`) a
+fresh clone already has. It walks the complete flow end to end: source code
+→ Project Understanding → Component Intelligence → StructuredEvidence →
+PROBE → closed-loop session with a second, real evidence submission →
+PATCH proposal → a clearly-labeled *simulated* external execution record →
+new after-evidence → VERIFY → persistence round-trip → safe export -
+asserting a genuinely `SUPPORTED` result plus separate, non-faked
+`NOT_SUPPORTED`/`INCONCLUSIVE` demonstrations.
+
+### Provenance model
+
+`SOFTWARE` (tree-sitter facts) · `MEASURED`/`DERIVED` (telemetry-derived
+facts) · `SPECIFICATION` (catalog-derived, datasheet-sourced) · `BASELINE`
+(a trusted prior capture) · `AI_INTERPRETATION` (Gemini/fake explanation
+only). Every one of the first five is deterministic Python; only the last
+is ever produced by an AI provider, and nothing converts one into another.
+
+### Safety model
+
+Python/Gemini **propose** (a hypothesis, a next test, a patch). Go **owns**
+hardware safety/authorization/control. **VERIFY requires new measured
+evidence** - an external "executed" flag is operational metadata, never
+proof of electrical behavior, and can never by itself produce a `SUPPORTED`
+verification.
+
+### Optional sponsor configuration
+
+All optional and off by default (`memory`/`none`) - see "History persistence
++ sponsor integrations" below for the full IMPLEMENTED/OPTIONAL/CONFIGURED
+table (Gemini, MongoDB Atlas, Tiger Data, Snowflake, DigitalOcean, GoDaddy).
+
 ## Gemini provider (Milestone 2)
 
 `GeminiAIProvider` reasons only over the same `StructuredEvidence` plus the
@@ -289,10 +364,10 @@ defaults (`DIAGNOSTIC_REPOSITORY=memory`, `TELEMETRY_SINK=none`,
 
 | System | Role | Status |
 |---|---|---|
-| **Gemini** | AI reasoning/explanation for hypotheses and patch-proposal drafting (Milestones 2, 6) | **IMPLEMENTED** (default: `fake`, network-free; real client behind `PROBE_AI_PROVIDER=gemini` + `GEMINI_API_KEY`) |
-| **MongoDB Atlas** | Persistent diagnostic session/history documents (`sessions`, `patch_proposals`, `events` collections) | **IMPLEMENTED**, **OPTIONAL** (default: `memory`; real adapter behind `DIAGNOSTIC_REPOSITORY=mongodb` + `MONGODB_URI`) |
-| **Tiger Data** (PostgreSQL-compatible) | Time-series electrical measurement storage, separate from session documents | **IMPLEMENTED**, **OPTIONAL** (default: `none`; real adapter behind `TELEMETRY_SINK=tiger` + `TIGER_DATABASE_URL`) |
-| **Snowflake** | Optional diagnostic analytics/export summaries | **ADAPTER BOUNDARY ONLY** - the real `snowflake-connector-python` SDK is deliberately not vendored (large transitive dependency tree); `ANALYTICS_SINK=snowflake` fails clearly at startup unless that package is installed separately. **CONFIGURED** requires `SNOWFLAKE_ACCOUNT`/`_USER`/`_PASSWORD`/`_DATABASE`/`_WAREHOUSE`; **NOT CONFIGURED** by default |
+| **Gemini** | AI reasoning/explanation for hypotheses and patch-proposal drafting (Milestones 2, 6) | **IMPLEMENTED**, **NOT CONFIGURED** by default (`fake`, network-free); real client behind `PROBE_AI_PROVIDER=gemini` + `GEMINI_API_KEY`; **DEMOED OFFLINE** in the golden demo and default test suite |
+| **MongoDB Atlas** | Persistent diagnostic session/history documents (`sessions`, `patch_proposals`, `events` collections) | **IMPLEMENTED**, **OPTIONAL**, **NOT CONFIGURED** by default (`memory`); real adapter behind `DIAGNOSTIC_REPOSITORY=mongodb` + `MONGODB_URI`, never connected live in this milestone; **DEMOED OFFLINE** via an injected fake collection in `tests/test_repository.py` |
+| **Tiger Data** (PostgreSQL-compatible) | Time-series electrical measurement storage, separate from session documents | **IMPLEMENTED**, **OPTIONAL**, **NOT CONFIGURED** by default (`none`); real adapter behind `TELEMETRY_SINK=tiger` + `TIGER_DATABASE_URL`, never connected live; **DEMOED OFFLINE** in `tests/test_telemetry_sink.py` |
+| **Snowflake** | Optional diagnostic analytics/export summaries | **ADAPTER BOUNDARY ONLY** - the real `snowflake-connector-python` SDK is deliberately not vendored (large transitive dependency tree); `ANALYTICS_SINK=snowflake` fails clearly at startup unless that package is installed separately. **NOT CONFIGURED** by default; **DEMOED OFFLINE** (adapter boundary + failure handling only) in `tests/test_analytics_sink.py` |
 | **DigitalOcean** | Hosting/deployment target | **NOT DEPLOYED** - `Dockerfile`/`.dockerignore` here make the service deployment-ready (see below); no DigitalOcean API call exists anywhere in this service |
 | **GoDaddy** | Domain/product registration | **NOT IMPLEMENTED** here, deliberately - domain management is not an Intelligence Layer runtime feature |
 

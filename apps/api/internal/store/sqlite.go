@@ -372,6 +372,7 @@ func (store *SQLiteStore) GetProject(id string) (*domain.Project, error) {
 	if err := json.Unmarshal([]byte(payload), &project); err != nil {
 		return nil, err
 	}
+	defaultVisibility(&project)
 	return &project, nil
 }
 
@@ -391,9 +392,18 @@ func (store *SQLiteStore) ListProjects() ([]domain.Project, error) {
 		if err := json.Unmarshal([]byte(payload), &project); err != nil {
 			return nil, err
 		}
+		defaultVisibility(&project)
 		projects = append(projects, project)
 	}
 	return projects, rows.Err()
+}
+
+// Projects stored before visibility existed have no value; treat them as
+// private, the safe default.
+func defaultVisibility(project *domain.Project) {
+	if project.Visibility == "" {
+		project.Visibility = domain.VisibilityPrivate
+	}
 }
 
 func (store *SQLiteStore) Close() error { return store.db.Close() }

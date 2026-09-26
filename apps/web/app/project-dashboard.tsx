@@ -3,11 +3,12 @@
 import { memo, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
-import { ArrowUpRight, FolderGit2, Plus, Search } from "lucide-react";
+import { ArrowUpRight, FolderGit2, Globe, Lock, Plus, Search } from "lucide-react";
 import type { HistorySummary, Project } from "@reweird/shared-types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { historyApi, projectApi } from "@/lib/api";
 import { cn } from "@/lib/utils";
 
@@ -15,23 +16,6 @@ const WEEKS = 12;
 const WEEK_MS = 7 * 86_400_000;
 const EASE = [0.32, 0.72, 0, 1] as const;
 const spring = { type: "spring", stiffness: 110, damping: 20 } as const;
-
-type StatusKey = "confirmed" | "progress" | "failed" | "awaiting";
-
-const statusMeta: Record<Project["analysis_status"], { key: StatusKey; label: string }> = {
-  CONFIRMED: { key: "confirmed", label: "Profile confirmed" },
-  DRAFT_READY: { key: "progress", label: "Draft ready" },
-  PROCESSING: { key: "progress", label: "Analyzing" },
-  PENDING: { key: "awaiting", label: "Awaiting analysis" },
-  FAILED: { key: "failed", label: "Analysis failed" },
-};
-
-const statusDot: Record<StatusKey, string> = {
-  confirmed: "bg-pass",
-  progress: "bg-warn",
-  failed: "bg-fail",
-  awaiting: "bg-subtle",
-};
 
 const reveal = {
   hidden: { opacity: 0, y: 18, filter: "blur(6px)" },
@@ -119,8 +103,31 @@ const Sparkline = memo(function Sparkline({ series, id }: { series: number[]; id
   );
 });
 
-function ProjectRow({ project, series }: { project: Project; series: number[] }) {
-  const meta = statusMeta[project.analysis_status];
+function VisibilityToggle({ project, onChange }: { project: Project; onChange: (next: Project["visibility"]) => void }) {
+  const isPublic = project.visibility === "public";
+  const next = isPublic ? "private" : "public";
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <button
+          type="button"
+          onClick={() => onChange(next)}
+          aria-label={`${isPublic ? "Public" : "Private"} project. Make ${next}.`}
+          className={cn(
+            "relative z-10 inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[11px] font-medium ring-1 transition-colors duration-300 active:scale-95",
+            isPublic ? "text-graph ring-graph/50 hover:bg-graph/10" : "text-muted-foreground ring-border hover:bg-accent hover:text-foreground",
+          )}
+        >
+          {isPublic ? <Globe className="size-3" strokeWidth={1.75} /> : <Lock className="size-3" strokeWidth={1.75} />}
+          {isPublic ? "Public" : "Private"}
+        </button>
+      </TooltipTrigger>
+      <TooltipContent>Make {next}</TooltipContent>
+    </Tooltip>
+  );
+}
+
+function ProjectRow({ project, series, onVisibility }: { project: Project; series: number[]; onVisibility: (id: string, next: Project["visibility"]) => void }) {
   return (
     <motion.li
       layout
@@ -130,17 +137,13 @@ function ProjectRow({ project, series }: { project: Project; series: number[] })
       transition={spring}
       className="border-b border-line-soft last:border-b-0"
     >
-      <Link
-        href={`/projects/${project.id}`}
-        className="group -mx-4 grid grid-cols-1 items-center gap-5 rounded-lg px-4 py-6 transition-colors duration-500 ease-[cubic-bezier(0.32,0.72,0,1)] hover:bg-surface/70 sm:grid-cols-[minmax(0,1fr)_auto]"
-      >
-        <div className="min-w-0">
+      <div className="group relative -mx-4 grid grid-cols-1 items-center gap-5 rounded-lg px-4 py-6 transition-colors duration-500 ease-[cubic-bezier(0.32,0.72,0,1)] hover:bg-surface/70 sm:grid-cols-[minmax(0,1fr)_auto]">
+        {/* Row-wide link sits under the content; the visibility toggle is a separate button above it (no button nested inside a link). */}
+        <Link href={`/projects/${project.id}`} aria-label={`Open ${project.name}`} className="absolute inset-0 rounded-lg focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none" />
+        <div className="pointer-events-none min-w-0">
           <div className="flex flex-wrap items-center gap-3">
-            <h3 className="truncate text-base font-semibold tracking-tight text-foreground transition-colors duration-300 group-hover:text-signal">{project.name}</h3>
-            <span className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[11px] font-medium text-muted-foreground ring-1 ring-border">
-              <span className={cn("size-1.5 rounded-full", statusDot[meta.key])} />
-              {meta.label}
-            </span>
+            <h3 className="truncate text-[17px] font-bold tracking-tight text-signal group-hover:underline group-hover:underline-offset-4">{project.name}</h3>
+            <span className="pointer-events-auto"><VisibilityToggle project={project} onChange={(next) => onVisibility(project.id, next)} /></span>
           </div>
           <p className="mt-2 line-clamp-1 max-w-[68ch] text-sm leading-relaxed text-muted-foreground">{project.description || "No description provided."}</p>
           <div className="mt-3.5 flex flex-wrap items-center gap-x-6 gap-y-1.5 text-xs text-subtle">
@@ -149,13 +152,13 @@ function ProjectRow({ project, series }: { project: Project; series: number[] })
             <span className="font-mono">Updated {ago(project.updated_at_ms)}</span>
           </div>
         </div>
-        <div className="flex items-center gap-5 justify-self-start sm:justify-self-end">
+        <div className="pointer-events-none flex items-center gap-5 justify-self-start sm:justify-self-end">
           <Sparkline series={series} id={project.id} />
           <span className="hidden size-8 place-items-center rounded-md text-subtle ring-1 ring-line-soft transition-all duration-500 ease-[cubic-bezier(0.32,0.72,0,1)] group-hover:-translate-y-px group-hover:translate-x-0.5 group-hover:text-foreground group-hover:ring-border sm:grid">
             <ArrowUpRight className="size-4" strokeWidth={1.5} />
           </span>
         </div>
-      </Link>
+      </div>
     </motion.li>
   );
 }
@@ -196,6 +199,18 @@ export function ProjectDashboardView({ onNewProject }: { onNewProject: () => voi
     return () => { live = false; };
   }, []);
 
+  const changeVisibility = async (id: string, next: Project["visibility"]) => {
+    const previous = projects?.find((project) => project.id === id)?.visibility;
+    setProjects((list) => list?.map((project) => project.id === id ? { ...project, visibility: next } : project) ?? list);
+    try {
+      await projectApi.setVisibility(id, next);
+      setError("");
+    } catch (cause) {
+      setProjects((list) => list?.map((project) => project.id === id && previous ? { ...project, visibility: previous } : project) ?? list);
+      setError(cause instanceof Error ? cause.message : "Visibility could not be changed.");
+    }
+  };
+
   const activity = useMemo(() => weeklyActivity(history), [history]);
   const emptySeries = useMemo(() => Array<number>(WEEKS).fill(0), []);
 
@@ -220,25 +235,8 @@ export function ProjectDashboardView({ onNewProject }: { onNewProject: () => voi
       animate="show"
       variants={{ hidden: {}, show: { transition: { staggerChildren: 0.09 } } }}
     >
-      {/* Heading */}
-      <motion.div variants={reveal} className="flex flex-col gap-6 pt-4 md:flex-row md:items-end md:justify-between">
-        <div>
-          <h1 className="flex items-baseline gap-3 text-3xl font-semibold tracking-tight text-foreground">
-            Projects
-            <span className="font-mono text-base font-normal tabular-nums text-subtle">{projects ? projects.length : "—"}</span>
-          </h1>
-          <p className="mt-2 max-w-[54ch] text-sm leading-relaxed text-muted-foreground">Every project analyzed on this instance, each with its last twelve weeks of diagnostic sessions.</p>
-        </div>
-        <Button onClick={onNewProject} className="group h-10 self-start rounded-md pr-1.5 pl-4 transition-transform active:scale-[0.98] md:self-auto">
-          New project
-          <span className="ml-1 grid size-7 place-items-center rounded-[5px] bg-white/15 transition-transform duration-500 ease-[cubic-bezier(0.32,0.72,0,1)] group-hover:scale-105 group-hover:rotate-90">
-            <Plus className="size-4" strokeWidth={2} />
-          </span>
-        </Button>
-      </motion.div>
-
       {/* Filters */}
-      <motion.div variants={reveal} className="mt-10 flex flex-col gap-3 border-b border-border pb-4 lg:flex-row lg:items-center">
+      <motion.div variants={reveal} className="flex flex-col gap-3 border-b border-border pb-4 lg:flex-row lg:items-center">
         <label className="relative flex-1">
           <span className="sr-only">Find a project</span>
           <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-subtle" strokeWidth={1.5} />
@@ -255,6 +253,12 @@ export function ProjectDashboardView({ onNewProject }: { onNewProject: () => voi
             <option value="updated">Last updated</option>
             <option value="name">Name</option>
           </select>
+          <Button onClick={onNewProject} className="group h-9 rounded-md pr-1 pl-3.5 transition-transform active:scale-[0.98]">
+            New
+            <span className="ml-0.5 grid size-7 place-items-center rounded-[5px] bg-white/15 transition-transform duration-500 ease-[cubic-bezier(0.32,0.72,0,1)] group-hover:rotate-90">
+              <Plus className="size-4" strokeWidth={2} />
+            </span>
+          </Button>
         </div>
       </motion.div>
 
@@ -289,7 +293,7 @@ export function ProjectDashboardView({ onNewProject }: { onNewProject: () => voi
           ) : (
             <ul>
               <AnimatePresence initial={false} mode="popLayout">
-                {filtered.map((project) => <ProjectRow key={project.id} project={project} series={activity.byProject.get(project.id) ?? emptySeries} />)}
+                {filtered.map((project) => <ProjectRow key={project.id} project={project} series={activity.byProject.get(project.id) ?? emptySeries} onVisibility={changeVisibility} />)}
               </AnimatePresence>
             </ul>
           )}

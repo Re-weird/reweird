@@ -107,6 +107,7 @@ func NewApp(engine *diagnostics.Engine, repository domain.Repository, source dom
 	api.Get("/projects/:id/profile", controller.getProjectProfile)
 	api.Put("/projects/:id/profile", controller.updateProjectProfile)
 	api.Post("/projects/:id/profile/confirm", controller.confirmProjectProfile)
+	api.Put("/projects/:id/visibility", controller.updateProjectVisibility)
 	api.Get("/projects/:id/probe-plan", controller.getProbePlan)
 	api.Post("/projects/:id/probe-plan/confirm", controller.confirmProbePlan)
 

@@ -116,6 +116,8 @@ export const projectApi = {
   analyzeProject: (projectID: string) =>
     requestJSON<AnalyzeProjectResponse>(`/api/v1/projects/${projectID}/analyze`, { method: "POST" }, 35_000),
   getProject: (projectID: string) => requestJSON<Project>(`/api/v1/projects/${projectID}`),
+  setVisibility: (projectID: string, visibility: Project["visibility"]) =>
+    requestJSON<Project>(`/api/v1/projects/${projectID}/visibility`, { method: "PUT", body: JSON.stringify({ visibility }) }),
   getDraftProfile: (projectID: string) => requestJSON<ProjectProfile>(`/api/v1/projects/${projectID}/profile`),
   saveProfileCorrections: (projectID: string, profile: ProjectProfile) =>
     requestJSON<ProjectProfile>(`/api/v1/projects/${projectID}/profile`, { method: "PUT", body: JSON.stringify(profile) }),

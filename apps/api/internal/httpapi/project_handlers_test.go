@@ -435,3 +435,37 @@ func connectionByRole(connections []domain.ProfileConnection, role string) *doma
 	}
 	return nil
 }
+
+func TestProjectVisibilityDefaultsPrivateAndPersists(t *testing.T) {
+	app, _ := testApp(t)
+	project := createTestProject(t, app)
+	if project.Visibility != domain.VisibilityPrivate {
+		t.Fatalf("new project visibility = %q, want private", project.Visibility)
+	}
+
+	response := doJSON(t, app, http.MethodPut, "/api/v1/projects/"+project.ID+"/visibility", map[string]any{"visibility": "public"})
+	if response.StatusCode != http.StatusOK {
+		t.Fatalf("visibility status = %d body=%s", response.StatusCode, readBody(t, response))
+	}
+	var updated domain.Project
+	decodeBody(t, response, &updated)
+	if updated.Visibility != domain.VisibilityPublic {
+		t.Fatalf("updated visibility = %q, want public", updated.Visibility)
+	}
+
+	listResponse := doJSON(t, app, http.MethodGet, "/api/v1/projects", nil)
+	var listed []domain.Project
+	decodeBody(t, listResponse, &listed)
+	if len(listed) != 1 || listed[0].Visibility != domain.VisibilityPublic {
+		t.Fatalf("listed = %#v", listed)
+	}
+
+	invalid := doJSON(t, app, http.MethodPut, "/api/v1/projects/"+project.ID+"/visibility", map[string]any{"visibility": "secret"})
+	if invalid.StatusCode != http.StatusUnprocessableEntity {
+		t.Fatalf("invalid visibility status = %d, want 422", invalid.StatusCode)
+	}
+	missing := doJSON(t, app, http.MethodPut, "/api/v1/projects/nope/visibility", map[string]any{"visibility": "public"})
+	if missing.StatusCode != http.StatusNotFound {
+		t.Fatalf("missing project status = %d, want 404", missing.StatusCode)
+	}
+}

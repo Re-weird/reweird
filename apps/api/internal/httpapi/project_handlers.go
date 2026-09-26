@@ -29,7 +29,7 @@ func (controller *Controller) createProject(ctx *fiber.Ctx) error {
 	if err != nil {
 		return internalError(ctx, err)
 	}
-	project := domain.Project{ID: id, Name: strings.TrimSpace(input.Name), Description: strings.TrimSpace(input.Description), Controller: strings.TrimSpace(input.Controller), LogicVoltage: input.LogicVoltage, AnalysisStatus: domain.AnalysisPending}
+	project := domain.Project{ID: id, Name: strings.TrimSpace(input.Name), Description: strings.TrimSpace(input.Description), Controller: strings.TrimSpace(input.Controller), LogicVoltage: input.LogicVoltage, AnalysisStatus: domain.AnalysisPending, Visibility: domain.VisibilityPrivate}
 	if err := projects.Validate(project); err != nil {
 		return apiError(ctx, fiber.StatusUnprocessableEntity, "INVALID_PROJECT", err.Error())
 	}
@@ -41,6 +41,34 @@ func (controller *Controller) createProject(ctx *fiber.Ctx) error {
 		return internalError(ctx, err)
 	}
 	return ctx.Status(fiber.StatusCreated).JSON(stored)
+}
+
+func (controller *Controller) updateProjectVisibility(ctx *fiber.Ctx) error {
+	var input struct {
+		Visibility domain.ProjectVisibility `json:"visibility"`
+	}
+	if err := ctx.BodyParser(&input); err != nil {
+		return apiError(ctx, fiber.StatusBadRequest, "INVALID_JSON", "Visibility must be valid JSON.")
+	}
+	if input.Visibility != domain.VisibilityPrivate && input.Visibility != domain.VisibilityPublic {
+		return apiError(ctx, fiber.StatusUnprocessableEntity, "INVALID_VISIBILITY", "Visibility must be \"private\" or \"public\".")
+	}
+	project, err := controller.findProject(ctx.Params("id"))
+	if err != nil {
+		return internalError(ctx, err)
+	}
+	if project == nil {
+		return apiError(ctx, fiber.StatusNotFound, "PROJECT_NOT_FOUND", "The requested project does not exist.")
+	}
+	project.Visibility = input.Visibility
+	if err := controller.repository.SaveProject(*project); err != nil {
+		return internalError(ctx, err)
+	}
+	stored, err := controller.repository.GetProject(project.ID)
+	if err != nil {
+		return internalError(ctx, err)
+	}
+	return ctx.JSON(stored)
 }
 
 func (controller *Controller) listProjects(ctx *fiber.Ctx) error {

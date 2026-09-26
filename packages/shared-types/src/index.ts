@@ -376,6 +376,8 @@ export interface Project {
   analysis_status: "PENDING" | "PROCESSING" | "DRAFT_READY" | "FAILED" | "CONFIRMED";
   analysis_error?: string;
   probe_plan?: ProbePlan;
+  /** Stored and shown, not enforced: there is no user auth yet. */
+  visibility: "private" | "public";
   created_at_ms: number;
   updated_at_ms: number;
 }

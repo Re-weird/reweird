@@ -1,0 +1,76 @@
+{
+  "probe": "P3",
+  "role": "ECHO",
+  "expected": {
+    "min_frequency_hz": 1,
+    "max_frequency_hz": 100,
+    "nominal_frequency_hz": 28.4
+  },
+  "observed": {
+    "frequency_hz": 24.1,
+    "dropout_events": 6
+  },
+  "baseline": {
+    "status": "USER_CONFIRMED_HEALTHY",
+    "trusted": true,
+    "frequency_hz": 28.4,
+    "dropouts_per_window": 0
+  },
+  "measurements": [
+    {
+      "probe": "P3",
+      "name": "pulse_count",
+      "value": 1450,
+      "provenance": "MEASURED"
+    },
+    {
+      "probe": "P3",
+      "name": "digital_transitions",
+      "value": 2900,
+      "provenance": "MEASURED"
+    }
+  ],
+  "derived_facts": [
+    {
+      "probe": "P3",
+      "name": "dropout_events",
+      "value": 6,
+      "provenance": "DERIVED"
+    },
+    {
+      "probe": "P3",
+      "name": "frequency_hz",
+      "value": 24.1,
+      "unit": "pulses/s",
+      "provenance": "DERIVED"
+    },
+    {
+      "probe": "P3",
+      "name": "stable",
+      "value": false,
+      "provenance": "DERIVED"
+    }
+  ],
+  "baseline_comparison": [
+    {
+      "probe": "P3",
+      "name": "baseline_deviation_percent",
+      "value": 15.1,
+      "unit": "%",
+      "provenance": "BASELINE",
+      "detail": "Below the rule threshold for a baseline-deviation finding"
+    }
+  ],
+  "rule_results": [
+    {
+      "id": "unexpected-dropout",
+      "probe": "P3",
+      "status": "fail",
+      "severity": 2,
+      "message": "6 unexpected ECHO dropouts detected"
+    }
+  ],
+  "unresolved_questions": [
+    "Does the dropout rate increase during controlled movement of the ECHO connection?"
+  ]
+}

@@ -11,3 +11,6 @@ coverage/
 bin/
 *.tsbuildinfo
 .pio/
+__pycache__/
+*.pyc
+.pytest_cache/

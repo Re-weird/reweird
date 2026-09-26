@@ -1,0 +1,45 @@
+{
+  "probe": "P2",
+  "role": "TRIG",
+  "expected": {
+    "min_frequency_hz": 39000,
+    "max_frequency_hz": 41000,
+    "nominal_frequency_hz": 40000
+  },
+  "observed": {
+    "pulse_count": 0
+  },
+  "baseline": {
+    "status": "KNOWN_GOOD_CAPTURE",
+    "trusted": true,
+    "frequency_hz": 40000
+  },
+  "measurements": [
+    {
+      "probe": "P2",
+      "name": "pulse_count",
+      "value": 0,
+      "provenance": "MEASURED"
+    }
+  ],
+  "derived_facts": [
+    {
+      "probe": "P2",
+      "name": "missing_expected_activity",
+      "value": true,
+      "provenance": "DERIVED"
+    }
+  ],
+  "rule_results": [
+    {
+      "id": "missing-signal",
+      "probe": "P2",
+      "status": "fail",
+      "severity": 3,
+      "message": "TRIG has no expected activity"
+    }
+  ],
+  "unresolved_questions": [
+    "Is the microcontroller firmware issuing the TRIG pulse command?"
+  ]
+}

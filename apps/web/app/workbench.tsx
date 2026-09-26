@@ -6,6 +6,7 @@ import type { DemoSession, HistorySummary, ProbePlan, Project, ProjectProfile, S
 import { historyApi } from "@/lib/api";
 import { realBreakReady, telemetryLabel } from "@/lib/weird-demo";
 import { MakeItWeird } from "./make-it-weird";
+import { JudgeCircuit } from "./judge-circuit";
 import { ProbeCard, RuleRow, SignalChart } from "./signal-components";
 import type { ProjectTabID } from "@/lib/project-routes";
 
@@ -57,7 +58,7 @@ export function Workbench({ session, project, profile, source, onNavigate, histo
         ["Understand", "overview"], ["Map", "overview"], ["Make it weird", "simulator"], ["Detect", "workbench"],
         ["Diagnose", "diagnosis"], ["Test", "next-test"], ["VERIFY", "verify"], ["Passport", "passport"],
       ] as [string, ProjectTabID][]).map(([label, tab], index) => <button key={`${label}-${index}`} onClick={() => onNavigate(tab)} className={index === currentStep + 3 && matchesProject ? "current" : ""}>{label}</button>)}</nav>
-      {canBreakPhysical && <section className="weird-physical"><span className="bench-label">Optional serial demo · passive monitoring only</span><h2>YOUR TURN. Make the project act weird.</h2><p>Only use a pre-designated, low-voltage safe demo interaction documented for this build while ReWeird watches. Never disconnect arbitrary power, ground, or unknown connections.</p><button className="secondary" onClick={() => onNavigate("diagnosis")}>I’ve broken it · inspect evidence <ArrowUpRight size={15} /></button><small>This opens the latest evidence; it neither records nor verifies that a physical change occurred.</small></section>}
+      {canBreakPhysical && <JudgeCircuit key={`${profile?.id}-${session.raw_telemetry?.device_id}`} session={session} onDiagnose={() => onNavigate("diagnosis")} onTest={() => onNavigate("next-test")} onVerify={() => onNavigate("verify")} />}
 
       <section className="bench-stats" aria-label="Current project summary">
         <div><Activity size={17} /><strong>{matchesProject ? activeProbes.length : "—"}<small>Active probes</small></strong></div>

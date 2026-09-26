@@ -518,6 +518,9 @@ type Repository interface {
 	GetProfile(id string) (*ProjectProfile, error)
 	ListProfiles() ([]ProjectProfile, error)
 	SaveProject(project Project) error
+	// SetProjectVisibility changes only visibility; it is not a content
+	// update, so it leaves updated_at alone.
+	SetProjectVisibility(id string, visibility ProjectVisibility) error
 	GetProject(id string) (*Project, error)
 	ListProjects() ([]Project, error)
 }

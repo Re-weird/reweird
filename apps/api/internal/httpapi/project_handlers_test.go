@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/re-weird/reweird/apps/api/internal/codeanalysis"
@@ -585,6 +586,7 @@ func TestProjectVisibilityDefaultsPrivateAndPersists(t *testing.T) {
 		t.Fatalf("new project visibility = %q, want private", project.Visibility)
 	}
 
+	time.Sleep(5 * time.Millisecond) // so a bumped timestamp would differ
 	response := doJSON(t, app, http.MethodPut, "/api/v1/projects/"+project.ID+"/visibility", map[string]any{"visibility": "public"})
 	if response.StatusCode != http.StatusOK {
 		t.Fatalf("visibility status = %d body=%s", response.StatusCode, readBody(t, response))
@@ -593,6 +595,9 @@ func TestProjectVisibilityDefaultsPrivateAndPersists(t *testing.T) {
 	decodeBody(t, response, &updated)
 	if updated.Visibility != domain.VisibilityPublic {
 		t.Fatalf("updated visibility = %q, want public", updated.Visibility)
+	}
+	if updated.UpdatedAtMS != project.UpdatedAtMS {
+		t.Fatalf("visibility change bumped updated_at_ms: %d -> %d", project.UpdatedAtMS, updated.UpdatedAtMS)
 	}
 
 	listResponse := doJSON(t, app, http.MethodGet, "/api/v1/projects", nil)

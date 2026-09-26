@@ -395,6 +395,23 @@ func (store *SQLiteStore) SaveProject(project domain.Project) error {
 	return err
 }
 
+func (store *SQLiteStore) SetProjectVisibility(id string, visibility domain.ProjectVisibility) error {
+	project, err := store.GetProject(id)
+	if err != nil {
+		return err
+	}
+	if project == nil {
+		return sql.ErrNoRows
+	}
+	project.Visibility = visibility
+	payload, err := json.Marshal(project)
+	if err != nil {
+		return err
+	}
+	_, err = store.db.Exec("UPDATE projects SET payload = ? WHERE id = ?", string(payload), id)
+	return err
+}
+
 func (store *SQLiteStore) GetProject(id string) (*domain.Project, error) {
 	var payload string
 	err := store.db.QueryRow("SELECT payload FROM projects WHERE id = ?", id).Scan(&payload)

@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useCallback, useContext, useEffect, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { AnalyzeProjectResponse, DemoSession, DiagnosticWorkflow, ProbePlan, Project, ProjectProfile, SimulatorScenario, TestRecommendation } from "@reweird/shared-types";
 import { ApiError, demoApi, projectApi, testApi } from "@/lib/api";
@@ -158,8 +158,10 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
     setSession(next);
     setSource(remote ? "api" : "browser");
     setLegacyVerify(action === "repair");
-    if (action === "repair") router.push(projectPath(DEMO_PROJECT_ID, "verify"));
-    if (action === "reset") router.push(projectPath(DEMO_PROJECT_ID, "simulator"));
+    // These actions swap in demo data, so they always land on the demo
+    // project's URL; staying on a real project's URL left its layout waiting
+    // for a project that is no longer in state.
+    router.push(projectPath(DEMO_PROJECT_ID, action === "repair" ? "verify" : "simulator"));
     setBusy(false);
   }, [router]);
 
@@ -184,32 +186,41 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
       setWorkflow(null);
       setLegacyVerify(false);
       setRecommendation(await testApi.recommendation().catch(() => null));
+      router.push(projectPath(DEMO_PROJECT_ID, "simulator"));
       setToast(`${scenarios.find((scenario) => scenario.id === selectedScenario)?.name ?? "Scenario"} analyzed from raw telemetry`);
     } catch {
       setToast("The API simulator is unavailable; start the Go backend to run fault scenarios");
     } finally {
       setBusy(false);
     }
-  }, [selectedScenario, scenarios]);
+  }, [selectedScenario, scenarios, router]);
+
+  // The id most recently asked for. A slower, earlier request must not
+  // overwrite the project the user has since navigated to.
+  const requestedProjectRef = useRef<string | null>(null);
 
   const loadProject = useCallback(async (id: string): Promise<"ready" | "missing"> => {
+    requestedProjectRef.current = id;
     if (id === DEMO_PROJECT_ID) {
       if (project) {
         setProject(null);
         setProbePlan(null);
         setProfile(makeDemoProfile());
-        demoApi.profile().then(setProfile).catch(() => undefined);
+        demoApi.profile().then((demoProfile) => { if (requestedProjectRef.current === DEMO_PROJECT_ID) setProfile(demoProfile); }).catch(() => undefined);
       }
       return "ready";
     }
     if (project?.id === id) return "ready";
+    const stale = () => requestedProjectRef.current !== id;
     setBusy(true);
     try {
       const freshProject = await projectApi.getProject(id);
       const freshProfile = await projectApi.getDraftProfile(id).catch(() => null);
+      const freshPlan = await projectApi.getProbePlan(id).catch(() => null);
+      if (stale()) return "ready";
       setProject(freshProject);
       setProfile(freshProfile);
-      try { setProbePlan(await projectApi.getProbePlan(id)); } catch { setProbePlan(null); }
+      setProbePlan(freshPlan);
       setWorkflow(null);
       return "ready";
     } catch {

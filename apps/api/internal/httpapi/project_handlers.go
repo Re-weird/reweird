@@ -60,8 +60,7 @@ func (controller *Controller) updateProjectVisibility(ctx *fiber.Ctx) error {
 	if project == nil {
 		return apiError(ctx, fiber.StatusNotFound, "PROJECT_NOT_FOUND", "The requested project does not exist.")
 	}
-	project.Visibility = input.Visibility
-	if err := controller.repository.SaveProject(*project); err != nil {
+	if err := controller.repository.SetProjectVisibility(project.ID, input.Visibility); err != nil {
 		return internalError(ctx, err)
 	}
 	stored, err := controller.repository.GetProject(project.ID)

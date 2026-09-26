@@ -159,7 +159,9 @@ npm run dev
 ```
 
 Open [http://localhost:3000](http://localhost:3000). If the API is unavailable,
-the header shows **Browser simulator** and every demo action still works.
+the header shows **Browser simulator** and every demo action still works. The
+`npm run dev` script binds the web server to `127.0.0.1` by default so the
+unfinished remote-access boundary is not exposed on a LAN.
 
 ### Full stack
 

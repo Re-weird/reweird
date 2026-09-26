@@ -18,7 +18,6 @@ import {
   Menu,
   Microscope,
   Moon,
-  Plus,
   Radio,
   RefreshCw,
   Settings,
@@ -29,7 +28,6 @@ import {
   TriangleAlert,
   Waves,
   X,
-  Upload,
 } from "lucide-react";
 import {
   Area,
@@ -52,31 +50,39 @@ import { Workbench } from "./workbench";
 import { ProjectDashboardView } from "./project-dashboard";
 import { AccountDashboardView } from "./account-dashboard";
 
-type View = "dashboard" | "projects" | "profile" | "connect" | "simulator" | "live" | "diagnosis" | "guided" | "verify" | "history" | "reports" | "computer" | "settings" | "account";
+type View = "dashboard" | "projects" | "profile" | "connect" | "simulator" | "diagnosis" | "guided" | "verify" | "history" | "reports" | "computer" | "settings" | "account";
 type Theme = "light" | "dark";
 
-const nav: { id: View; label: string; icon: typeof Activity; group: "Workspace" | "Diagnostic flow" | "Records" }[] = [
-  { id: "dashboard", label: "Workbench", icon: LayoutDashboard, group: "Workspace" },
+// Account-level destinations only. Left sidebar stays flat now that every
+// project-specific page lives under the top project tab bar (projectTabs).
+const nav: { id: View; label: string; icon: typeof Activity; group: "Workspace" }[] = [
   { id: "projects", label: "Projects", icon: FolderGit2, group: "Workspace" },
-  { id: "profile", label: "Project overview", icon: Box, group: "Workspace" },
-  { id: "connect", label: "Probe setup", icon: Cable, group: "Workspace" },
-  { id: "simulator", label: "Simulator", icon: TestTube2, group: "Diagnostic flow" },
-  { id: "live", label: "Live signals", icon: Activity, group: "Diagnostic flow" },
-  { id: "diagnosis", label: "Diagnosis", icon: Microscope, group: "Diagnostic flow" },
-  { id: "guided", label: "Next test", icon: TestTube2, group: "Diagnostic flow" },
-  { id: "verify", label: "Verify result", icon: CheckCircle2, group: "Diagnostic flow" },
-  { id: "history", label: "History", icon: RefreshCw, group: "Records" },
-  { id: "reports", label: "Reports", icon: FileBarChart, group: "Records" },
-  { id: "computer", label: "Computer checks", icon: Cpu, group: "Records" },
 ];
 
-const navGroups = ["Workspace", "Diagnostic flow", "Records"] as const;
+const navGroups = ["Workspace"] as const;
 
-function StatusDot({ status }: { status: ProbeReading["status"] }) {
+// Project-specific destinations, shown as a top tab bar (like a repo's own
+// nav) whenever a project view is active. "Live signals" was folded into
+// Workbench directly, so it has no tab of its own.
+const projectTabs: { id: View; label: string; icon: typeof Activity }[] = [
+  { id: "dashboard", label: "Workbench", icon: LayoutDashboard },
+  { id: "profile", label: "Overview", icon: Box },
+  { id: "connect", label: "Probe setup", icon: Cable },
+  { id: "simulator", label: "Simulator", icon: TestTube2 },
+  { id: "diagnosis", label: "Diagnosis", icon: Microscope },
+  { id: "guided", label: "Next test", icon: TestTube2 },
+  { id: "verify", label: "Verify result", icon: CheckCircle2 },
+  { id: "history", label: "History", icon: RefreshCw },
+  { id: "reports", label: "Reports", icon: FileBarChart },
+  { id: "computer", label: "Computer checks", icon: Cpu },
+];
+const projectViewIDs = new Set(projectTabs.map((tab) => tab.id));
+
+export function StatusDot({ status }: { status: ProbeReading["status"] }) {
   return <span className={`status-dot ${status}`} aria-label={status} />;
 }
 
-function MiniChart({ values, danger = false }: { values: number[] | null; danger?: boolean }) {
+export function MiniChart({ values, danger = false }: { values: number[] | null; danger?: boolean }) {
   if (!values?.length) return <div className="mini-empty">No probe assigned</div>;
   const max = Math.max(...values, 1);
   const points = values
@@ -89,7 +95,7 @@ function MiniChart({ values, danger = false }: { values: number[] | null; danger
   );
 }
 
-function ProbeCard({ reading }: { reading: ProbeReading }) {
+export function ProbeCard({ reading }: { reading: ProbeReading }) {
   const danger = reading.status === "intermittent";
   return (
     <article className={`probe-card ${danger ? "probe-alert" : ""} ${reading.status === "idle" ? "muted-card" : ""}`}>
@@ -113,7 +119,7 @@ function ProbeCard({ reading }: { reading: ProbeReading }) {
   );
 }
 
-function RuleRow({ rule }: { rule: RuleResult }) {
+export function RuleRow({ rule }: { rule: RuleResult }) {
   const Icon = rule.status === "pass" ? Check : rule.status === "warn" ? CircleDot : TriangleAlert;
   return (
     <div className={`rule-row ${rule.status}`}>
@@ -132,7 +138,7 @@ function ConfidenceRing({ value }: { value: number }) {
   );
 }
 
-function SignalChart({ session }: { session: DemoSession }) {
+export function SignalChart({ session }: { session: DemoSession }) {
   const charted = session.probes.filter((probe) => probe.samples?.length).slice(0, 2);
   const rows = (charted[0]?.samples ?? []).map((_, index) => ({
     time: `${index * 5}s`,
@@ -170,7 +176,6 @@ function AppShell({
   projectContext,
   hardwareConnected,
   children,
-  onNewProject,
   onLoadDemo,
 }: {
   active: View;
@@ -181,7 +186,6 @@ function AppShell({
   projectContext: string;
   hardwareConnected: boolean;
   children: React.ReactNode;
-  onNewProject: () => void;
   onLoadDemo: () => void;
 }) {
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -213,7 +217,7 @@ function AppShell({
       <aside className={`sidebar ${mobileOpen ? "mobile-open" : ""}`}>
         <button className="mobile-close" onClick={() => setMobileOpen(false)} aria-label="Close menu"><X size={20} /></button>
         <div className="brand"><span className="brand-mark"><Waves size={22} /></span><span>Re<span>Weird</span></span></div>
-        <button className="project-switcher" onClick={() => { setActive("profile"); setMobileOpen(false); }}>
+        <button className="project-switcher" onClick={() => { setActive("dashboard"); setMobileOpen(false); }}>
           <span className="device-icon"><Cpu size={18} /></span>
           <div><small>Active project</small><strong>{projectName}</strong></div>
           <ChevronRight size={16} />
@@ -227,11 +231,9 @@ function AppShell({
                 return (
                   <button key={item.id} className={active === item.id ? "active" : ""} aria-current={active === item.id ? "page" : undefined} onClick={() => { setActive(item.id); setMobileOpen(false); }}>
                     <Icon size={17} /><span>{item.label}</span>
-                    {item.id === "diagnosis" && session.stage !== "verify" && <i />}
                   </button>
                 );
               })}
-              {group === "Workspace" && <button onClick={() => { onNewProject(); setMobileOpen(false); }}><Upload size={17} /><span>Upload project</span></button>}
             </div>
           ))}
         </nav>
@@ -246,7 +248,7 @@ function AppShell({
       <main>
         <header className="topbar">
           <button className="mobile-menu" onClick={() => setMobileOpen(true)} aria-label="Open menu"><Menu size={20} /></button>
-          <div className="topbar-title"><span>{active === "settings" ? "Settings & status" : active === "account" ? "Your activity" : nav.find((item) => item.id === active)?.label}</span><small>{projectContext}</small></div>
+          <div className="topbar-title"><span>{active === "settings" ? "Settings & status" : active === "account" ? "Your activity" : nav.find((item) => item.id === active)?.label ?? projectTabs.find((tab) => tab.id === active)?.label}</span><small>{projectContext}</small></div>
           <div className="top-actions">
             <div className={`connection-pill ${hardwareConnected ? "" : "waiting"}`}><span /> {hardwareConnected ? "Hardware connected" : "Hardware offline"}</div>
             <div className={`mode-pill source-${source === "browser" ? "demo" : session.telemetry_mode === "serial" ? "hardware" : "simulator"}`}><Radio size={13} /> {sourceLabel}</div>
@@ -254,29 +256,23 @@ function AppShell({
               {theme === "dark" ? <Sun size={16} /> : <Moon size={16} />}
             </button>
             <button className="secondary compact" onClick={onLoadDemo}>Load demo</button>
-            <button className="primary compact" onClick={onNewProject}><Plus size={16} /> New project</button>
           </div>
         </header>
+        {projectViewIDs.has(active) && <nav className="project-tabs" aria-label="Project navigation">
+          {projectTabs.map((tab) => {
+            const Icon = tab.icon;
+            return <button key={tab.id} className={active === tab.id ? "active" : ""} aria-current={active === tab.id ? "page" : undefined} onClick={() => setActive(tab.id)}>
+              <Icon size={15} /><span>{tab.label}</span>
+              {tab.id === "diagnosis" && session.stage !== "verify" && <i />}
+            </button>;
+          })}
+        </nav>}
         <div className={`content ${active === "dashboard" ? "workbench-content" : ""}`}>{children}</div>
       </main>
     </div>
   );
 }
 
-
-function LiveView({ session }: { session: DemoSession }) {
-  const charted = session.probes.filter((probe) => probe.samples?.length).slice(0, 2);
-  return (
-    <>
-      <section className="page-heading"><div><p className="kicker">Session {session.id}</p><h1>Live diagnostics</h1><p>{session.telemetry_mode === "serial" ? "ESP32 serial" : "Simulator"} telemetry is normalized through the same contract used by every transport.</p></div><div className="live-badge"><span /> {session.telemetry_mode === "serial" ? "SERIAL" : "SIMULATED"} · {session.raw_telemetry ? `${(1000 / session.raw_telemetry.window_ms).toFixed(2)} Hz` : "No raw frame"}</div></section>
-      <section className="probe-grid">{session.probes.map((probe) => <ProbeCard reading={probe} key={probe.probe} />)}</section>
-      <section className="two-column wide-left">
-        <div className="panel"><div className="panel-heading"><div><span className="eyebrow">Raw activity buckets</span><h2>Signal activity</h2></div><div className="chart-legend">{charted.map((probe) => <span key={probe.probe}>{probe.probe} {probe.role}</span>)}</div></div><SignalChart session={session} /></div>
-        <div className="panel"><div className="panel-heading"><div><span className="eyebrow">Analysis</span><h2>Rule engine</h2></div></div><div className="rules-list">{session.evidence.rule_results.map((rule) => <RuleRow rule={rule} key={rule.id} />)}</div><div className="engine-note"><Bolt size={16} /><span>Deterministic checks run before any AI interpretation.</span></div></div>
-      </section>
-    </>
-  );
-}
 
 function DiagnosisView({ session, source, onPlan, busy }: { session: DemoSession; source: "api" | "browser"; onPlan: () => void; busy: boolean }) {
   const tested = session.stage === "test" || session.stage === "repair";
@@ -407,7 +403,7 @@ function DemoProbePlanView({ plan, onContinue }: { plan: ProbePlan | null; onCon
 
 export default function Home() {
   const [session, setSession] = useState<DemoSession>(() => makeDemoSession());
-  const [active, setActive] = useState<View>("dashboard");
+  const [active, setActive] = useState<View>("account");
   const [source, setSource] = useState<"api" | "browser">("browser");
   const [busy, setBusy] = useState(false);
   const [showNewProject, setShowNewProject] = useState(false);
@@ -603,20 +599,16 @@ export default function Home() {
     setProbePlan(confirmed);
     const remote = await demoApi.load();
     if (remote && profile && remote.profile_id === profile.id) { setSession(remote); setSource("api"); }
-    setActive("live");
+    setActive("dashboard");
     setToast("Probe connections confirmed; live diagnostics unlocked");
   };
 
   const view = useMemo(() => {
-    if (active === "dashboard") return <Workbench session={session} project={project} profile={profile} source={source} onNavigate={setActive} onUpload={() => setShowNewProject(true)} />;
+    if (active === "dashboard") return <Workbench session={session} project={project} profile={profile} source={source} onNavigate={setActive} />;
     if (active === "projects") return <ProjectDashboardView onOpenProject={openProject} onNewProject={() => setShowNewProject(true)} />;
     if (active === "profile") return <ProjectProfileView project={project} profile={profile} onSave={saveProfile} onConfirm={confirmProfile} />;
     if (active === "connect") return project ? <ProbePlanView project={project} plan={probePlan ?? project?.probe_plan ?? null} onConnected={confirmConnections} /> : <DemoProbePlanView plan={probePlan} onContinue={() => setActive("simulator")} />;
     if (active === "simulator") return <SimulatorView session={session} scenarios={scenarios} selected={selectedScenario} setSelected={setSelectedScenario} onRun={runScenario} onPlan={() => runTestAction("plan")} onDemoTest={() => runOriginalDemo("wiggle")} onDemoRepair={() => runOriginalDemo("repair")} busy={busy} />;
-    if (active === "live") {
-      if (project && session.profile_id !== profile?.id) return <ProjectLivePending project={project} profile={profile} plan={probePlan} />;
-      return <LiveView session={session} />;
-    }
     if (active === "diagnosis") return project && session.profile_id !== profile?.id
       ? <ProjectLivePending project={project} profile={profile} plan={probePlan} />
       : <DiagnosisView session={session} source={source} onPlan={() => runTestAction("plan")} busy={busy} />;
@@ -630,7 +622,7 @@ export default function Home() {
   }, [active, session, source, busy, project, profile, probePlan, scenarios, selectedScenario, workflow, recommendation, testError, legacyVerify]);
 
   return (
-    <AppShell active={active} setActive={setActive} session={session} source={source} projectName={project?.name ?? session.project_name} projectContext={project ? `${project.controller} · ${project.analysis_status}` : "ESP32 · Built-in demo"} hardwareConnected={source === "api" && session.telemetry_mode === "serial" && (!project || session.profile_id === profile?.id) ? session.hardware_connected : false} onNewProject={() => setShowNewProject(true)} onLoadDemo={loadDemoProject}>
+    <AppShell active={active} setActive={setActive} session={session} source={source} projectName={project?.name ?? session.project_name} projectContext={project ? `${project.controller} · ${project.analysis_status}` : "ESP32 · Built-in demo"} hardwareConnected={source === "api" && session.telemetry_mode === "serial" && (!project || session.profile_id === profile?.id) ? session.hardware_connected : false} onLoadDemo={loadDemoProject}>
       {view}
       {showNewProject && <NewProjectModal onClose={() => setShowNewProject(false)} onComplete={completeProjectAnalysis} onLoadDemo={loadDemoProject} />}
       {toast && <div className="toast" role="status"><CheckCircle2 size={18} />{toast}</div>}

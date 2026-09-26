@@ -85,6 +85,12 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--cyan); outline-
 .secondary { background: transparent; }
 .text-button { font-size: 11px; font-weight: 500; }
 .icon-button { border-radius: 6px; }
+.project-tabs { display: flex; align-items: center; gap: 4px; padding: 0 28px; height: 46px; border-bottom: 1px solid var(--line); overflow-x: auto; }
+.project-tabs button { display: flex; align-items: center; gap: 7px; height: 100%; padding: 0 4px; border: 0; background: transparent; color: var(--muted); font-size: 12px; font-weight: 500; white-space: nowrap; border-bottom: 2px solid transparent; cursor: pointer; position: relative; }
+.project-tabs button:hover { color: var(--text); }
+.project-tabs button.active { color: var(--text); border-bottom-color: var(--cyan); font-weight: 600; }
+.project-tabs button svg { stroke-width: 1.5; }
+.project-tabs button i { width: 6px; height: 6px; border-radius: 50%; background: var(--cyan); font-style: normal; margin-left: -2px; }
 .content { width: auto; max-width: 1530px; padding: 32px 28px 48px; }
 .workbench-content { padding-top: 24px; }
 .page-heading h1 { font-size: clamp(26px, 2.5vw, 35px); font-weight: 600; letter-spacing: -1.1px; }
@@ -155,15 +161,6 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--cyan); outline-
 .bench-stats small { display: block; font: 10px/1.5 "Manrope", sans-serif; color: var(--muted); letter-spacing: 0; margin-top: 6px; }
 .bench-stats > div:last-child strong { font-family: inherit; font-size: 16px; letter-spacing: -.3px; }
 .bench-stats .stat-attention svg { color: var(--red); }
-.bench-upload { display: flex; align-items: center; gap: 20px; background: var(--surface); border: 1px solid var(--line); border-radius: 9px; padding: 24px; }
-.upload-symbol { display: grid; place-items: center; width: 54px; height: 65px; border: 1px solid var(--line); border-radius: 8px; color: var(--cyan); background: var(--surface-2); flex-shrink: 0; }
-.upload-copy { flex: 1; }
-.upload-copy h2 { font-size: 17px; font-weight: 600; letter-spacing: -.4px; margin: 0; }
-.upload-copy p { font-size: 11px; color: var(--muted); line-height: 1.65; margin: 7px 0 13px; }
-.upload-copy .primary { font-size: 11px; min-height: 32px; padding: 7px 11px; }
-.upload-formats { display: flex; flex-direction: column; gap: 11px; border-left: 1px solid var(--line); padding-left: 21px; }
-.upload-formats > span:not(.bench-label) { display: flex; gap: 7px; align-items: center; font-size: 10px; color: var(--muted); }
-.upload-formats small { font-size: 9px; color: var(--subtle-text); max-width: 150px; line-height: 1.6; }
 .bench-panel { background: var(--surface); border: 1px solid var(--line); border-radius: 9px; overflow: hidden; }
 .bench-panel-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 20px 22px 17px; }
 .bench-panel-head h2 { margin: 4px 0 0; font-weight: 600; font-size: 14px; letter-spacing: -.2px; }
@@ -271,7 +268,6 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--cyan); outline-
 @media (max-width: 1250px) {
   .workbench { grid-template-columns: minmax(0, 1.65fr) minmax(285px, 1fr); gap: 14px; }
   .content { padding-left: 20px; padding-right: 20px; }
-  .upload-formats { display: none; }
   .bench-stats > div { padding: 0 11px; gap: 8px; }
   .bench-stats svg { display: none; }
   .welcome-caption { display: none; }
@@ -282,7 +278,6 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--cyan); outline-
   .workbench-rail { display: grid; grid-template-columns: 1fr 1fr; }
   .bench-analysis { grid-row: span 2; }
   .bench-safety { grid-column: 1 / -1; }
-  .upload-formats { display: flex; }
   .diagnosis-layout, .profile-grid, .guided-grid, .history-layout, .computer-columns { grid-template-columns: 1fr; }
 }
 @media (max-width: 800px) {
@@ -292,6 +287,7 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--cyan); outline-
   .nav-backdrop { display: block; position: fixed; inset: 0; z-index: 40; background: #06090db0; border: 0; }
   .content { width: 100%; padding: 20px 16px 40px; }
   .topbar { padding: 0 16px; }
+  .project-tabs { padding: 0 16px; }
   .mode-pill { display: flex !important; font-size: 9px; }
   .top-actions .compact { display: none; }
   .mobile-close { z-index: 2; }
@@ -303,10 +299,6 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--cyan); outline-
   .welcome-copy h1 { font-size: 32px; }
   .welcome-photo { opacity: .65; background-position: center, 65% center; }
   .welcome-foot { font-size: 8px; }
-  .upload-formats { display: none; }
-  .bench-upload { padding: 21px; gap: 16px; }
-  .upload-symbol { width: 42px; height: 54px; }
-  .upload-copy h2 { font-size: 15px; }
   .bench-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); padding: 4px 15px; }
   .bench-stats > div { padding: 14px 8px; }
   .bench-stats > div:nth-child(2) { border-right: 0; }

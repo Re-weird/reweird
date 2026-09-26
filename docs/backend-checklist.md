@@ -65,14 +65,14 @@ Check items off as you go. Ping me when a section is done — I'll review before
 - [x] Code analyzer: deterministic parser, Tree-sitter-ready interface — `internal/codeanalysis`
 - [ ] PROBE (Layer 6): currently a **deterministic mock** inside the diagnostic engine, per `docs/architecture.md`. Real Gemini PROBE adapter (finding/confidence/evidence_ids/next_test JSON, same swap pattern as vision) not built yet.
 
-## 10. Test Planning State (Layer 7, Go half) — PARTIAL
+## 10. Test Planning State (Layer 7, Go half) — DONE
 - [x] Stage state machine exists: Diagnose → Test → Repair → Verify (`domain.Stage`)
 - [x] Transition endpoints (`/demo/reset`, `/demo/wiggle`, `/demo/repair`)
-- [ ] Formal "Approve Test Action" endpoint/flag distinct from the demo transition routes
+- [x] Formal test-plan/approve flow — `internal/testplanner`, `httpapi/test_handlers.go`: `POST /tests` plans (recommendation → `domain.DiagnosticWorkflow`), `POST /tests/:id/start` is the persisted user-approval step, `TestLocked` status gates anything requiring PATCH. (landed on `main` 2026-09-26, commit `6528132`)
 
 ---
 
-**Next real gaps, in order:** PROBE Gemini adapter (§9) → Git/Audit layer (§8) → Computer Diagnostics (§7, optional) → WebSocket live push (§1) → formal Approve Test Action (§10).
+**Next real gaps, in order:** PROBE Gemini adapter (§9) → Git/Audit layer (§8) → Computer Diagnostics (§7, optional) → WebSocket live push (§1).
 
 **When you finish a section, tell me which number — I'll check the code against the doc before you continue.**
 
@@ -108,10 +108,8 @@ Check items off as you go. Ping me when a section is done — I'll review before
 - [ ] Keep REST endpoints as-is for initial load / reconnect catch-up
 - [ ] Backpressure/close handling if client stalls; no unbounded buffering
 
-### E. Formal "Approve Test Action" endpoint (Layer 7)
-- [ ] Replace implicit demo-transition routes (`/demo/wiggle`, `/demo/repair`) with a generic `POST /api/v1/projects/:id/test-actions/:actionId/approve`
-- [ ] Test planner proposes an action (from allowed action set) + evidence justification; user approval is a separate persisted step before execution
-- [ ] Keeps the same user-in-the-loop gate PATCH already has, applied to non-hardware test actions too
+### E. Formal "Approve Test Action" endpoint (Layer 7) — DONE, landed on `main` outside this plan
+- [x] `internal/testplanner` + `httpapi/test_handlers.go` already implement this: `POST /tests` proposes a plan from a `domain.TestRecommendation`, `POST /tests/:id/start` is the persisted approval step, `TestLocked` status blocks anything requiring PATCH. No further work needed here.
 
 ### F. Hardware bench validation (blocks nothing above, but real gap)
 - [ ] Flash firmware to an actual ESP32 + HC-SR04, verify P1-P6 readings against a multimeter/scope
@@ -124,4 +122,4 @@ Check items off as you go. Ping me when a section is done — I'll review before
 - Wi-Fi/WebSocket/MQTT telemetry transports — USB serial only for now
 - Multi-file project uploads, video, GitHub import, OCR — single image + single source payload only
 
-**Suggested build order:** A → D → E → B → C → F, with G staying parked. A unlocks the story's "AI explains it" step; D+E finish the interaction loop; B closes the named "real gap"; C is optional; F is hardware time, not code time, and can run in parallel with any of the above once a board is available.
+**Suggested build order:** A → D → B → C → F, with G staying parked. (E landed on `main` independently 2026-09-26 — see §10.) A unlocks the story's "AI explains it" step; D finishes the interaction loop; B closes the named "real gap"; C is optional; F is hardware time, not code time, and can run in parallel with any of the above once a board is available.

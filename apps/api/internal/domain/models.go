@@ -421,6 +421,30 @@ type TimelineEvent struct {
 	Complete bool   `json:"complete"`
 }
 
+type VerifyResult string
+
+const (
+	VerifyFixed        VerifyResult = "fixed"
+	VerifyStillFailing VerifyResult = "still_failing"
+	VerifyUnclear      VerifyResult = "unclear"
+)
+
+type Report struct {
+	SessionID      string              `json:"session_id"`
+	ProjectName    string              `json:"project_name"`
+	ProfileID      string              `json:"profile_id"`
+	Stage          Stage               `json:"stage"`
+	Headline       string              `json:"headline"`
+	Summary        string              `json:"summary"`
+	PossibleCauses []string            `json:"possible_causes"`
+	Confidence     float64             `json:"confidence"`
+	NextTest       string              `json:"next_test"`
+	Before         MeasurementSummary  `json:"before"`
+	After          *MeasurementSummary `json:"after,omitempty"`
+	Verify         *VerifyResult       `json:"verify,omitempty"`
+	Evidence       Evidence            `json:"evidence"`
+}
+
 type Session struct {
 	ID                string              `json:"id"`
 	ProjectName       string              `json:"project_name"`

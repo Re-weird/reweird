@@ -1,5 +1,6 @@
 "use client";
 
+import { useParams } from "next/navigation";
 import { CheckCircle2 } from "lucide-react";
 import { useAppState } from "@/lib/app-state";
 import { NewProjectModal } from "./project-workflow";
@@ -13,11 +14,13 @@ import { SectionNav } from "./section-nav";
 // reset must not reach them.
 export function AppChrome({ children }: { children: React.ReactNode }) {
   const { showNewProject, setShowNewProject, completeProjectAnalysis, loadDemoProject, toast } = useAppState();
+  // Inside a project the page takes the full width: no profile rail.
+  const inProject = Boolean(useParams<{ id?: string }>()?.id);
   return (
     <main>
       <div className="content">
-        <div className="grid grid-cols-1 gap-10 lg:grid-cols-[232px_minmax(0,1fr)] lg:gap-12">
-          <ProfileRail />
+        <div className={inProject ? "grid grid-cols-1" : "grid grid-cols-1 gap-10 lg:grid-cols-[232px_minmax(0,1fr)] lg:gap-12"}>
+          {!inProject && <ProfileRail />}
           <div className="min-w-0">
             <SectionNav />
             <div className="pt-8">{children}</div>

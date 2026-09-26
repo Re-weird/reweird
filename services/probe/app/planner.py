@@ -40,6 +40,11 @@ class TestPlanner:
                 f"Verify the measurement divider/scale for {probe} and compare the source "
                 "rail under load against the trusted specification."
             )
+        if ("pulse-width-outside-specification", "fail") in ids_by_status:
+            return (
+                f"Re-measure the {role} pulse timing on {probe} and compare it against the "
+                "component's trigger/echo specification for signal integrity issues."
+            )
         if ("missing-signal", "fail") in ids_by_status:
             return (
                 f"Confirm the {probe} probe assignment and compare the physical signal "

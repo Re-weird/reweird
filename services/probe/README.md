@@ -65,6 +65,41 @@ The provider is constructed once at process startup (and cached) so a
 missing `GEMINI_API_KEY` fails fast at boot when `PROBE_AI_PROVIDER=gemini`,
 rather than on a caller's first request.
 
+## Component Intelligence (Milestone 4)
+
+`packages/component-catalog/` (read-only, `app/catalog.py`) can now supply a
+**deterministic expected specification** for a named component role -
+supply-voltage range, pulse-width range, and whether a signal is required -
+each numeric value traced to a cited datasheet source
+(`packages/component-catalog/README.md`). `POST /probe` accepts one new,
+**optional** field, `component_id` (e.g. `"hc-sr04"`); every existing
+Milestone 1/2 request that omits it behaves exactly as before (regression-
+tested in `tests/test_probe_component.py`).
+
+When `component_id` is given, `app/specification.py`'s pure, deterministic
+functions compare the catalog's specification against the submitted
+evidence's own typed measurements (never the untyped `observed` dict, which
+has no unit) and merge the result into `specification_results`/`rule_results`
+**before** grounding or any Gemini call - `ground_evidence`, preflight's
+conflict detection, and Gemini's all-or-nothing validation all already
+generically support `SPECIFICATION`-provenance facts and needed zero changes.
+
+Two new rule ids were added to the existing rule vocabulary, and no more:
+`pulse-width-outside-specification` (a new checkable dimension) and
+`specification-not-evaluable` - a single WARN id covering every "Python
+cannot deterministically decide this" case (no catalog spec for this role,
+no matching observed measurement, or a missing/mismatched unit). This is
+deliberately never confused with `missing-signal`: that fail-status id is
+only ever emitted when a *present* measurement deterministically shows zero
+activity for a required signal. Lacking a measurement is not evidence of
+absence, so it is never reported as one.
+
+An unknown `component_id` resolves to `UNKNOWN`/`UNKNOWN_COMPONENT` before
+any provider is called at all - proven with a call-counting fake provider in
+tests. Gemini (or `FakeAIProvider`) can only explain/rank an already-computed
+rule result; nothing in `Hypothesis` can mutate a `RuleResult`'s status, so a
+provider cannot override a deterministic finding even if it tries.
+
 ## Run
 
     uv sync
@@ -81,3 +116,9 @@ opt-in live test exists outside the default suite, in `live_tests/`:
     curl -s -X POST http://localhost:8091/probe \
       -H "content-type: application/json" \
       -d "{\"evidence\": $(cat fixtures/intermittent_echo.json)}" | python -m json.tool
+
+    # With a catalog-derived specification check:
+    curl -s -X POST http://localhost:8091/probe \
+      -H "content-type: application/json" \
+      -d "{\"evidence\": $(cat fixtures/hc_sr04_voltage_outside_spec.json), \"component_id\": \"hc-sr04\"}" \
+      | python -m json.tool

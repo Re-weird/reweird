@@ -67,6 +67,10 @@ class Hypothesis(BaseModel):
 
 class ProbeRequest(BaseModel):
     evidence: StructuredEvidence
+    # Optional catalog id (e.g. "hc-sr04") for THIS probe's role. Omitted by
+    # every Milestone 1/2 caller - behavior is then unchanged from before
+    # Milestone 4 existed. See app/specification.py.
+    component_id: str | None = None
 
 
 UnknownReason = Literal[
@@ -75,6 +79,7 @@ UnknownReason = Literal[
     "PROVIDER_ERROR",
     "INVALID_PROVIDER_OUTPUT",
     "PROVIDER_UNCERTAIN",
+    "UNKNOWN_COMPONENT",
 ]
 
 

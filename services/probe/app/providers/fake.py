@@ -8,11 +8,16 @@ _CONFIDENCE: dict[tuple[str, str], float] = {
     ("power-rail-instability", "fail"): 0.90,
     ("simultaneous-dropout", "fail"): 0.90,
     ("voltage-outside-specification", "fail"): 0.88,
+    ("pulse-width-outside-specification", "fail"): 0.85,
     ("missing-signal", "fail"): 0.85,
     ("unexpected-dropout", "fail"): 0.70,
     ("baseline-deviation", "fail"): 0.65,
     ("baseline-deviation", "warn"): 0.55,
     ("movement-correlation", "warn"): 0.40,
+    # Milestone 4: "we don't have enough data to check this" is never a
+    # fault hypothesis in its own right - kept deliberately low confidence,
+    # lowest priority, so it never outranks an actual deterministic finding.
+    ("specification-not-evaluable", "warn"): 0.15,
 }
 
 _PRIORITY = [
@@ -20,9 +25,11 @@ _PRIORITY = [
     "power-rail-instability",
     "simultaneous-dropout",
     "voltage-outside-specification",
+    "pulse-width-outside-specification",
     "missing-signal",
     "unexpected-dropout",
     "baseline-deviation",
+    "specification-not-evaluable",
 ]
 
 _LABELS: dict[str, str] = {
@@ -30,9 +37,11 @@ _LABELS: dict[str, str] = {
     "power-rail-instability": "Power rail instability",
     "simultaneous-dropout": "Shared electrical fault across probes",
     "voltage-outside-specification": "Voltage outside specification",
+    "pulse-width-outside-specification": "Pulse width outside specification",
     "missing-signal": "Missing expected signal activity",
     "unexpected-dropout": "Unexpected signal dropout",
     "baseline-deviation": "Deviation from trusted baseline",
+    "specification-not-evaluable": "Specification could not be evaluated",
 }
 
 

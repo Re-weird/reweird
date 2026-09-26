@@ -3,6 +3,7 @@ from functools import lru_cache
 
 from fastapi import Depends, FastAPI
 
+from app.catalog import CatalogSpecEntry, get_default_catalog
 from app.config import get_settings
 from app.planner import TestPlanner
 from app.probe import run_probe
@@ -23,6 +24,7 @@ def get_provider() -> AIProvider:
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     get_provider()  # forces construction + config validation at startup, not on first request
+    get_default_catalog()
     yield
 
 
@@ -33,10 +35,15 @@ def get_planner() -> TestPlanner:
     return TestPlanner()
 
 
+def get_catalog() -> dict[str, CatalogSpecEntry]:
+    return get_default_catalog()
+
+
 @app.post("/probe", response_model=ProbeResponse)
 def post_probe(
     request: ProbeRequest,
     provider: AIProvider = Depends(get_provider),
     planner: TestPlanner = Depends(get_planner),
+    catalog: dict[str, CatalogSpecEntry] = Depends(get_catalog),
 ) -> ProbeResponse:
-    return run_probe(request.evidence, provider, planner)
+    return run_probe(request.evidence, provider, planner, catalog, request.component_id)

@@ -1,0 +1,13 @@
+{
+  "probe": "P3",
+  "role": "ECHO",
+  "expected": {},
+  "observed": {},
+  "baseline": { "status": "UNKNOWN" },
+  "measurements": [
+    { "probe": "P3", "name": "pulse_width", "value": 6000, "unit": "us", "provenance": "MEASURED" },
+    { "probe": "P3", "name": "pulse_count", "value": 12, "provenance": "MEASURED" }
+  ],
+  "rule_results": [],
+  "unresolved_questions": []
+}

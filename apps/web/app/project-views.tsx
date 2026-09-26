@@ -3,6 +3,7 @@
 import { Activity, Cable, ChevronRight, Microscope, RefreshCw, ShieldCheck, TestTube2, TriangleAlert, CheckCircle2 } from "lucide-react";
 import type { DemoSession, ProbePlan, Project, ProjectProfile, SimulatorScenario } from "@reweird/shared-types";
 import { ConfidenceRing, RuleRow } from "./signal-components";
+import { telemetryLabel } from "@/lib/weird-demo";
 
 export function DiagnosisView({ session, source, onPlan, busy }: { session: DemoSession; source: "api" | "browser"; onPlan: () => void; busy: boolean }) {
   const tested = session.stage === "test" || session.stage === "repair";
@@ -11,8 +12,11 @@ export function DiagnosisView({ session, source, onPlan, busy }: { session: Demo
   const observed = Object.entries(session.evidence.observed).slice(0, 3);
   const baseline = Object.entries(session.evidence.baseline).slice(0, 3);
   const renderFacts = (facts: [string, unknown][]) => facts.map(([key, value]) => <small key={key}>{key.replaceAll("_", " ")}: {String(value)}</small>);
+  const failed = session.evidence.rule_results.filter((rule) => rule.status === "fail");
+  const uncertain = !failed.length && (Boolean(session.evidence.unresolved_questions?.length) || session.evidence.rule_results.some((rule) => rule.status === "warn"));
   return (
     <>
+      <section className={`weird-result-banner ${failed.length ? "suspect" : ""}`} aria-live="polite"><span className="eyebrow">{telemetryLabel(session, source)} · evidence-led detection</span><h2>{failed.length ? "SOMETHING’S WEIRD." : uncertain ? "STILL WEIRD." : "SUSPICIOUSLY NORMAL."}</h2><p>{failed.length ? `${session.evidence.probe} · ${session.evidence.role}: ${failed.map((rule) => rule.message).join(" ")}` : uncertain ? "Another measurement is needed before narrowing this down." : "No failed deterministic checks in this capture."}</p></section>
       <section className="page-heading"><div><p className="kicker">Evidence review</p><h1>{session.diagnosis.headline}</h1><p>Measurement, rule output, and inference are kept visibly separate.</p></div><ConfidenceRing value={session.diagnosis.confidence} /></section>
       <section className="diagnosis-layout">
         <div className="panel evidence-panel">
@@ -25,7 +29,7 @@ export function DiagnosisView({ session, source, onPlan, busy }: { session: Demo
           <div className="rules-list">{session.evidence.rule_results.map((rule) => <RuleRow rule={rule} key={rule.id} />)}</div>
         </div>
         <div className="panel interpretation-card">
-          <div className="interpretation-label"><Microscope size={16} /> PROBE interpretation <span>{source === "browser" ? "Demo" : session.telemetry_mode === "serial" ? "Serial evidence" : "Simulated evidence"}</span></div>
+          <div className="interpretation-label"><Microscope size={16} /> PROBE interpretation <span>{telemetryLabel(session, source)}</span></div>
           <h2>{session.diagnosis.summary}</h2>
           <p>Possible causes, ranked but not asserted as measured truth:</p>
           <ol>{session.diagnosis.possible_causes.map((cause, index) => <li key={cause}><span>{index + 1}</span>{cause}</li>)}</ol>
@@ -33,7 +37,7 @@ export function DiagnosisView({ session, source, onPlan, busy }: { session: Demo
       </section>
       <section className="test-callout">
         <div className="test-icon"><TestTube2 size={24} /></div>
-        <div><span className="eyebrow">Recommended next test</span><h2>{session.diagnosis.next_test}</h2><p>{tested ? "The repeated movement correlation provides stronger evidence than the initial anomaly alone." : "This test is user-guided and only monitors input. PATCH output remains disabled."}</p></div>
+        <div><span className="eyebrow">I have a theory. Let’s test it.</span><h2>{session.diagnosis.next_test}</h2><p>{tested ? "Review the actual test evidence before treating a cause as confirmed." : "This test is user-guided and only monitors input. PATCH output remains disabled."}</p></div>
         <button className="primary" onClick={onPlan} disabled={busy}>{busy ? <RefreshCw className="spin" size={17} /> : <Activity size={17} />} Open guided test planner</button>
       </section>
     </>
@@ -42,9 +46,12 @@ export function DiagnosisView({ session, source, onPlan, busy }: { session: Demo
 
 export function SimulatorView({
   session,
+  source,
   scenarios,
   selected,
   setSelected,
+  mysteryPending,
+  onRevealMystery,
   onRun,
   onPlan,
   onDemoTest,
@@ -52,9 +59,12 @@ export function SimulatorView({
   busy,
 }: {
   session: DemoSession;
+  source: "api" | "browser";
   scenarios: SimulatorScenario[];
   selected: string;
   setSelected: (id: string) => void;
+  mysteryPending: boolean;
+  onRevealMystery: () => void;
   onRun: () => void;
   onPlan: () => void;
   onDemoTest: () => void;
@@ -64,26 +74,27 @@ export function SimulatorView({
   const activeScenario = scenarios.find((scenario) => scenario.id === session.scenario_id);
   return (
     <>
-      <section className="page-heading"><div><p className="kicker">Layers 3–4 software harness</p><h1>Raw telemetry fault simulator</h1><p>Each case emits bounded electrical samples through the same validation, normalization, profile matching, storage, analysis, and diagnosis path reserved for ESP32 serial.</p></div><div className="live-badge"><span /> PATCH locked</div></section>
+      <section className="page-heading"><div><p className="kicker">{telemetryLabel(session, source)} · Layers 3–4 software harness</p><h1>Raw telemetry fault simulator</h1><p>Each API case emits bounded electrical samples through validation, normalization, profile matching, storage, analysis, and diagnosis. Browser fallback uses an illustrative in-memory fixture.</p></div><div className="live-badge"><span /> PATCH locked</div></section>
       <section className="pipeline-strip" aria-label="Telemetry processing pipeline">
         {["Raw samples", "Validate", "Normalize", "Match profile", "Store window", "Signal analysis", "Evidence", "Diagnosis"].map((step, index) => <div key={step}><span>{index + 1}</span>{step}</div>)}
       </section>
       <section className="simulator-layout">
         <div className="panel scenario-panel">
           <div className="panel-heading"><div><span className="eyebrow">Simulated faults</span><h2>Select a deterministic input</h2></div></div>
-          <div className="scenario-list">
+          {mysteryPending && <div className="weird-result-banner"><span className="eyebrow">Mystery simulation</span><h2>The fault is still hidden.</h2><p>Read the measurement and diagnosis first, then reveal which existing scenario supplied these samples.</p><button className="secondary" onClick={onRevealMystery}>Reveal selected scenario</button></div>}
+          {!mysteryPending && <div className="scenario-list">
             {scenarios.map((scenario) => (
               <label className={selected === scenario.id ? "selected" : ""} key={scenario.id}>
                 <input type="radio" name="scenario" value={scenario.id} checked={selected === scenario.id} onChange={() => setSelected(scenario.id)} />
                 <span><strong>{scenario.name}</strong><small>{scenario.description}</small></span>
               </label>
             ))}
-          </div>
-          <button className="primary full" disabled={busy || !selected} onClick={onRun}>{busy ? <RefreshCw className="spin" size={17} /> : <TestTube2 size={17} />} Load raw samples and analyze</button>
+          </div>}
+          {!mysteryPending && <button className="primary full" disabled={busy || !selected} onClick={onRun}>{busy ? <RefreshCw className="spin" size={17} /> : <TestTube2 size={17} />} Load raw samples and analyze</button>}
         </div>
         <div className="panel simulator-result">
           <div className="panel-heading"><div><span className="eyebrow">Current result</span><h2>{session.diagnosis.headline}</h2></div><span className="session-id">#{session.measurement_id ?? "memory"}</span></div>
-          <p>{session.stage === "verify" ? "VERIFY captured a fresh healthy window and compared it with the original fault evidence." : activeScenario?.description ?? "Select a scenario to run it through the backend pipeline."}</p>
+          <p>{session.stage === "verify" ? "VERIFY captured a fresh healthy window and compared it with the original fault evidence." : mysteryPending ? "This hidden scenario was analyzed from simulated raw samples. Inspect the evidence before revealing the scenario." : activeScenario?.description ?? "Select a scenario to run it through the backend pipeline."}</p>
           <div className="result-meta"><span>Contract v{session.raw_telemetry?.schema_version ?? 2}</span><span>{session.raw_telemetry?.device_id ?? "browser fixture"}</span><span>Profile {session.profile_id ?? "ultrasonic-demo"}</span></div>
           <div className="analysis-table">
             <div className="analysis-head"><span>Probe</span><span>Raw input</span><span>Derived facts</span><span>Status</span></div>

@@ -74,6 +74,9 @@ signal returns to its healthy baseline.
 - A Settings & status view that reports configuration without showing secrets
 - A browser-side simulator fallback, so the demo still works if the Go API is
   not running
+- An optional **MAKE IT WEIRD** Workbench journey that selects existing API
+  fault scenarios (including a mystery choice), then links the evidence, guided
+  test, VERIFY result, circuit map, and persisted Device Passport story
 
 ## Capability status
 
@@ -368,6 +371,12 @@ path from raw samples through validation, normalization, profile matching,
 measurement storage, structured evidence, diagnosis, guided change, and VERIFY.
 The simulator does not inject a diagnosis label into the engine; each result is
 derived from the raw electrical values and the confirmed profile.
+On the Workbench, **MAKE IT WEIRD** is an optional judge-facing entry to four
+of those same API scenarios; Mystery picks one without naming it in the
+selector. It needs the Go API. With no API, the existing browser demo remains
+available through the normal navigation, but cannot emulate all raw-sample
+faults. The optional physical “Your turn” prompt only appears for a matching
+serial capture and confirmed probe setup; it never controls electrical output.
 
 ## Safety model
 

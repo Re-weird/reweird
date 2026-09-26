@@ -2,8 +2,8 @@
 
 import { useEffect, useState } from "react";
 import { Activity, ArrowUpRight, CheckCircle2, CircleAlert, Cpu, Fingerprint, History, RefreshCw, Save, ShieldCheck } from "lucide-react";
-import type { DemoSession, DevicePassport, PassportCapture, PassportStatus, ProbePlan, Project, ProjectProfile } from "@reweird/shared-types";
-import { ApiError, passportApi } from "@/lib/api";
+import type { DemoSession, DevicePassport, HistoryDetail, PassportCapture, PassportStatus, ProbePlan, Project, ProjectProfile } from "@reweird/shared-types";
+import { ApiError, historyApi, passportApi } from "@/lib/api";
 import { CircuitMap } from "./circuit-map";
 
 const statusLabels: Record<PassportStatus, string> = {
@@ -48,13 +48,16 @@ export function DevicePassportView({
   const [selectedID, setSelectedID] = useState<number | null>(null);
   const [confirmed, setConfirmed] = useState(false);
   const [note, setNote] = useState("");
+  const [story, setStory] = useState<HistoryDetail[]>([]);
 
   useEffect(() => {
     if (!profile?.confirmed) return;
     let cancelled = false;
     setLoading(true);
-    passportApi.get(profile.id).then((result) => {
+    passportApi.get(profile.id).then(async (result) => {
       if (!cancelled) { setPassport(result); setError(""); }
+      const details = await Promise.allSettled(result.history.slice(0, 8).map((item) => historyApi.detail(item.id)));
+      if (!cancelled) setStory(details.filter((entry): entry is PromiseFulfilledResult<HistoryDetail> => entry.status === "fulfilled").map((entry) => entry.value));
     }).catch((cause: unknown) => {
       if (!cancelled) setError(cause instanceof Error ? cause.message : "Passport could not be loaded.");
     }).finally(() => { if (!cancelled) setLoading(false); });
@@ -72,7 +75,7 @@ export function DevicePassportView({
   async function refresh() {
     if (!profile) return;
     setLoading(true); setError("");
-    try { setPassport(await passportApi.get(profile.id)); }
+    try { const updated = await passportApi.get(profile.id); setPassport(updated); const details = await Promise.allSettled(updated.history.slice(0, 8).map((item) => historyApi.detail(item.id))); setStory(details.filter((entry): entry is PromiseFulfilledResult<HistoryDetail> => entry.status === "fulfilled").map((entry) => entry.value)); }
     catch (cause) { setError(cause instanceof Error ? cause.message : "Passport could not be loaded."); }
     finally { setLoading(false); }
   }
@@ -89,6 +92,11 @@ export function DevicePassportView({
       setError(cause instanceof ApiError || cause instanceof Error ? cause.message : "Could not save Known Good.");
     } finally { setSaving(false); }
   }
+
+  const events = story.flatMap((detail) => detail.timeline.map((event) => ({ ...event, source: detail.summary.telemetry_source || "Source not recorded" })))
+    .concat((passport?.known_good ?? []).map((baseline) => ({ id: `baseline-${baseline.id}`, timestamp_ms: baseline.saved_at_ms, kind: "KNOWN_GOOD", description: `User marked capture #${baseline.measurement_id} as Known Good.`, provenance: "USER" as const, source: baseline.source })))
+    .sort((a, b) => b.timestamp_ms - a.timestamp_ms).slice(0, 18);
+  const supportedFindings = story.filter((detail) => detail.workflow.result && ["POSITIVE_CORRELATION", "SHARED_FAILURE_PATTERN", "RAIL_OUTSIDE_TOLERANCE", "EXPECTED_ACTIVITY_MISSING", "TIMING_OUTSIDE_SPECIFICATION", "BASELINE_DEVIATION"].includes(detail.workflow.result.result)).length;
 
   return <div className="passport-page">
     <section className="page-heading"><div><p className="kicker">Persistent device record</p><h1>Device Passport</h1><p>Project identity, intended circuit, user-marked Known Good captures, diagnostic history, and verified outcomes in one place.</p></div><button className="secondary" onClick={refresh} disabled={loading}><RefreshCw size={15} /> Refresh passport</button></section>
@@ -121,6 +129,11 @@ export function DevicePassportView({
       </section>
 
       <CircuitMap profile={passport.profile} plan={passport.probe_plan ?? plan} session={session} demoMode={!project} onNavigate={onNavigate} />
+
+      <section className="panel passport-story" aria-labelledby="passport-story-title"><div className="panel-heading"><div><span className="eyebrow">Persisted evidence · newest first</span><h2 id="passport-story-title">The device’s story</h2></div><History size={17} /></div>
+        <p>{supportedFindings} evidence-supported {supportedFindings === 1 ? "finding" : "findings"} in the most recent {story.length} detailed {story.length === 1 ? "session" : "sessions"} · {passport.verified_repairs.length} {passport.verified_repairs.length === 1 ? "outcome" : "outcomes"} verified as recovered after a user-reported action.</p>
+        {events.length ? <ol className="passport-story-list">{events.map((event) => <li key={event.id}><time dateTime={new Date(event.timestamp_ms).toISOString()}>{dateLabel(event.timestamp_ms)}</time><div><strong>{event.kind.replaceAll("_", " ")}</strong><span>{event.kind === "USER_ACTION" ? `User reported: ${event.description}` : event.description}</span><small>{event.source} · {event.provenance}</small></div></li>)}</ol> : <p>No persisted diagnostic events yet. Run a guided test to begin the record.</p>}
+      </section>
 
       <section className="passport-grid passport-records">
         <div className="panel"><div className="panel-heading"><div><span className="eyebrow">Build</span><h2>Components</h2></div><Cpu size={17} /></div>{passport.profile.components.length ? passport.profile.components.map((component) => <div className="passport-list-row" key={component.id}><strong>{component.name}</strong><small>{component.interface_type ?? "Interface not specified"}</small></div>) : <p className="passport-empty">No components in the confirmed profile.</p>}</div>

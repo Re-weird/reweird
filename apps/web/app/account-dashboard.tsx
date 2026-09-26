@@ -163,7 +163,7 @@ export function AccountDashboardView() {
           />
           <div className="relative">
             <SectionHead index="01" title="0 diagnostic sessions in the last year" meta="All projects" />
-            <div className="overflow-x-auto pb-1">
+            <div className="mx-auto w-full overflow-x-auto pb-1 lg:w-[70%]">
               <ActivityHeatmap />
             </div>
           </div>

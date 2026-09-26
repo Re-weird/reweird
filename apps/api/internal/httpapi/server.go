@@ -15,6 +15,7 @@ import (
 	"github.com/re-weird/reweird/apps/api/internal/domain"
 	"github.com/re-weird/reweird/apps/api/internal/profiles"
 	"github.com/re-weird/reweird/apps/api/internal/projectunderstanding"
+	"github.com/re-weird/reweird/apps/api/internal/reports"
 )
 
 type Controller struct {
@@ -66,6 +67,7 @@ func NewApp(engine *diagnostics.Engine, repository domain.Repository, source dom
 
 	api := app.Group("/api/v1")
 	api.Get("/session", controller.current)
+	api.Get("/report", controller.report)
 	api.Get("/telemetry/status", controller.telemetryStatus)
 	api.Get("/measurements", controller.listMeasurements)
 	api.Get("/simulator/scenarios", controller.listSimulatorScenarios)
@@ -108,6 +110,14 @@ func (controller *Controller) current(ctx *fiber.Ctx) error {
 		return serviceUnavailable(ctx, err)
 	}
 	return ctx.JSON(session)
+}
+
+func (controller *Controller) report(ctx *fiber.Ctx) error {
+	session, err := controller.analyze(ctx.Context())
+	if err != nil {
+		return serviceUnavailable(ctx, err)
+	}
+	return ctx.JSON(reports.BuildReport(session))
 }
 
 func (controller *Controller) transition(stage domain.Stage) fiber.Handler {

@@ -73,6 +73,26 @@ class ProbeRequest(BaseModel):
     component_id: str | None = None
 
 
+class MainDiagnosis(BaseModel):
+    """The authoritative Go/TypeScript Diagnosis contract.
+
+    This is intentionally a compatibility view, not a competing application
+    contract. The Python service can improve the narrative fields, but it
+    cannot add to or mutate the StructuredEvidence owned by main.
+    """
+
+    headline: str
+    summary: str
+    possible_causes: list[str]
+    confidence: float = Field(ge=0, le=1)
+    next_test: str
+
+
+class MainProbeRequest(BaseModel):
+    evidence: StructuredEvidence
+    deterministic_diagnosis: MainDiagnosis
+
+
 UnknownReason = Literal[
     "NO_EVIDENCE",
     "CONFLICTING_RULES",

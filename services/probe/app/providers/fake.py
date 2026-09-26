@@ -45,6 +45,12 @@ _LABELS: dict[str, str] = {
 }
 
 
+def _label(rule: RuleResult) -> str:
+    if rule.id == "movement-correlation" and rule.status == "warn":
+        return "Movement correlation not yet tested"
+    return _LABELS.get(rule.id, rule.id)
+
+
 def _baseline_trusted(evidence: StructuredEvidence) -> bool:
     status = evidence.baseline.get("status")
     if status is None or status == "UNKNOWN":
@@ -163,7 +169,7 @@ class FakeAIProvider:
             )
             hypothesis = Hypothesis(
                 rank=0,
-                label=_LABELS.get(rule_id, rule_id),
+                label=_label(best),
                 confidence=confidence,
                 explanation=_explanation(rule_id, evidence, [rule.message for rule in rules]),
                 grounded_in=ref_ids,

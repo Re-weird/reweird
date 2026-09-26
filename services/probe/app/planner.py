@@ -20,8 +20,6 @@ class TestPlanner:
             )
 
         ids_by_status = {(rule.id, rule.status) for rule in evidence.rule_results}
-        has_movement_rule = any(rule_id == "movement-correlation" for rule_id, _ in ids_by_status)
-
         if ("movement-correlation", "fail") in ids_by_status:
             return (
                 f"Reseat or replace the {role} connection on {probe}, then re-run VERIFY "
@@ -50,7 +48,7 @@ class TestPlanner:
                 f"Confirm the {probe} probe assignment and compare the physical signal "
                 f"with the software-commanded state for {role}."
             )
-        if ("unexpected-dropout", "fail") in ids_by_status and not has_movement_rule:
+        if ("unexpected-dropout", "fail") in ids_by_status:
             return (
                 f"Gently flex/wiggle the {role} connection on {probe} while monitoring "
                 "dropout rate to test for an intermittent physical connection "

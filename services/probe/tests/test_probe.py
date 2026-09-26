@@ -60,6 +60,22 @@ def test_intermittent_echo_recommends_movement_correlation_test() -> None:
     assert result.hypotheses[0].grounded_in  # cites at least one ref id
 
 
+def test_movement_warning_never_claims_correlation_is_confirmed() -> None:
+    evidence = _base_evidence(
+        rule_results=[
+            RuleResult(
+                id="movement-correlation",
+                probe="P3",
+                status="warn",
+                message="Movement correlation has not been tested",
+            )
+        ]
+    )
+    result = provider.interpret(evidence, ground_evidence(evidence))
+    assert result.hypotheses[0].label == "Movement correlation not yet tested"
+    assert "confirmed" not in result.hypotheses[0].label.lower()
+
+
 def test_conflicting_evidence_is_unknown_with_conflicting_rules_reason() -> None:
     _, result, recommended_test = _diagnose("conflicting_evidence")
     assert result.outcome == "UNKNOWN"

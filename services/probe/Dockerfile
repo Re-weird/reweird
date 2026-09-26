@@ -5,8 +5,8 @@
 #   docker build -f services/probe/Dockerfile -t reweird-probe .
 #   docker run --rm -p 8091:8091 reweird-probe
 #
-# This intentionally does not touch the root docker-compose.yml (owned by
-# another subsystem) - it is a standalone, service-local artifact.
+# The root docker-compose.yml wires this service to the Go API; it can also be
+# built and run independently with the commands above.
 
 FROM python:3.11-slim AS base
 

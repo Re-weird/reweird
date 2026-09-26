@@ -7,6 +7,13 @@ unresolved questions; never the raw telemetry stream). Its output is ranked
 hypotheses, each grounded in specific evidence reference IDs so nothing is
 hallucinated, plus a deterministically recommended next test.
 
+Main calls `POST /probe/main-diagnosis` through its Go service adapter. The
+endpoint accepts the repository's authoritative `StructuredEvidence` and
+deterministic `Diagnosis`, runs the same grounding/provider/Test Planner flow,
+and maps the result back to the existing main-facing `Diagnosis` shape. An
+UNKNOWN result returns the deterministic diagnosis unchanged. `POST /probe`
+remains the detailed endpoint exposing hypotheses and grounding reference IDs.
+
 Milestone 1 runs entirely without any network or AI calls: `FakeAIProvider` is a
 rule-based, deterministic interpreter of the same rule vocabulary used by the Go
 diagnostic engine (`missing-signal`, `voltage-outside-specification`,

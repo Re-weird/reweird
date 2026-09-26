@@ -1,6 +1,6 @@
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 # Reused verbatim from the shared EvidenceProvenance vocabulary
 # (packages/shared-types, apps/api/internal/domain/models.go, and already
@@ -61,6 +61,35 @@ class CatalogEntry(BaseModel):
     supply_voltage: dict[str, Any] = Field(default_factory=dict)
     interfaces: list[str] = Field(default_factory=list)
     notes: list[str] = Field(default_factory=list)
+
+    @model_validator(mode="before")
+    @classmethod
+    def _map_current_catalog_schema(cls, data: Any) -> Any:
+        """packages/component-catalog's authoritative schema (owned by the
+        Go API, see packages/component-catalog/catalog.go) uses
+        pin_roles/operating_voltage/known_signal_types/safe_measurement_notes
+        rather than this service's original pins/supply_voltage/interfaces/
+        notes names. Map the current field names onto the old ones (only
+        when the old name is absent) so this service's Gemini-facing
+        catalog index stays meaningful without requiring every catalog
+        entry to carry two parallel schemas."""
+        if not isinstance(data, dict):
+            return data
+        mapped = dict(data)
+        if "pins" not in mapped and isinstance(mapped.get("pin_roles"), list):
+            mapped["pins"] = [
+                role["name"] for role in mapped["pin_roles"] if isinstance(role, dict) and role.get("name")
+            ]
+        if "supply_voltage" not in mapped and isinstance(mapped.get("operating_voltage"), dict):
+            mapped["supply_voltage"] = mapped["operating_voltage"]
+        if "interfaces" not in mapped:
+            if isinstance(mapped.get("known_signal_types"), list):
+                mapped["interfaces"] = mapped["known_signal_types"]
+            elif isinstance(mapped.get("interface_type"), str) and mapped["interface_type"]:
+                mapped["interfaces"] = [mapped["interface_type"]]
+        if "notes" not in mapped and isinstance(mapped.get("safe_measurement_notes"), list):
+            mapped["notes"] = mapped["safe_measurement_notes"]
+        return mapped
 
 
 class ConflictNote(BaseModel):

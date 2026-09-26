@@ -14,6 +14,7 @@ from app.catalog import CatalogSpecEntry, get_default_catalog
 from app.config import get_settings
 from app.events import new_event
 from app.export import build_diagnostic_export
+from app.main_compat import diagnose_for_main
 from app.patch_provider import FakePatchProposalProvider, PatchProposalProvider
 from app.patch_proposals import (
     InvalidProposalTransitionError,
@@ -33,6 +34,8 @@ from app.repository import DiagnosticRepository, RepositoryUnavailableError, get
 from app.schemas import (
     CreateSessionRequest,
     DiagnosticSession,
+    MainDiagnosis,
+    MainProbeRequest,
     PatchProposal,
     PatchProposalRequest,
     PatchProposalResponse,
@@ -145,6 +148,29 @@ def post_probe(
     catalog: dict[str, CatalogSpecEntry] = Depends(get_catalog),
 ) -> ProbeResponse:
     return run_probe(request.evidence, provider, planner, catalog, request.component_id)
+
+
+@app.post("/probe/main-diagnosis", response_model=MainDiagnosis)
+def post_main_diagnosis(
+    request: MainProbeRequest,
+    provider: AIProvider = Depends(get_provider),
+    planner: TestPlanner = Depends(get_planner),
+    catalog: dict[str, CatalogSpecEntry] = Depends(get_catalog),
+) -> MainDiagnosis:
+    """Consume main's StructuredEvidence and return main's Diagnosis shape.
+
+    The detailed grounded references remain available from POST /probe. This
+    compatibility endpoint only performs the final, loss-aware mapping needed
+    by the current Go API contract.
+    """
+
+    return diagnose_for_main(
+        request.evidence,
+        request.deterministic_diagnosis,
+        provider,
+        planner,
+        catalog,
+    )
 
 
 def _get_session_or_404(repository: DiagnosticRepository, session_id: str) -> DiagnosticSession:

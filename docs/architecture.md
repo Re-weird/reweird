@@ -83,6 +83,13 @@ confirmed profile. Confirmation metadata and probe assignments are created by
 the project confirmation endpoint after conflict checks; confirmed profiles
 cannot be silently replaced by a new upload or analysis.
 
+The browser circuit map is a projection of profile components/connections and
+the generated probe plan. It never infers a physical wire from a profile edge.
+Probe status is overlaid only from a stored capture whose profile, raw frame,
+and analysis IDs match the displayed confirmed profile (and whose non-demo
+project probe plan has been marked connected). This is an observation, not
+visual wiring verification or a component-health verdict.
+
 ## Trust boundaries
 
 Device telemetry is untrusted until validated against both the telemetry schema

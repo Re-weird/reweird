@@ -431,6 +431,13 @@ export default function Home() {
   }, []);
 
   useEffect(() => {
+    if (project) return;
+    let cancelled = false;
+    demoApi.probePlan().then((plan) => { if (!cancelled) setProbePlan(plan); }).catch(() => undefined);
+    return () => { cancelled = true; };
+  }, [project]);
+
+  useEffect(() => {
     if (!toast) return;
     const timer = setTimeout(() => setToast(null), 2800);
     return () => clearTimeout(timer);
@@ -586,7 +593,7 @@ export default function Home() {
 
   const view = useMemo(() => {
     if (active === "dashboard") return <Workbench session={session} project={project} profile={profile} source={source} onNavigate={setActive} onUpload={() => setShowNewProject(true)} />;
-    if (active === "profile") return <ProjectProfileView project={project} profile={profile} onSave={saveProfile} onConfirm={confirmProfile} />;
+    if (active === "profile") return <ProjectProfileView project={project} profile={profile} plan={probePlan ?? project?.probe_plan ?? null} session={session} onSave={saveProfile} onConfirm={confirmProfile} onNavigate={setActive} />;
     if (active === "connect") return project ? <ProbePlanView project={project} plan={probePlan ?? project?.probe_plan ?? null} onConnected={confirmConnections} /> : <DemoProbePlanView plan={probePlan} onContinue={() => setActive("simulator")} />;
     if (active === "simulator") return <SimulatorView session={session} scenarios={scenarios} selected={selectedScenario} setSelected={setSelectedScenario} onRun={runScenario} onPlan={() => runTestAction("plan")} onDemoTest={() => runOriginalDemo("wiggle")} onDemoRepair={() => runOriginalDemo("repair")} busy={busy} />;
     if (active === "live") {

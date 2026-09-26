@@ -50,6 +50,8 @@ signal returns to its healthy baseline.
 - Generic probe placement generated only after user confirmation, followed by a
   persisted "probes connected" gate
 - Project Profile, Live Diagnostics, Diagnosis, Verify, and Reports views
+- An interactive circuit map derived from each profile's components and
+  connections; matching probe captures may overlay activity and per-probe checks
 - Deterministic checks for stable power, expected activity, dropouts, and
   movement correlation
 - Structured evidence that keeps measured values, rules, and interpretation
@@ -195,7 +197,10 @@ project-specific workflow. A confirmed profile cannot be overwritten or
 silently re-analyzed; a future revision workflow is required to change it.
 
 The profile screen contains no universal HC-SR04 mapping. The built-in demo is a
-normal seeded profile rendered by the same component.
+normal seeded profile rendered by the same component. Its circuit map shows
+intended connections and exact generated probe assignments; it only shows
+measurement status for a matching, stored capture. It does not establish that
+the physical wiring matches the profile.
 
 ### Real ESP32 over USB serial
 

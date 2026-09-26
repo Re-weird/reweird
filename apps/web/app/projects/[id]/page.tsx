@@ -7,6 +7,6 @@ import { projectPath } from "@/lib/project-routes";
 
 export default function ProjectWorkbenchPage() {
   const router = useRouter();
-  const { session, project, profile, source, currentProjectID, historyProjectID } = useAppState();
-  return <Workbench session={session} project={project} profile={profile} source={source} onNavigate={(tab) => router.push(projectPath(currentProjectID, tab))} historyProjectID={historyProjectID} />;
+  const { session, project, profile, probePlan, source, scenarios, busy, runScenario, loadDemoProject, currentProjectID, historyProjectID } = useAppState();
+  return <Workbench session={session} project={project} profile={profile} plan={probePlan} source={source} scenarios={scenarios} busy={busy} onRunScenario={runScenario} onBrowserDemo={loadDemoProject} onNavigate={(tab) => router.push(projectPath(currentProjectID, tab))} historyProjectID={historyProjectID} />;
 }

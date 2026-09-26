@@ -4,6 +4,8 @@ import { useState } from "react";
 import { Activity, ArrowUpRight, Cable, CircleAlert, Cpu, History, Layers3, Radio } from "lucide-react";
 import type { DemoSession, ProbePlan, ProjectProfile } from "@reweird/shared-types";
 import { buildCircuitMap, type CircuitMapConnection } from "@/lib/circuit-map";
+import { circuitDisplayState } from "@/lib/circuit-map";
+import { useAppState } from "@/lib/app-state";
 
 type Destination = "connect" | "live" | "diagnosis" | "guided" | "history";
 
@@ -16,13 +18,6 @@ function signalLabel(item: CircuitMapConnection, hasCapture: boolean): string {
   if (item.reading.status === "intermittent") return "Intermittent";
   if (item.reading.status === "idle") return "No activity";
   return item.reading.status === "stable" ? "Stable reading" : "Activity observed";
-}
-
-function signalTone(item: CircuitMapConnection, hasCapture: boolean): string {
-  if (!item.reading || !hasCapture) return "waiting";
-  if (item.rules.some((rule) => rule.status === "fail") || item.reading.status === "intermittent") return "fail";
-  if (item.rules.some((rule) => rule.status === "warn") || item.reading.status === "idle") return "warn";
-  return "observed";
 }
 
 function measuredValue(item: CircuitMapConnection): string {
@@ -43,6 +38,7 @@ export function CircuitMap({
   demoMode: boolean;
   onNavigate: (destination: Destination) => void;
 }) {
+  const { workflow } = useAppState();
   const [selectedID, setSelectedID] = useState<string | null>(null);
   const model = buildCircuitMap(profile, plan, session, demoMode);
   const connections = model.groups.flatMap((group) => group.connections);
@@ -50,6 +46,11 @@ export function CircuitMap({
   const captureDescription = model.hasMatchingCapture
     ? model.captureKind === "serial" ? "ESP32 serial capture" : "Simulated API capture"
     : profile.confirmed ? model.planConnected || demoMode ? "No matching capture" : "Probe setup not confirmed" : "Draft profile";
+  const displayState = (item: CircuitMapConnection) => circuitDisplayState(item, model.hasMatchingCapture, session, workflow);
+  const displayLabel = (item: CircuitMapConnection) => {
+    const state = displayState(item);
+    return state === "recovered" ? "Recovered · VERIFY passed" : state === "testing" ? "Testing · guided plan" : state === "suspect" ? "Suspect · matching evidence" : state === "normal" ? "Normal · observed" : signalLabel(item, model.hasMatchingCapture);
+  };
 
   return <section className="panel circuit-map" aria-labelledby="circuit-map-title">
     <div className="panel-heading circuit-map-heading">
@@ -66,23 +67,23 @@ export function CircuitMap({
               {group.connections.map((item) => <button
                 type="button"
                 key={item.connection.id}
-                className={`map-wire ${signalTone(item, model.hasMatchingCapture)} ${selected?.connection.id === item.connection.id ? "selected" : ""}`}
+                className={`map-wire ${displayState(item)} ${selected?.connection.id === item.connection.id ? "selected" : ""}`}
                 aria-pressed={selected?.connection.id === item.connection.id}
-                aria-label={`${group.name} ${item.connection.role}: ${item.connection.target}. ${item.instruction?.probe ?? "No probe assigned"}. ${signalLabel(item, model.hasMatchingCapture)}.`}
+                aria-label={`${group.name} ${item.connection.role}: ${item.connection.target}. ${item.instruction?.probe ?? "No probe assigned"}. ${displayLabel(item)}.`}
                 onClick={() => setSelectedID(item.connection.id)}
               >
                 <span className="map-wire-pin">{item.connection.gpio != null ? `GPIO${item.connection.gpio}` : "Profile node"}</span>
                 <span className="map-wire-trace" aria-hidden="true" />
                 <span className="map-wire-probe">{item.instruction?.probe ?? "—"}</span>
                 <span className="map-wire-role">{item.connection.role}</span>
-                <span className="map-wire-state">{signalLabel(item, model.hasMatchingCapture)}</span>
+                <span className="map-wire-state">{displayLabel(item)}</span>
               </button>)}
             </div>}
           </div>)}
         </div>
       </div>
       {selected && <div className="map-detail" aria-live="polite">
-        <div className="map-detail-top"><div><span className="eyebrow">Selected connection</span><h3>{selected.connection.component_name} · {selected.connection.role}</h3></div><span className={`map-status ${signalTone(selected, model.hasMatchingCapture)}`}>{signalLabel(selected, model.hasMatchingCapture)}</span></div>
+        <div className="map-detail-top"><div><span className="eyebrow">Selected connection</span><h3>{selected.connection.component_name} · {selected.connection.role}</h3></div><span className={`map-status ${displayState(selected)}`}>{displayLabel(selected)}</span></div>
         <div className="map-detail-facts">
           <div><small>Profile target</small><strong>{selected.connection.target}</strong></div>
           <div><small>Expected signal</small><strong>{selected.connection.expected.signal_type || selected.connection.behavior || "Not specified"}</strong></div>

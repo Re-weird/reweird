@@ -5,7 +5,7 @@ import ts from "typescript";
 
 const source = readFileSync(new URL("./circuit-map.ts", import.meta.url), "utf8");
 const compiled = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2020 } }).outputText;
-const { buildCircuitMap } = await import(`data:text/javascript;base64,${Buffer.from(compiled).toString("base64")}`);
+const { buildCircuitMap, circuitDisplayState } = await import(`data:text/javascript;base64,${Buffer.from(compiled).toString("base64")}`);
 
 function profile() {
   return {
@@ -82,4 +82,20 @@ test("preserves uninstrumented connections and components without inventing a pr
   assert.equal(result.groups[0].connections[2].instruction, undefined);
   assert.equal(result.groups[1].name, "LED");
   assert.equal(result.groups[1].connections.length, 0);
+});
+
+test("fault, testing, and recovery highlights require matching captured evidence", () => {
+  const bad = { ...capture(), probes: [{ probe: "P1", status: "intermittent", value: 0, unit: "Hz" }], evidence: { rule_results: [{ id: "pwm", probe: "P1", status: "fail" }] } };
+  const mapped = buildCircuitMap(profile(), plan(), bad);
+  const item = mapped.groups[0].connections[0];
+  assert.equal(circuitDisplayState(item, mapped.hasMatchingCapture, bad, null), "suspect");
+  assert.equal(circuitDisplayState(item, false, bad, null), "waiting");
+  const workflow = { profile_id: "profile-a", status: "WAITING_FOR_USER", plan: { recommendation: { target_probes: ["P1"] } } };
+  assert.equal(circuitDisplayState(item, true, bad, workflow), "testing");
+  const resolved = { ...workflow, status: "RESOLVED", verification: { status: "RESOLVED", after_window_id: 22, changes: [{ probe: "P1" }] } };
+  const good = buildCircuitMap(profile(), plan(), capture()).groups[0].connections[0];
+  assert.equal(circuitDisplayState(good, true, capture(), resolved), "recovered");
+  assert.equal(circuitDisplayState(item, true, bad, resolved), "suspect");
+  assert.equal(circuitDisplayState(item, true, { ...bad, measurement_id: 23 }, resolved), "suspect");
+  assert.equal(circuitDisplayState(item, true, bad, { ...resolved, profile_id: "other" }), "suspect");
 });

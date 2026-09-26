@@ -19,6 +19,8 @@ interface AppState {
   probePlan: ProbePlan | null;
   scenarios: SimulatorScenario[];
   selectedScenario: string;
+  mysteryPending: boolean;
+  revealMystery: () => void;
   setSelectedScenario: (id: string) => void;
   recommendation: TestRecommendation | null;
   workflow: DiagnosticWorkflow | null;
@@ -35,7 +37,7 @@ interface AppState {
   runTestAction: (action: "plan" | "start" | "capture" | "remeasure" | "cancel") => Promise<void>;
   runOriginalDemo: (action: "wiggle" | "repair" | "reset") => Promise<void>;
   recordUserAction: (description: string) => Promise<void>;
-  runScenario: () => Promise<void>;
+  runScenario: (scenarioID?: string, mystery?: boolean) => Promise<void>;
   loadProject: (id: string) => Promise<ProjectLoadResult>;
   completeProjectAnalysis: (result: AnalyzeProjectResponse) => void;
   loadDemoProject: () => Promise<void>;
@@ -64,6 +66,7 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
   const [probePlan, setProbePlan] = useState<ProbePlan | null>(null);
   const [scenarios, setScenarios] = useState<SimulatorScenario[]>([]);
   const [selectedScenario, setSelectedScenario] = useState("intermittent-connection");
+  const [mysteryPending, setMysteryPending] = useState(false);
   const [recommendation, setRecommendation] = useState<TestRecommendation | null>(null);
   const [workflow, setWorkflow] = useState<DiagnosticWorkflow | null>(null);
   const [testError, setTestError] = useState<string | null>(null);
@@ -167,6 +170,7 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
 
   const runOriginalDemo = useCallback(async (action: "wiggle" | "repair" | "reset") => {
     setBusy(true);
+    setMysteryPending(false);
     const remote = await demoApi[action]();
     setProject(null);
     setProbePlan(null);
@@ -191,10 +195,11 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
     finally { setBusy(false); }
   }, [scopedWorkflow]);
 
-  const runScenario = useCallback(async () => {
+  const runScenario = useCallback(async (scenarioID?: string, mystery = false) => {
     setBusy(true);
     try {
-      const next = await demoApi.selectScenario(selectedScenario);
+      const chosen = scenarioID ?? selectedScenario;
+      const next = await demoApi.selectScenario(chosen);
       const nextRecommendation = await testApi.recommendation().catch(() => null);
       // Fetch first, then swap to demo data and navigate in the same tick, so
       // a real project's URL is never left showing without its project.
@@ -202,12 +207,14 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
       setProbePlan(null);
       setProfile(makeDemoProfile());
       setSession(next);
+      setSelectedScenario(chosen);
+      setMysteryPending(mystery);
       setSource("api");
       setWorkflow(null);
       setLegacyVerify(false);
       setRecommendation(nextRecommendation);
       router.push(projectPath(DEMO_PROJECT_ID, "simulator"));
-      setToast(`${scenarios.find((scenario) => scenario.id === selectedScenario)?.name ?? "Scenario"} analyzed from raw telemetry`);
+      setToast(mystery ? "Mystery scenario analyzed from simulated raw telemetry" : `${scenarios.find((scenario) => scenario.id === chosen)?.name ?? "Scenario"} analyzed from simulated raw telemetry`);
     } catch {
       setToast("The API simulator is unavailable; start the Go backend to run fault scenarios");
     } finally {
@@ -263,6 +270,7 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
     setProbePlan(null);
     setWorkflow(null);
     setLegacyVerify(false);
+    setMysteryPending(false);
     const remote = await demoApi.reset();
     setSession(remote ?? makeDemoSession());
     setSource(remote ? "api" : "browser");
@@ -302,7 +310,7 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
   }, [project, profile, router]);
 
   const value: AppState = {
-    session, source, busy, toast, project, profile, probePlan, scenarios, selectedScenario, setSelectedScenario,
+    session, source, busy, toast, project, profile, probePlan, scenarios, selectedScenario, setSelectedScenario, mysteryPending, revealMystery: () => setMysteryPending(false),
     recommendation, workflow: scopedWorkflow, testError, legacyVerify, showNewProject, setShowNewProject, currentProjectID, historyProjectID, sessionReady,
     runTestAction, runOriginalDemo, recordUserAction, runScenario, loadProject, completeProjectAnalysis,
     loadDemoProject, saveProfile, confirmProfile, confirmConnections,

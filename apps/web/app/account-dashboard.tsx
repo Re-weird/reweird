@@ -6,7 +6,6 @@ import { motion, useReducedMotion, type Variants } from "framer-motion";
 import { ArrowUpRight, FolderGit2 } from "lucide-react";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 
@@ -176,7 +175,7 @@ function ActivityRadar() {
   );
 }
 
-export function AccountDashboardView({ onNavigate }: { onNavigate: (view: "projects" | "settings") => void }) {
+export function AccountDashboardView() {
   return (
     <motion.div variants={stagger} initial="hidden" animate="show" className="mx-auto grid w-full max-w-[1240px] grid-cols-1 gap-10 lg:grid-cols-[250px_minmax(0,1fr)] lg:gap-14">
       <motion.aside variants={rise} className="flex flex-col gap-6 self-start lg:sticky lg:top-24">
@@ -215,19 +214,8 @@ export function AccountDashboardView({ onNavigate }: { onNavigate: (view: "proje
       </motion.aside>
 
       <motion.div variants={stagger} className="min-w-0">
-        <motion.div variants={rise}>
-          <Tabs value="overview" onValueChange={(value) => { if (value === "projects" || value === "settings") onNavigate(value); }}>
-            <TabsList variant="line" className="h-auto w-full justify-start gap-7 border-b border-border p-0">
-              {[["overview", "Overview"], ["projects", "Projects"], ["settings", "Settings"]].map(([value, label]) => (
-                <TabsTrigger key={value} value={value} className="h-auto flex-none rounded-none px-0 pb-3 text-[13px] after:bottom-[-1px] after:bg-signal">
-                  {label}
-                </TabsTrigger>
-              ))}
-            </TabsList>
-          </Tabs>
-        </motion.div>
 
-        <motion.section variants={rise} className="relative mt-8">
+        <motion.section variants={rise} className="relative">
           <div
             className="pointer-events-none absolute -inset-x-4 -inset-y-4 opacity-60 [background-image:radial-gradient(var(--line-soft)_1px,transparent_1px)] [background-size:14px_14px] [mask-image:radial-gradient(ellipse_at_30%_40%,black,transparent_75%)]"
             aria-hidden="true"

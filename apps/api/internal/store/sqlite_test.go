@@ -152,3 +152,35 @@ func TestLegacyProjectWithoutVisibilityReadsAsPrivate(t *testing.T) {
 		t.Fatalf("ListProjects visibility = %q, want private", listed[0].Visibility)
 	}
 }
+
+func TestSetProjectVisibilityChangesOnlyVisibility(t *testing.T) {
+	repository, err := Open(filepath.Join(t.TempDir(), "reweird-visibility.db"))
+	if err != nil {
+		t.Fatalf("Open() error = %v", err)
+	}
+	defer repository.Close()
+
+	project := domain.Project{ID: "rig", Name: "Rig", Description: "original", Controller: "ESP32", LogicVoltage: 3.3, AnalysisStatus: domain.AnalysisPending, Visibility: domain.VisibilityPrivate}
+	if err := repository.SaveProject(project); err != nil {
+		t.Fatalf("SaveProject() error = %v", err)
+	}
+	stored, _ := repository.GetProject("rig")
+
+	if err := repository.SetProjectVisibility("rig", domain.VisibilityPublic); err != nil {
+		t.Fatalf("SetProjectVisibility() error = %v", err)
+	}
+	updated, err := repository.GetProject("rig")
+	if err != nil || updated == nil {
+		t.Fatalf("GetProject() = %v, %v", updated, err)
+	}
+	if updated.Visibility != domain.VisibilityPublic {
+		t.Fatalf("visibility = %q, want public", updated.Visibility)
+	}
+	if updated.Description != "original" || updated.Controller != "ESP32" || updated.UpdatedAtMS != stored.UpdatedAtMS {
+		t.Fatalf("other fields changed: %#v", updated)
+	}
+
+	if err := repository.SetProjectVisibility("missing", domain.VisibilityPublic); err == nil {
+		t.Fatal("SetProjectVisibility on a missing project returned nil error")
+	}
+}

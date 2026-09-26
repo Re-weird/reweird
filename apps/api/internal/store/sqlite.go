@@ -395,21 +395,22 @@ func (store *SQLiteStore) SaveProject(project domain.Project) error {
 	return err
 }
 
+// SetProjectVisibility updates only the visibility field, in one statement.
+// Reading the whole payload and writing it back would let a concurrent
+// SaveProject land in between and be overwritten by the stale copy.
 func (store *SQLiteStore) SetProjectVisibility(id string, visibility domain.ProjectVisibility) error {
-	project, err := store.GetProject(id)
+	result, err := store.db.Exec("UPDATE projects SET payload = json_set(payload, '$.visibility', ?) WHERE id = ?", string(visibility), id)
 	if err != nil {
 		return err
 	}
-	if project == nil {
+	affected, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if affected == 0 {
 		return sql.ErrNoRows
 	}
-	project.Visibility = visibility
-	payload, err := json.Marshal(project)
-	if err != nil {
-		return err
-	}
-	_, err = store.db.Exec("UPDATE projects SET payload = ? WHERE id = ?", string(payload), id)
-	return err
+	return nil
 }
 
 func (store *SQLiteStore) GetProject(id string) (*domain.Project, error) {

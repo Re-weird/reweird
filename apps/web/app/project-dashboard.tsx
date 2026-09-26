@@ -3,7 +3,7 @@
 import { memo, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
-import { ArrowUpRight, FolderGit2, Globe, Lock, Plus, Search } from "lucide-react";
+import { ArrowUpRight, FolderGit2, Globe, Lock, Plus, RefreshCw, Search, WifiOff } from "lucide-react";
 import type { HistorySummary, Project } from "@reweird/shared-types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -190,16 +190,23 @@ export function ProjectDashboardView({ onNewProject }: { onNewProject: () => voi
   const [search, setSearch] = useState("");
   const [sort, setSort] = useState<"updated" | "name">("updated");
 
+  // A failed load is its own state, not an empty list: showing "Nothing on
+  // the bench yet" during an outage would read as an empty account.
+  const [loadError, setLoadError] = useState("");
+  const [attempt, setAttempt] = useState(0);
+
   useEffect(() => {
     let live = true;
+    setLoadError("");
+    setProjects(null);
     projectApi.listProjects()
       .then((items) => { if (live) setProjects(items ?? []); })
-      .catch((cause) => { if (live) { setError(cause instanceof Error ? cause.message : "Projects are unavailable."); setProjects([]); } });
+      .catch((cause) => { if (live) setLoadError(cause instanceof Error ? cause.message : "Projects are unavailable."); });
     historyApi.list()
       .then((response) => { if (live) setHistory(response.items ?? []); })
       .catch(() => undefined);
     return () => { live = false; };
-  }, []);
+  }, [attempt]);
 
   // One visibility request per project at a time; the pill is disabled while
   // it is in flight, so out-of-order responses can't leave the UI and the
@@ -263,7 +270,7 @@ export function ProjectDashboardView({ onNewProject }: { onNewProject: () => voi
             <option value="updated">Last updated</option>
             <option value="name">Name</option>
           </select>
-          <Button onClick={onNewProject} className="group h-9 rounded-md pr-1 pl-3.5 transition-transform active:scale-[0.98]">
+          <Button onClick={onNewProject} disabled={Boolean(loadError)} className="group h-9 rounded-md pr-1 pl-3.5 transition-transform active:scale-[0.98]">
             New
             <span className="ml-0.5 grid size-7 place-items-center rounded-[5px] bg-white/15 transition-transform duration-500 ease-[cubic-bezier(0.32,0.72,0,1)] group-hover:rotate-90">
               <Plus className="size-4" strokeWidth={2} />
@@ -276,7 +283,16 @@ export function ProjectDashboardView({ onNewProject }: { onNewProject: () => voi
         {error && <p role="alert" className="mt-6 rounded-md px-3 py-2 text-sm text-fail ring-1 ring-fail/40">{error}</p>}
 
         <div className="mt-2">
-          {projects === null ? <LoadingRows /> : !hasProjects ? (
+          {loadError ? (
+            <div className="flex flex-col items-start gap-4 py-16">
+              <span className="grid size-11 place-items-center rounded-lg bg-surface-2 text-muted-foreground ring-1 ring-border"><WifiOff className="size-5" strokeWidth={1.5} /></span>
+              <div>
+                <h2 className="text-base font-semibold text-foreground">Couldn&apos;t load your projects</h2>
+                <p className="mt-1 max-w-[52ch] text-sm leading-relaxed text-muted-foreground">{loadError} Your projects are still there; check that the Go API is running, then try again.</p>
+              </div>
+              <Button variant="outline" size="sm" onClick={() => setAttempt((count) => count + 1)}><RefreshCw /> Try again</Button>
+            </div>
+          ) : projects === null ? <LoadingRows /> : !hasProjects ? (
             <div className="grid grid-cols-1 items-center gap-10 py-16 md:grid-cols-2">
               <div className="flex flex-col gap-2" aria-hidden="true">
                 {[1, 0.55, 0.25].map((opacity) => (

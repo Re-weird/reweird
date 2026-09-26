@@ -53,6 +53,11 @@ func (controller *Controller) updateProjectVisibility(ctx *fiber.Ctx) error {
 	if input.Visibility != domain.VisibilityPrivate && input.Visibility != domain.VisibilityPublic {
 		return apiError(ctx, fiber.StatusUnprocessableEntity, "INVALID_VISIBILITY", "Visibility must be \"private\" or \"public\".")
 	}
+	// Same lock as every other project-mutating handler: they read, modify, and
+	// SaveProject the full payload, so without it one of them could write back
+	// a visibility read before this change.
+	controller.profileMu.Lock()
+	defer controller.profileMu.Unlock()
 	project, err := controller.findProject(ctx.Params("id"))
 	if err != nil {
 		return internalError(ctx, err)

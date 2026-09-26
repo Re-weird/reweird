@@ -75,3 +75,53 @@ Check items off as you go. Ping me when a section is done — I'll review before
 **Next real gaps, in order:** PROBE Gemini adapter (§9) → Git/Audit layer (§8) → Computer Diagnostics (§7, optional) → WebSocket live push (§1) → formal Approve Test Action (§10).
 
 **When you finish a section, tell me which number — I'll check the code against the doc before you continue.**
+
+---
+
+## Remaining work plan (2026-09-26)
+
+### A. PROBE Gemini adapter (Layer 6) — highest priority gap
+- [ ] Define `PROBEProvider` interface (mirrors existing `VisionProvider` swap pattern in `internal/vision`)
+- [ ] Request shape: serialize `domain.Evidence` (rules + specs + baseline + software facts, each tagged with provenance) into a bounded prompt payload
+- [ ] Response contract: `finding`, `confidence`, `evidence_ids[]`, `next_test` — structured JSON, validated before use (same discipline as vision's structured-response parser)
+- [ ] `GeminiProbeProvider` (real, key-gated) + keep current deterministic mock as `FakeProbeProvider` fallback when `GEMINI_API_KEY` unset
+- [ ] Hard rule: PROBE output is interpretation only — cannot write measured/spec/baseline evidence fields, cannot trigger PATCH
+- [ ] Unit tests against a local fake Gemini endpoint (same pattern as existing vision tests), no live paid key in repo
+- [ ] Wire into `internal/diagnostics/engine.go` as the source of the human-readable diagnosis text currently hardcoded/templated
+
+### B. Git / Audit layer (Layer 11) — real gap, not started
+- [ ] Secret-scan pass over report/session data before any commit (block on match, no bypass)
+- [ ] Commit author resolution: real human identity when available, else a bot identity — never silently attribute AI output to a person
+- [ ] Opt-in adapter: approved → commit + push; not approved → local-only commit, no push
+- [ ] Append-only audit log: one record per diagnostic/test/repair/commit action, with timestamp + actor + evidence refs
+- [ ] User-facing setting to enable/disable git sync per project (default OFF, per current security.md stance)
+
+### C. Computer Diagnostics (Layer 10) — optional for V1
+- [ ] Local agent: read CPU/mem/disk/network/process/service state (read-only, no control path)
+- [ ] Normalize into the same `domain.DerivedFacts` shape signal-analysis already produces, so diagnostic engine rules apply unmodified
+- [ ] "Combined Mode": diagnostic engine consumes hardware evidence + computer evidence together in one Evidence bundle
+- [ ] Explicitly out of scope: any write/kill/service-restart action — read-only until a separate PATCH-style gate exists
+
+### D. WebSocket live telemetry push (Layer 4)
+- [ ] `/api/v1/ws/telemetry` endpoint, one connection per active session
+- [ ] Push normalized measurement windows as they land, instead of frontend polling `/api/v1/measurements`
+- [ ] Keep REST endpoints as-is for initial load / reconnect catch-up
+- [ ] Backpressure/close handling if client stalls; no unbounded buffering
+
+### E. Formal "Approve Test Action" endpoint (Layer 7)
+- [ ] Replace implicit demo-transition routes (`/demo/wiggle`, `/demo/repair`) with a generic `POST /api/v1/projects/:id/test-actions/:actionId/approve`
+- [ ] Test planner proposes an action (from allowed action set) + evidence justification; user approval is a separate persisted step before execution
+- [ ] Keeps the same user-in-the-loop gate PATCH already has, applied to non-hardware test actions too
+
+### F. Hardware bench validation (blocks nothing above, but real gap)
+- [ ] Flash firmware to an actual ESP32 + HC-SR04, verify P1-P6 readings against a multimeter/scope
+- [ ] Confirm ADC safety bounds (never >3.3V) hold on real rail noise, not just simulated frames
+- [ ] Validate serial reconnect/timeout behavior against a real USB disconnect, not just mocked source
+
+### G. Deferred / explicitly not doing yet
+- Real PATCH validator (Layer 8) — stays locked (`423 PATCH_LOCKED`) until hardware output is intentionally re-enabled; do not build early
+- Auth / multi-user / device identity — no plan yet, needed before any production exposure
+- Wi-Fi/WebSocket/MQTT telemetry transports — USB serial only for now
+- Multi-file project uploads, video, GitHub import, OCR — single image + single source payload only
+
+**Suggested build order:** A → D → E → B → C → F, with G staying parked. A unlocks the story's "AI explains it" step; D+E finish the interaction loop; B closes the named "real gap"; C is optional; F is hardware time, not code time, and can run in parallel with any of the above once a board is available.

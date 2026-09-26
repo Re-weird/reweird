@@ -13,6 +13,7 @@ import {
   CircleDot,
   Cpu,
   FileBarChart,
+  FolderGit2,
   LayoutDashboard,
   Menu,
   Microscope,
@@ -48,12 +49,14 @@ import { HistoryReportView } from "./history-report";
 import { ComputerDiagnosticsView } from "./computer-diagnostics";
 import { SettingsStatusView } from "./settings-status";
 import { Workbench } from "./workbench";
+import { ProjectDashboardView } from "./project-dashboard";
 
-type View = "dashboard" | "profile" | "connect" | "simulator" | "live" | "diagnosis" | "guided" | "verify" | "history" | "reports" | "computer" | "settings";
+type View = "dashboard" | "projects" | "profile" | "connect" | "simulator" | "live" | "diagnosis" | "guided" | "verify" | "history" | "reports" | "computer" | "settings";
 type Theme = "light" | "dark";
 
 const nav: { id: View; label: string; icon: typeof Activity; group: "Workspace" | "Diagnostic flow" | "Records" }[] = [
   { id: "dashboard", label: "Workbench", icon: LayoutDashboard, group: "Workspace" },
+  { id: "projects", label: "Projects", icon: FolderGit2, group: "Workspace" },
   { id: "profile", label: "Project overview", icon: Box, group: "Workspace" },
   { id: "connect", label: "Probe setup", icon: Cable, group: "Workspace" },
   { id: "simulator", label: "Simulator", icon: TestTube2, group: "Diagnostic flow" },
@@ -531,6 +534,24 @@ export default function Home() {
     }
   };
 
+  const openProject = async (target: Project) => {
+    setBusy(true);
+    try {
+      const freshProject = await projectApi.getProject(target.id);
+      const freshProfile = await projectApi.getDraftProfile(target.id).catch(() => null);
+      setProject(freshProject);
+      setProfile(freshProfile);
+      try { setProbePlan(await projectApi.getProbePlan(target.id)); } catch { setProbePlan(null); }
+      setWorkflow(null);
+      setActive("profile");
+      setToast(`Opened ${freshProject.name}`);
+    } catch (cause) {
+      setToast(cause instanceof Error ? cause.message : "This project could not be opened.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const completeProjectAnalysis = (result: AnalyzeProjectResponse) => {
     setProject(result.project);
     setProfile(result.profile);
@@ -586,6 +607,7 @@ export default function Home() {
 
   const view = useMemo(() => {
     if (active === "dashboard") return <Workbench session={session} project={project} profile={profile} source={source} onNavigate={setActive} onUpload={() => setShowNewProject(true)} />;
+    if (active === "projects") return <ProjectDashboardView onOpenProject={openProject} onNewProject={() => setShowNewProject(true)} />;
     if (active === "profile") return <ProjectProfileView project={project} profile={profile} onSave={saveProfile} onConfirm={confirmProfile} />;
     if (active === "connect") return project ? <ProbePlanView project={project} plan={probePlan ?? project?.probe_plan ?? null} onConnected={confirmConnections} /> : <DemoProbePlanView plan={probePlan} onContinue={() => setActive("simulator")} />;
     if (active === "simulator") return <SimulatorView session={session} scenarios={scenarios} selected={selectedScenario} setSelected={setSelectedScenario} onRun={runScenario} onPlan={() => runTestAction("plan")} onDemoTest={() => runOriginalDemo("wiggle")} onDemoRepair={() => runOriginalDemo("repair")} busy={busy} />;

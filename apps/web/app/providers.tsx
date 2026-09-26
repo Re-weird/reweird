@@ -1,8 +1,8 @@
 "use client";
 
 import { useEffect } from "react";
-import { ClerkProvider } from "@clerk/nextjs";
-import { CLERK_ENABLED, useAuth } from "@/lib/clerk";
+import { SessionProvider } from "next-auth/react";
+import { AUTH_ENABLED, useAuth } from "@/lib/auth";
 import { setTokenGetter } from "@/lib/auth-token";
 
 function TokenBridge() {
@@ -15,11 +15,11 @@ function TokenBridge() {
 }
 
 export function Providers({ children }: { children: React.ReactNode }) {
-  if (!CLERK_ENABLED) return <>{children}</>;
+  if (!AUTH_ENABLED) return <>{children}</>;
   return (
-    <ClerkProvider>
+    <SessionProvider>
       <TokenBridge />
       {children}
-    </ClerkProvider>
+    </SessionProvider>
   );
 }

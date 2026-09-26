@@ -42,7 +42,7 @@ import {
 import type { AnalyzeProjectResponse, DemoSession, DiagnosticWorkflow, ProbePlan, ProbeReading, Project, ProjectProfile, RuleResult, SimulatorScenario, TestRecommendation } from "@reweird/shared-types";
 import { ApiError, demoApi, projectApi, testApi } from "@/lib/api";
 import { useTheme } from "@/lib/theme";
-import { useUser } from "@/lib/clerk";
+import { useUser } from "@/lib/auth";
 import { makeDemoProfile, makeDemoSession } from "@/lib/demo";
 import { NewProjectModal, ProbePlanView, ProjectProfileView } from "./project-workflow";
 import { GuidedTestView } from "./guided-test";

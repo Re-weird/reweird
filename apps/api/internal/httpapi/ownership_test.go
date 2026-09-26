@@ -19,10 +19,10 @@ import (
 
 // testOwnedApp wires up a real app via the same newApp used in production,
 // but with a fake owner-identity middleware that trusts a test-only
-// "X-Test-Owner" header instead of verifying a real Clerk token. This lets
+// "X-Test-Owner" header instead of verifying a real signed token. This lets
 // the ownership isolation logic itself be tested deterministically, without
-// making network calls to Clerk's JWKS endpoint. Production never uses this
-// path — NewApp always wires the real ownerContext(clerkConfigured).
+// needing a real AUTH_TOKEN_SECRET-signed token. Production never uses this
+// path — NewApp always wires the real ownerContext(authConfigured).
 func testOwnedApp(t *testing.T) *fiber.App {
 	t.Helper()
 	root := t.TempDir()
@@ -135,7 +135,7 @@ func TestProjectOwnershipIsolation(t *testing.T) {
 // header -> anonymous, unconfigured -> anonymous even with a header present,
 // and a malformed/invalid bearer token -> 401, never silently downgraded.
 func TestOwnerContextRealMiddleware(t *testing.T) {
-	newRealApp := func(t *testing.T, clerkConfigured bool) *fiber.App {
+	newRealApp := func(t *testing.T, authConfigured bool) *fiber.App {
 		t.Helper()
 		root := t.TempDir()
 		repository, err := store.Open(filepath.Join(root, "test.db"))
@@ -147,7 +147,7 @@ func TestOwnerContextRealMiddleware(t *testing.T) {
 		if err := repository.SaveProfile(demo); err != nil {
 			t.Fatal(err)
 		}
-		return NewApp(diagnostics.NewEngine(signalanalysis.New()), repository, simulator.NewUltrasonicSource(), demo.ID, ProjectServices{}, clerkConfigured)
+		return NewApp(diagnostics.NewEngine(signalanalysis.New()), repository, simulator.NewUltrasonicSource(), demo.ID, ProjectServices{}, authConfigured)
 	}
 
 	t.Run("no header is anonymous", func(t *testing.T) {

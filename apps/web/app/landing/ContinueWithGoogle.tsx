@@ -1,8 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { SignInButton } from "@clerk/nextjs";
-import { CLERK_ENABLED } from "@/lib/clerk";
+import { signIn } from "next-auth/react";
+import { AUTH_ENABLED } from "@/lib/auth";
 import { GoogleMark } from "./GoogleMark";
 
 export function ContinueWithGoogle({ className }: { className?: string }) {
@@ -12,7 +12,7 @@ export function ContinueWithGoogle({ className }: { className?: string }) {
     </>
   );
 
-  if (!CLERK_ENABLED) {
+  if (!AUTH_ENABLED) {
     return (
       <Link href="/app" className={className} title="Google sign-in isn't configured on this deployment yet — see design/design.md for setup.">
         {content}
@@ -21,8 +21,6 @@ export function ContinueWithGoogle({ className }: { className?: string }) {
   }
 
   return (
-    <SignInButton mode="modal" forceRedirectUrl="/app">
-      <button className={className} type="button">{content}</button>
-    </SignInButton>
+    <button className={className} type="button" onClick={() => signIn("google", { callbackUrl: "/app" })}>{content}</button>
   );
 }

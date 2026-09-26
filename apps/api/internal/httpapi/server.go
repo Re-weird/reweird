@@ -36,14 +36,14 @@ type ProjectServices struct {
 	UploadRoot    string
 }
 
-func NewApp(engine *diagnostics.Engine, repository domain.Repository, source domain.TelemetrySource, profileID string, projectServices ProjectServices, clerkConfigured bool) *fiber.App {
-	return newApp(engine, repository, source, profileID, projectServices, ownerContext(clerkConfigured))
+func NewApp(engine *diagnostics.Engine, repository domain.Repository, source domain.TelemetrySource, profileID string, projectServices ProjectServices, authConfigured bool) *fiber.App {
+	return newApp(engine, repository, source, profileID, projectServices, ownerContext(authConfigured))
 }
 
 // newApp takes the owner-identity middleware as a parameter so tests can
 // substitute a fake verifier (simulating specific signed-in owners) without
-// making real Clerk network calls. Production always goes through NewApp,
-// which wires up the real ownerContext(clerkConfigured) middleware above.
+// needing a real signed token. Production always goes through NewApp, which
+// wires up the real ownerContext(authConfigured) middleware above.
 func newApp(engine *diagnostics.Engine, repository domain.Repository, source domain.TelemetrySource, profileID string, projectServices ProjectServices, ownerMiddleware fiber.Handler) *fiber.App {
 	app := fiber.New(fiber.Config{
 		AppName:               "ReWeird API",

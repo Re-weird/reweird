@@ -1,11 +1,7 @@
 "use client";
 
-import dynamic from "next/dynamic";
-
-const ScrollStory = dynamic(() => import("./scroll-story/ScrollStory").then((mod) => mod.ScrollStory), {
-  ssr: false,
-});
+import { ProductStory } from "./ProductStory";
 
 export function LandingPage() {
-  return <ScrollStory />;
+  return <ProductStory />;
 }

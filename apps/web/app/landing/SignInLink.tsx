@@ -1,8 +1,8 @@
 "use client";
 
 import { LogIn } from "lucide-react";
-import { SignInButton } from "@clerk/nextjs";
-import { CLERK_ENABLED } from "@/lib/clerk";
+import { signIn } from "next-auth/react";
+import { AUTH_ENABLED } from "@/lib/auth";
 
 export function SignInLink({ className }: { className?: string }) {
   const content = (
@@ -12,7 +12,7 @@ export function SignInLink({ className }: { className?: string }) {
     </>
   );
 
-  if (!CLERK_ENABLED) {
+  if (!AUTH_ENABLED) {
     return (
       <a href="/" className={className} title="Google sign-in isn't configured on this deployment yet.">
         {content}
@@ -21,8 +21,6 @@ export function SignInLink({ className }: { className?: string }) {
   }
 
   return (
-    <SignInButton mode="modal">
-      <button className={className} type="button" style={{ width: "100%", textAlign: "left" }}>{content}</button>
-    </SignInButton>
+    <button className={className} type="button" style={{ width: "100%", textAlign: "left" }} onClick={() => signIn("google")}>{content}</button>
   );
 }

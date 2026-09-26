@@ -3,9 +3,9 @@
 import { useRef } from "react";
 import Link from "next/link";
 import { ArrowUpRight, Moon, Sun, Waves } from "lucide-react";
-import { SignInButton } from "@clerk/nextjs";
+import { signIn } from "next-auth/react";
 import { useTheme } from "@/lib/theme";
-import { useUser, CLERK_ENABLED } from "@/lib/clerk";
+import { useUser, AUTH_ENABLED } from "@/lib/auth";
 import { ContinueWithGoogle } from "../ContinueWithGoogle";
 import { beats, poseAt, activeBeatIndex } from "./beats";
 import { useStoryProgress } from "./useStoryProgress";
@@ -30,8 +30,8 @@ export function ScrollStory() {
           <Link href="/app?mode=demo">Demo</Link>
           {isSignedIn ? (
             <Link href="/app" className={styles.signIn}>Open workspace</Link>
-          ) : CLERK_ENABLED ? (
-            <SignInButton mode="modal"><button className={styles.navSignInButton} type="button">Sign in</button></SignInButton>
+          ) : AUTH_ENABLED ? (
+            <button className={styles.navSignInButton} type="button" onClick={() => signIn("google")}>Sign in</button>
           ) : (
             <Link href="/app" className={styles.signIn}>Sign in</Link>
           )}

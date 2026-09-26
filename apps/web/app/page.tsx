@@ -18,12 +18,14 @@ import {
   LayoutDashboard,
   Menu,
   Microscope,
+  Moon,
   Plus,
   Radio,
   RefreshCw,
   Settings,
   ShieldCheck,
   Sparkles,
+  Sun,
   TestTube2,
   TriangleAlert,
   Waves,
@@ -48,21 +50,23 @@ import { ComputerDiagnosticsView } from "./computer-diagnostics";
 import { SettingsStatusView } from "./settings-status";
 
 type View = "dashboard" | "profile" | "connect" | "simulator" | "live" | "diagnosis" | "guided" | "verify" | "history" | "reports" | "computer" | "settings";
+type Theme = "light" | "dark";
 
-const nav: { id: View; label: string; icon: typeof Activity }[] = [
-  { id: "dashboard", label: "Overview", icon: LayoutDashboard },
-  { id: "profile", label: "Project profile", icon: Box },
-  { id: "connect", label: "Connect ReWeird", icon: Cable },
-  { id: "simulator", label: "Fault simulator", icon: TestTube2 },
-  { id: "live", label: "Live diagnostics", icon: Activity },
-  { id: "diagnosis", label: "Diagnosis", icon: Microscope },
-  { id: "guided", label: "Guided test", icon: TestTube2 },
-  { id: "verify", label: "Verify", icon: CheckCircle2 },
-  { id: "history", label: "History", icon: RefreshCw },
-  { id: "reports", label: "Reports", icon: FileBarChart },
-  { id: "computer", label: "Computer diagnostics", icon: Cpu },
-  { id: "settings", label: "Settings & status", icon: Settings },
+const nav: { id: View; label: string; icon: typeof Activity; group: "Workspace" | "Diagnostic flow" | "Records" }[] = [
+  { id: "dashboard", label: "Overview", icon: LayoutDashboard, group: "Workspace" },
+  { id: "profile", label: "Project overview", icon: Box, group: "Workspace" },
+  { id: "connect", label: "Probe setup", icon: Cable, group: "Workspace" },
+  { id: "simulator", label: "Simulator", icon: TestTube2, group: "Diagnostic flow" },
+  { id: "live", label: "Live signals", icon: Activity, group: "Diagnostic flow" },
+  { id: "diagnosis", label: "Diagnosis", icon: Microscope, group: "Diagnostic flow" },
+  { id: "guided", label: "Next test", icon: TestTube2, group: "Diagnostic flow" },
+  { id: "verify", label: "Verify result", icon: CheckCircle2, group: "Diagnostic flow" },
+  { id: "history", label: "History", icon: RefreshCw, group: "Records" },
+  { id: "reports", label: "Reports", icon: FileBarChart, group: "Records" },
+  { id: "computer", label: "Computer checks", icon: Cpu, group: "Records" },
 ];
+
+const navGroups = ["Workspace", "Diagnostic flow", "Records"] as const;
 
 const stageIndex = { detect: 0, diagnose: 1, test: 2, repair: 2, verify: 3 } as const;
 
@@ -143,10 +147,10 @@ function SignalChart({ session }: { session: DemoSession }) {
               <stop offset="100%" stopColor="#ff5c7a" stopOpacity={0} />
             </linearGradient>
           </defs>
-          <CartesianGrid stroke="#1d2831" vertical={false} />
-          <XAxis dataKey="time" stroke="#65717b" fontSize={11} tickLine={false} axisLine={false} />
-          <YAxis stroke="#65717b" fontSize={11} tickLine={false} axisLine={false} />
-          <Tooltip contentStyle={{ background: "#111a21", border: "1px solid #2b3943", borderRadius: 10, fontSize: 12 }} />
+          <CartesianGrid stroke="var(--line)" vertical={false} />
+          <XAxis dataKey="time" stroke="var(--muted)" fontSize={11} tickLine={false} axisLine={false} />
+          <YAxis stroke="var(--muted)" fontSize={11} tickLine={false} axisLine={false} />
+          <Tooltip contentStyle={{ background: "var(--surface)", color: "var(--text)", border: "1px solid var(--line)", borderRadius: 10, fontSize: 12 }} />
           <Area type="monotone" dataKey="primary" stroke="#ff5c7a" strokeWidth={2} fill="url(#echoGradient)" name={charted[0] ? `${charted[0].probe} ${charted[0].role}` : "Signal"} />
           {charted[1] && <Area type="monotone" dataKey="secondary" stroke="#23d5ab" strokeWidth={2} fill="transparent" name={`${charted[1].probe} ${charted[1].role}`} />}
         </AreaChart>
@@ -179,6 +183,28 @@ function AppShell({
   onLoadDemo: () => void;
 }) {
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [theme, setTheme] = useState<Theme>("dark");
+
+  useEffect(() => {
+    const stored = window.localStorage.getItem("reweird-theme");
+    const nextTheme: Theme = stored === "light" || stored === "dark"
+      ? stored
+      : window.matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark";
+    setTheme(nextTheme);
+    document.documentElement.dataset.theme = nextTheme;
+  }, []);
+
+  const toggleTheme = () => {
+    const nextTheme: Theme = theme === "dark" ? "light" : "dark";
+    setTheme(nextTheme);
+    document.documentElement.dataset.theme = nextTheme;
+    window.localStorage.setItem("reweird-theme", nextTheme);
+  };
+
+  const sourceLabel = source === "browser"
+    ? "Demo data"
+    : session.telemetry_mode === "serial" ? "ESP32 serial" : "API simulator";
+
   return (
     <div className="app-shell">
       <aside className={`sidebar ${mobileOpen ? "mobile-open" : ""}`}>
@@ -189,17 +215,21 @@ function AppShell({
           <div><small>Active project</small><strong>{projectName}</strong></div>
           <ChevronRight size={16} />
         </div>
-        <nav>
-          <p className="nav-label">Workspace</p>
-          {nav.map((item) => {
-            const Icon = item.icon;
-            return (
-              <button key={item.id} className={active === item.id ? "active" : ""} onClick={() => { setActive(item.id); setMobileOpen(false); }}>
-                <Icon size={18} /><span>{item.label}</span>
-                {item.id === "diagnosis" && session.stage !== "verify" && <i />}
-              </button>
-            );
-          })}
+        <nav aria-label="Primary navigation">
+          {navGroups.map((group) => (
+            <div className="nav-group" key={group}>
+              <p className="nav-label">{group}</p>
+              {nav.filter((item) => item.group === group).map((item) => {
+                const Icon = item.icon;
+                return (
+                  <button key={item.id} className={active === item.id ? "active" : ""} aria-current={active === item.id ? "page" : undefined} onClick={() => { setActive(item.id); setMobileOpen(false); }}>
+                    <Icon size={17} /><span>{item.label}</span>
+                    {item.id === "diagnosis" && session.stage !== "verify" && <i />}
+                  </button>
+                );
+              })}
+            </div>
+          ))}
         </nav>
         <div className="sidebar-bottom">
           <button onClick={() => setActive("reports")}><GitBranch size={17} /> Report sync</button>
@@ -211,10 +241,13 @@ function AppShell({
       <main>
         <header className="topbar">
           <button className="mobile-menu" onClick={() => setMobileOpen(true)} aria-label="Open menu"><Menu size={20} /></button>
-          <div className="topbar-title"><span>{nav.find((item) => item.id === active)?.label}</span><small>{projectContext}</small></div>
+          <div className="topbar-title"><span>{active === "settings" ? "Settings & status" : nav.find((item) => item.id === active)?.label}</span><small>{projectContext}</small></div>
           <div className="top-actions">
-            <div className={`connection-pill ${hardwareConnected ? "" : "waiting"}`}><span /> {hardwareConnected ? "Hardware connected" : "Hardware waiting"}</div>
-            <div className="mode-pill"><Radio size={13} /> {source === "api" ? (session.telemetry_mode === "serial" ? "ESP32 serial" : "API simulator") : "Browser simulator"}</div>
+            <div className={`connection-pill ${hardwareConnected ? "" : "waiting"}`}><span /> {hardwareConnected ? "Hardware connected" : "Hardware offline"}</div>
+            <div className={`mode-pill source-${source === "browser" ? "demo" : session.telemetry_mode === "serial" ? "hardware" : "simulator"}`}><Radio size={13} /> {sourceLabel}</div>
+            <button className="icon-button theme-toggle" onClick={toggleTheme} aria-label={`Switch to ${theme === "dark" ? "light" : "dark"} mode`} title={`Switch to ${theme === "dark" ? "light" : "dark"} mode`}>
+              {theme === "dark" ? <Sun size={16} /> : <Moon size={16} />}
+            </button>
             <button className="secondary compact" onClick={onLoadDemo}>Load demo</button>
             <button className="primary compact" onClick={onNewProject}><Plus size={16} /> New project</button>
           </div>
@@ -232,9 +265,9 @@ function DashboardView({ session, setActive }: { session: DemoSession; setActive
     <>
       <section className="hero-row">
         <div>
-          <p className="kicker">Diagnostic workspace</p>
-          <h1>Good evening, engineer.</h1>
-          <p>One active session is turning validated raw samples into profile-aware evidence.</p>
+          <p className="kicker">Evidence-first hardware diagnostics</p>
+          <h1>Find the fault. Prove the fix.</h1>
+          <p>Follow one clear path from project context and measured signals to diagnosis, the next safe test, and verification.</p>
         </div>
         <button className="secondary" onClick={() => setActive("live")}><Activity size={17} /> Open live session</button>
       </section>

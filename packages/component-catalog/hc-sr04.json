@@ -1,11 +1,22 @@
 {
   "id": "hc-sr04",
   "name": "HC-SR04 Ultrasonic Distance Sensor",
-  "pins": ["VCC", "TRIG", "ECHO", "GND"],
-  "supply_voltage": { "typical": 5.0, "unit": "V" },
-  "interfaces": ["trigger pulse", "echo pulse"],
-  "notes": [
-    "ECHO level must be made safe for the selected controller input.",
-    "Catalog values are project context and do not replace measured evidence."
+  "aliases": ["HC-SR04", "ultrasonic sensor", "distance sensor"],
+  "interface_type": "trigger/echo pulse",
+  "operating_voltage": { "typical": 5.0, "unit": "V" },
+  "pin_roles": [
+    { "name": "VCC", "direction": "power", "signal_types": ["voltage rail"], "description": "Module supply." },
+    { "name": "TRIG", "direction": "input", "signal_types": ["digital pulse"], "description": "Trigger input from the controller." },
+    { "name": "ECHO", "direction": "output", "signal_types": ["pulse width"], "description": "Echo pulse returned to the controller." },
+    { "name": "GND", "direction": "reference", "signal_types": ["ground"], "description": "Common circuit reference." }
+  ],
+  "expected_behavior": "A controller trigger pulse starts a ranging cycle and the module returns an echo pulse whose width represents time of flight.",
+  "safe_measurement_notes": [
+    "The ECHO output may reach the module supply voltage; use a verified divider or level shifter before a 3.3 V input.",
+    "Catalog context does not replace measured evidence or a board-specific datasheet."
+  ],
+  "known_signal_types": ["voltage rail", "digital pulse", "pulse width"],
+  "sources": [
+    { "title": "SparkFun HC-SR04 Datasheet", "url": "https://cdn.sparkfun.com/datasheets/Sensors/Proximity/HCSR04.pdf" }
   ]
 }

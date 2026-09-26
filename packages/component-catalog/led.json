@@ -1,0 +1,14 @@
+{
+  "id": "led",
+  "name": "Light-emitting Diode",
+  "aliases": ["LED", "indicator LED"],
+  "interface_type": "digital or PWM output",
+  "pin_roles": [
+    { "name": "ANODE", "direction": "input", "signal_types": ["digital", "PWM"], "description": "Positive LED terminal, normally driven through current limiting." },
+    { "name": "CATHODE", "direction": "reference", "signal_types": ["ground or switched return"], "description": "Negative LED terminal." }
+  ],
+  "expected_behavior": "Light output follows a current-limited digital or PWM drive.",
+  "safe_measurement_notes": ["Forward voltage and current depend on the exact LED; do not infer a safe drive current from this generic entry."],
+  "known_signal_types": ["digital", "PWM"],
+  "sources": [{ "title": "IEC 60747-5-2 Overview", "url": "https://webstore.iec.ch/en/publication/2192" }]
+}

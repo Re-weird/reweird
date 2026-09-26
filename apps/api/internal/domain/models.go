@@ -2,6 +2,129 @@ package domain
 
 import "context"
 
+type ProjectFactSource string
+
+const (
+	SourceCodeStaticAnalysis ProjectFactSource = "CODE_STATIC_ANALYSIS"
+	SourceVisionAI           ProjectFactSource = "VISION_AI"
+	SourceCatalog            ProjectFactSource = "CATALOG"
+	SourceUser               ProjectFactSource = "USER"
+	SourceInferred           ProjectFactSource = "INFERRED"
+)
+
+type AnalysisStatus string
+
+const (
+	AnalysisPending    AnalysisStatus = "PENDING"
+	AnalysisProcessing AnalysisStatus = "PROCESSING"
+	AnalysisDraftReady AnalysisStatus = "DRAFT_READY"
+	AnalysisFailed     AnalysisStatus = "FAILED"
+	AnalysisConfirmed  AnalysisStatus = "CONFIRMED"
+)
+
+type ProjectMedia struct {
+	StorageRef       string `json:"storage_ref"`
+	OriginalFilename string `json:"original_filename"`
+	ContentType      string `json:"content_type"`
+	SizeBytes        int64  `json:"size_bytes"`
+	SHA256           string `json:"sha256"`
+}
+
+type ProjectCode struct {
+	Filename  string `json:"filename"`
+	Language  string `json:"language"`
+	Text      string `json:"text"`
+	SizeBytes int64  `json:"size_bytes"`
+	SHA256    string `json:"sha256"`
+}
+
+type CodePinFinding struct {
+	GPIO       int               `json:"gpio"`
+	Symbol     string            `json:"symbol"`
+	Direction  string            `json:"direction"`
+	Behavior   string            `json:"behavior"`
+	Confidence float64           `json:"confidence"`
+	Source     ProjectFactSource `json:"source"`
+	Evidence   []string          `json:"evidence"`
+}
+
+type CodeAnalysis struct {
+	Status    string           `json:"status"`
+	Language  string           `json:"language"`
+	Parser    string           `json:"parser"`
+	Pins      []CodePinFinding `json:"pins"`
+	Includes  []string         `json:"includes"`
+	Libraries []string         `json:"libraries"`
+	Timing    []string         `json:"timing"`
+	Warnings  []string         `json:"warnings"`
+}
+
+type VisionComponent struct {
+	CatalogID     string            `json:"catalog_id,omitempty"`
+	Name          string            `json:"name"`
+	Confidence    float64           `json:"confidence"`
+	VisibleLabels []string          `json:"visible_labels,omitempty"`
+	Source        ProjectFactSource `json:"source"`
+}
+
+type VisionRelationship struct {
+	From       string            `json:"from"`
+	To         string            `json:"to"`
+	Role       string            `json:"role"`
+	GPIO       *int              `json:"gpio,omitempty"`
+	Confidence float64           `json:"confidence"`
+	Source     ProjectFactSource `json:"source"`
+}
+
+type VisionAnalysis struct {
+	Status        string               `json:"status"`
+	Model         string               `json:"model,omitempty"`
+	Components    []VisionComponent    `json:"components"`
+	Relationships []VisionRelationship `json:"relationships"`
+	Warnings      []string             `json:"warnings"`
+}
+
+type ProjectAnalysis struct {
+	Code          CodeAnalysis   `json:"code"`
+	Vision        VisionAnalysis `json:"vision"`
+	GeneratedAtMS int64          `json:"generated_at_ms"`
+}
+
+type ProbeInstruction struct {
+	Probe       string `json:"probe"`
+	Role        string `json:"role"`
+	Target      string `json:"target"`
+	Expected    string `json:"expected"`
+	SignalType  string `json:"signal_type"`
+	SafeWarning string `json:"safe_warning"`
+	Explanation string `json:"explanation,omitempty"`
+}
+
+type ProbePlan struct {
+	ProjectID     string             `json:"project_id"`
+	ProfileID     string             `json:"profile_id"`
+	Instructions  []ProbeInstruction `json:"instructions"`
+	Connected     bool               `json:"connected"`
+	ConnectedAtMS int64              `json:"connected_at_ms,omitempty"`
+	GeneratedAtMS int64              `json:"generated_at_ms"`
+}
+
+type Project struct {
+	ID             string           `json:"id"`
+	Name           string           `json:"name"`
+	Description    string           `json:"description,omitempty"`
+	Controller     string           `json:"controller"`
+	LogicVoltage   float64          `json:"logic_voltage"`
+	Image          *ProjectMedia    `json:"image,omitempty"`
+	Code           *ProjectCode     `json:"code,omitempty"`
+	Analysis       *ProjectAnalysis `json:"analysis,omitempty"`
+	AnalysisStatus AnalysisStatus   `json:"analysis_status"`
+	AnalysisError  string           `json:"analysis_error,omitempty"`
+	ProbePlan      *ProbePlan       `json:"probe_plan,omitempty"`
+	CreatedAtMS    int64            `json:"created_at_ms"`
+	UpdatedAtMS    int64            `json:"updated_at_ms"`
+}
+
 type Stage string
 
 const (
@@ -112,24 +235,78 @@ type ProbeConfiguration struct {
 }
 
 type ComponentSpecification struct {
-	ID           string             `json:"id"`
-	Name         string             `json:"name"`
-	Manufacturer string             `json:"manufacturer,omitempty"`
-	Properties   map[string]float64 `json:"properties,omitempty"`
-	Source       string             `json:"source,omitempty"`
+	ID                   string              `json:"id"`
+	Name                 string              `json:"name"`
+	Manufacturer         string              `json:"manufacturer,omitempty"`
+	Properties           map[string]float64  `json:"properties,omitempty"`
+	Source               string              `json:"source,omitempty"`
+	Sources              []ProjectFactSource `json:"sources,omitempty"`
+	Confidence           float64             `json:"confidence,omitempty"`
+	Confirmed            bool                `json:"confirmed"`
+	InterfaceType        string              `json:"interface_type,omitempty"`
+	ExpectedBehavior     string              `json:"expected_behavior,omitempty"`
+	SafeMeasurementNotes []string            `json:"safe_measurement_notes,omitempty"`
+}
+
+type ProfileEvidence struct {
+	Value      string            `json:"value"`
+	Source     ProjectFactSource `json:"source"`
+	Confidence float64           `json:"confidence"`
+}
+
+type ProfileConnection struct {
+	ID            string              `json:"id"`
+	ComponentID   string              `json:"component_id,omitempty"`
+	ComponentName string              `json:"component_name"`
+	Role          string              `json:"role"`
+	GPIO          *int                `json:"gpio,omitempty"`
+	Target        string              `json:"target"`
+	Direction     string              `json:"direction"`
+	Behavior      string              `json:"behavior"`
+	Expected      ExpectedSignal      `json:"expected"`
+	Confidence    float64             `json:"confidence"`
+	Sources       []ProjectFactSource `json:"sources"`
+	Evidence      []ProfileEvidence   `json:"evidence,omitempty"`
+	Required      bool                `json:"required"`
+	Confirmed     bool                `json:"confirmed"`
+}
+
+type ConflictOption struct {
+	Value      string            `json:"value"`
+	Source     ProjectFactSource `json:"source"`
+	Confidence float64           `json:"confidence"`
+}
+
+type ProfileConflict struct {
+	ID                   string           `json:"id"`
+	ConnectionID         string           `json:"connection_id,omitempty"`
+	Field                string           `json:"field"`
+	Options              []ConflictOption `json:"options"`
+	Resolution           string           `json:"resolution,omitempty"`
+	Resolved             bool             `json:"resolved"`
+	RequiresConfirmation bool             `json:"requires_confirmation"`
 }
 
 type ProjectProfile struct {
-	ID               string                   `json:"id"`
-	ProjectName      string                   `json:"project_name"`
-	Controller       string                   `json:"controller"`
-	LogicVoltage     float64                  `json:"logic_voltage"`
-	Confirmed        bool                     `json:"confirmed"`
-	Components       []ComponentSpecification `json:"components"`
-	Probes           []ProbeConfiguration     `json:"probes"`
-	ExpectedBehavior string                   `json:"expected_behavior"`
-	CreatedAtMS      int64                    `json:"created_at_ms"`
-	UpdatedAtMS      int64                    `json:"updated_at_ms"`
+	ID                  string                   `json:"id"`
+	ProjectID           string                   `json:"project_id,omitempty"`
+	Version             int                      `json:"version"`
+	ProjectName         string                   `json:"project_name"`
+	Controller          string                   `json:"controller"`
+	LogicVoltage        float64                  `json:"logic_voltage"`
+	Confirmed           bool                     `json:"confirmed"`
+	ConfirmedAtMS       int64                    `json:"confirmed_at_ms,omitempty"`
+	ConfirmedBy         string                   `json:"confirmed_by,omitempty"`
+	Components          []ComponentSpecification `json:"components"`
+	Connections         []ProfileConnection      `json:"connections,omitempty"`
+	Probes              []ProbeConfiguration     `json:"probes"`
+	ExpectedBehavior    string                   `json:"expected_behavior"`
+	OperatingConditions []string                 `json:"operating_conditions,omitempty"`
+	Conflicts           []ProfileConflict        `json:"conflicts,omitempty"`
+	UnresolvedQuestions []string                 `json:"unresolved_questions,omitempty"`
+	AnalysisStatus      string                   `json:"analysis_status,omitempty"`
+	CreatedAtMS         int64                    `json:"created_at_ms"`
+	UpdatedAtMS         int64                    `json:"updated_at_ms"`
 }
 
 func (profile ProjectProfile) Probe(probe string) (ProbeConfiguration, bool) {
@@ -281,4 +458,7 @@ type Repository interface {
 	SaveProfile(profile ProjectProfile) error
 	GetProfile(id string) (*ProjectProfile, error)
 	ListProfiles() ([]ProjectProfile, error)
+	SaveProject(project Project) error
+	GetProject(id string) (*Project, error)
+	ListProjects() ([]Project, error)
 }

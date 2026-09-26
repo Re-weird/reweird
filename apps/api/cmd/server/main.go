@@ -8,14 +8,18 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/re-weird/reweird/apps/api/internal/codeanalysis"
 	"github.com/re-weird/reweird/apps/api/internal/diagnostics"
 	"github.com/re-weird/reweird/apps/api/internal/domain"
 	"github.com/re-weird/reweird/apps/api/internal/httpapi"
 	"github.com/re-weird/reweird/apps/api/internal/profiles"
+	"github.com/re-weird/reweird/apps/api/internal/projectunderstanding"
 	"github.com/re-weird/reweird/apps/api/internal/signalanalysis"
 	"github.com/re-weird/reweird/apps/api/internal/simulator"
 	"github.com/re-weird/reweird/apps/api/internal/store"
 	"github.com/re-weird/reweird/apps/api/internal/transport/serialsource"
+	"github.com/re-weird/reweird/apps/api/internal/vision"
+	componentcatalog "github.com/re-weird/reweird/packages/component-catalog"
 )
 
 func main() {
@@ -23,6 +27,7 @@ func main() {
 	port := environment("API_PORT", "8080")
 	telemetryMode := strings.ToLower(environment("TELEMETRY_MODE", "simulator"))
 	profileID := environment("PROJECT_PROFILE_ID", "ultrasonic-demo")
+	uploadRoot := environment("UPLOAD_DIR", "./data/uploads")
 
 	repository, err := store.Open(databasePath)
 	if err != nil {
@@ -55,7 +60,16 @@ func main() {
 	}
 
 	engine := diagnostics.NewEngine(signalanalysis.New())
-	app := httpapi.NewApp(engine, repository, source, profileID)
+	catalog, err := componentcatalog.Load()
+	if err != nil {
+		log.Fatalf("load component catalog: %v", err)
+	}
+	understanding := projectunderstanding.New(
+		codeanalysis.New(),
+		vision.NewGemini(os.Getenv("GEMINI_API_KEY"), environment("GEMINI_MODEL", "gemini-2.5-flash")),
+		catalog,
+	)
+	app := httpapi.NewApp(engine, repository, source, profileID, httpapi.ProjectServices{Understanding: understanding, UploadRoot: uploadRoot})
 
 	log.Printf("ReWeird API listening on http://localhost:%s (telemetry=%s, profile=%s, PATCH=locked)", port, source.Name(), profileID)
 	if err := app.Listen(":" + port); err != nil {

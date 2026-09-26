@@ -1,0 +1,13 @@
+{
+  "id": "pwm-output",
+  "name": "PWM Output",
+  "aliases": ["PWM", "LEDC", "analogWrite"],
+  "interface_type": "pulse-width modulation",
+  "pin_roles": [
+    { "name": "PWM", "direction": "input to component", "signal_types": ["PWM", "frequency", "duty cycle"], "description": "Pulse-width-modulated controller output." }
+  ],
+  "expected_behavior": "A periodic digital waveform conveys an average command through frequency and duty cycle.",
+  "safe_measurement_notes": ["Expected frequency and duty cycle must come from project code or a user-confirmed specification."],
+  "known_signal_types": ["PWM", "frequency", "duty cycle"],
+  "sources": [{ "title": "Espressif ESP32 LEDC API", "url": "https://docs.espressif.com/projects/esp-idf/en/stable/esp32/api-reference/peripherals/ledc.html" }]
+}

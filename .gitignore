@@ -11,3 +11,4 @@ coverage/
 bin/
 *.tsbuildinfo
 .pio/
+data/uploads/

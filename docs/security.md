@@ -10,7 +10,17 @@
 - Serial JSON rejects unknown fields, unsupported schema versions, duplicate or
   unknown probes, invalid states, non-finite/out-of-range values, oversized
   arrays, mismatched modes, and unconfirmed profiles.
-- The API body limit is 256 KiB and telemetry arrays have smaller field limits.
+- The API body limit is 6 MiB. Images are limited to 5 MiB and accepted only when
+  content sniffing identifies PNG or JPEG. Code is limited to 512 KiB, restricted
+  to supported text extensions, validated as UTF-8/non-binary, and never
+  compiled, imported, evaluated, or executed.
+- Original filenames are reduced to safe basenames. Media is stored under a
+  generated content-hash name inside the configured upload root, with path
+  containment checks and exclusive file creation.
+- Obvious credential uploads such as `.env`, `.pem`, `.key`, `.p12`, and `.pfx`
+  are rejected. Full source text is not written to request logs.
+- Gemini credentials remain server-side. Image input is bounded, and every
+  returned fact is forced to `VISION_AI` provenance before merging.
 - SQLite receives normalized diagnostic snapshots, not arbitrary device commands.
 - CORS allows only local development origins.
 - Git synchronization is off by default.
@@ -28,10 +38,12 @@
 - Audit whether every action came from a user, deterministic system rule, AI
   recommendation, or hardware event.
 
-## Required before uploads and integrations
+## Required before production uploads and integrations
 
-- Validate MIME type, extension, size, and archive expansion limits.
-- Scan source and reports for secrets before persistence or Git operations.
+- Add malware scanning and content-disarm policy if additional media formats are
+  accepted. Archives remain unsupported, so there is no archive expansion path.
+- Scan source and reports for secrets beyond the current filename blocklist
+  before persistence or Git operations.
 - Store API keys server-side only; never expose them to the browser or firmware.
 - Sandbox code parsing and media processing.
 - Escape report output and guard against prompt injection in source comments,

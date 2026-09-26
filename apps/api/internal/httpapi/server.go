@@ -13,23 +13,31 @@ import (
 	"github.com/re-weird/reweird/apps/api/internal/diagnostics"
 	"github.com/re-weird/reweird/apps/api/internal/domain"
 	"github.com/re-weird/reweird/apps/api/internal/profiles"
+	"github.com/re-weird/reweird/apps/api/internal/projectunderstanding"
 )
 
 type Controller struct {
-	mu         sync.RWMutex
-	stage      domain.Stage
-	reference  *domain.AnalysisResult
-	engine     *diagnostics.Engine
-	repository domain.Repository
-	source     domain.TelemetrySource
-	profileID  string
+	mu            sync.RWMutex
+	stage         domain.Stage
+	reference     *domain.AnalysisResult
+	engine        *diagnostics.Engine
+	repository    domain.Repository
+	source        domain.TelemetrySource
+	profileID     string
+	understanding *projectunderstanding.Service
+	uploadRoot    string
 }
 
-func NewApp(engine *diagnostics.Engine, repository domain.Repository, source domain.TelemetrySource, profileID string) *fiber.App {
+type ProjectServices struct {
+	Understanding *projectunderstanding.Service
+	UploadRoot    string
+}
+
+func NewApp(engine *diagnostics.Engine, repository domain.Repository, source domain.TelemetrySource, profileID string, projectServices ProjectServices) *fiber.App {
 	app := fiber.New(fiber.Config{
 		AppName:               "ReWeird API",
 		DisableStartupMessage: true,
-		BodyLimit:             256 * 1024,
+		BodyLimit:             6 * 1024 * 1024,
 	})
 	app.Use(logger.New())
 	app.Use(cors.New(cors.Config{
@@ -39,11 +47,13 @@ func NewApp(engine *diagnostics.Engine, repository domain.Repository, source dom
 	}))
 
 	controller := &Controller{
-		stage:      domain.StageDiagnose,
-		engine:     engine,
-		repository: repository,
-		source:     source,
-		profileID:  profileID,
+		stage:         domain.StageDiagnose,
+		engine:        engine,
+		repository:    repository,
+		source:        source,
+		profileID:     profileID,
+		understanding: projectServices.Understanding,
+		uploadRoot:    projectServices.UploadRoot,
 	}
 	if scenario, ok := source.(domain.ScenarioTelemetrySource); ok {
 		scenario.SetStage(domain.StageDiagnose)
@@ -60,9 +70,19 @@ func NewApp(engine *diagnostics.Engine, repository domain.Repository, source dom
 	api.Get("/profiles/:id", controller.getProfile)
 	api.Post("/profiles", controller.saveProfile)
 	api.Put("/profiles/:id", controller.saveProfile)
+	api.Post("/projects", controller.createProject)
+	api.Get("/projects", controller.listProjects)
+	api.Get("/projects/:id", controller.getProject)
+	api.Post("/projects/:id/media", controller.uploadProjectImage)
+	api.Post("/projects/:id/code", controller.uploadProjectCode)
+	api.Post("/projects/:id/analyze", controller.analyzeProject)
+	api.Get("/projects/:id/profile", controller.getProjectProfile)
+	api.Put("/projects/:id/profile", controller.updateProjectProfile)
+	api.Post("/projects/:id/profile/confirm", controller.confirmProjectProfile)
+	api.Get("/projects/:id/probe-plan", controller.getProbePlan)
+	api.Post("/projects/:id/probe-plan/confirm", controller.confirmProbePlan)
 
 	// Compatibility routes preserve the original dashboard and hackathon demo.
-	api.Get("/projects", controller.listProfiles)
 	api.Get("/demo/session", controller.current)
 	api.Post("/demo/reset", controller.transition(domain.StageDiagnose))
 	api.Post("/demo/wiggle", controller.transition(domain.StageTest))
@@ -161,7 +181,10 @@ func (controller *Controller) analyze(ctx context.Context) (domain.Session, erro
 }
 
 func (controller *Controller) analyzeAt(ctx context.Context, stage domain.Stage, reference *domain.AnalysisResult) (domain.Session, error) {
-	profile, err := controller.repository.GetProfile(controller.profileID)
+	controller.mu.RLock()
+	profileID := controller.profileID
+	controller.mu.RUnlock()
+	profile, err := controller.repository.GetProfile(profileID)
 	if err != nil {
 		return domain.Session{}, err
 	}

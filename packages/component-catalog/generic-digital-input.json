@@ -1,0 +1,13 @@
+{
+  "id": "generic-digital-input",
+  "name": "Generic Digital Input",
+  "aliases": ["digital input", "input pin"],
+  "interface_type": "digital input",
+  "pin_roles": [
+    { "name": "SIGNAL", "direction": "output from component", "signal_types": ["digital state", "transition", "pulse"], "description": "Signal observed by a controller input." }
+  ],
+  "expected_behavior": "A binary signal is sampled by the controller; valid thresholds depend on the controller and logic rail.",
+  "safe_measurement_notes": ["Confirm the source voltage and controller input limits."],
+  "known_signal_types": ["digital state", "transition", "pulse"],
+  "sources": [{ "title": "Espressif ESP32 GPIO API", "url": "https://docs.espressif.com/projects/esp-idf/en/stable/esp32/api-reference/peripherals/gpio.html" }]
+}

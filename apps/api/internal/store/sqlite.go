@@ -47,6 +47,15 @@ func (store *SQLiteStore) migrate() error {
 		);
 		CREATE INDEX IF NOT EXISTS idx_profiles_updated_at
 			ON project_profiles(updated_at DESC);
+		CREATE TABLE IF NOT EXISTS projects (
+			id TEXT PRIMARY KEY,
+			payload TEXT NOT NULL,
+			analysis_status TEXT NOT NULL,
+			created_at DATETIME NOT NULL,
+			updated_at DATETIME NOT NULL
+		);
+		CREATE INDEX IF NOT EXISTS idx_projects_updated_at
+			ON projects(updated_at DESC);
 	`)
 	return err
 }
@@ -146,6 +155,64 @@ func (store *SQLiteStore) ListProfiles() ([]domain.ProjectProfile, error) {
 		return nil, err
 	}
 	return profiles, nil
+}
+
+func (store *SQLiteStore) SaveProject(project domain.Project) error {
+	now := time.Now().UTC()
+	if project.CreatedAtMS == 0 {
+		project.CreatedAtMS = now.UnixMilli()
+	}
+	project.UpdatedAtMS = now.UnixMilli()
+	payload, err := json.Marshal(project)
+	if err != nil {
+		return err
+	}
+	_, err = store.db.Exec(`
+		INSERT INTO projects (id, payload, analysis_status, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?)
+		ON CONFLICT(id) DO UPDATE SET
+			payload = excluded.payload,
+			analysis_status = excluded.analysis_status,
+			updated_at = excluded.updated_at
+	`, project.ID, string(payload), project.AnalysisStatus, time.UnixMilli(project.CreatedAtMS).UTC(), now)
+	return err
+}
+
+func (store *SQLiteStore) GetProject(id string) (*domain.Project, error) {
+	var payload string
+	err := store.db.QueryRow("SELECT payload FROM projects WHERE id = ?", id).Scan(&payload)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	var project domain.Project
+	if err := json.Unmarshal([]byte(payload), &project); err != nil {
+		return nil, err
+	}
+	return &project, nil
+}
+
+func (store *SQLiteStore) ListProjects() ([]domain.Project, error) {
+	rows, err := store.db.Query("SELECT payload FROM projects ORDER BY updated_at DESC")
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	projects := make([]domain.Project, 0)
+	for rows.Next() {
+		var payload string
+		if err := rows.Scan(&payload); err != nil {
+			return nil, err
+		}
+		var project domain.Project
+		if err := json.Unmarshal([]byte(payload), &project); err != nil {
+			return nil, err
+		}
+		projects = append(projects, project)
+	}
+	return projects, rows.Err()
 }
 
 func (store *SQLiteStore) Close() error { return store.db.Close() }

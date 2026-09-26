@@ -1,0 +1,14 @@
+{
+  "id": "uart-device",
+  "name": "Generic UART Device",
+  "aliases": ["UART", "Serial", "TX", "RX"],
+  "interface_type": "UART",
+  "pin_roles": [
+    { "name": "TX", "direction": "output", "signal_types": ["serial data", "pulse train"], "description": "Transmit data line." },
+    { "name": "RX", "direction": "input", "signal_types": ["serial data", "pulse train"], "description": "Receive data line." }
+  ],
+  "expected_behavior": "Asynchronous serial data is exchanged at a user-confirmed baud rate and logic level.",
+  "safe_measurement_notes": ["Confirm logic voltage, idle polarity, and baud rate from the project before interpreting traffic."],
+  "known_signal_types": ["serial data", "pulse train"],
+  "sources": [{ "title": "Espressif ESP32 UART API", "url": "https://docs.espressif.com/projects/esp-idf/en/stable/esp32/api-reference/peripherals/uart.html" }]
+}

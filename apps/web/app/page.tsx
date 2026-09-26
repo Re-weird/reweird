@@ -6,6 +6,7 @@ import {
   BarChart3,
   Bolt,
   Box,
+  Cable,
   Check,
   CheckCircle2,
   ChevronRight,
@@ -27,7 +28,6 @@ import {
   Sparkles,
   TestTube2,
   TriangleAlert,
-  Upload,
   Waves,
   X,
   Zap,
@@ -41,15 +41,17 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import type { DemoSession, ProbeReading, RuleResult } from "@reweird/shared-types";
-import { demoApi } from "@/lib/api";
-import { makeDemoSession } from "@/lib/demo";
+import type { AnalyzeProjectResponse, DemoSession, ProbePlan, ProbeReading, Project, ProjectProfile, RuleResult } from "@reweird/shared-types";
+import { demoApi, projectApi } from "@/lib/api";
+import { makeDemoProfile, makeDemoSession } from "@/lib/demo";
+import { NewProjectModal, ProbePlanView, ProjectProfileView } from "./project-workflow";
 
-type View = "dashboard" | "profile" | "live" | "diagnosis" | "verify" | "reports";
+type View = "dashboard" | "profile" | "connect" | "live" | "diagnosis" | "verify" | "reports";
 
 const nav: { id: View; label: string; icon: typeof Activity }[] = [
   { id: "dashboard", label: "Overview", icon: LayoutDashboard },
   { id: "profile", label: "Project profile", icon: Box },
+  { id: "connect", label: "Connect ReWeird", icon: Cable },
   { id: "live", label: "Live diagnostics", icon: Activity },
   { id: "diagnosis", label: "Diagnosis", icon: Microscope },
   { id: "verify", label: "Verify", icon: CheckCircle2 },
@@ -151,6 +153,9 @@ function AppShell({
   setActive,
   session,
   source,
+  projectName,
+  projectContext,
+  hardwareConnected,
   children,
   onNewProject,
 }: {
@@ -158,6 +163,9 @@ function AppShell({
   setActive: (view: View) => void;
   session: DemoSession;
   source: "api" | "browser";
+  projectName: string;
+  projectContext: string;
+  hardwareConnected: boolean;
   children: React.ReactNode;
   onNewProject: () => void;
 }) {
@@ -169,7 +177,7 @@ function AppShell({
         <div className="brand"><span className="brand-mark"><Waves size={22} /></span><span>Re<span>Weird</span></span></div>
         <div className="project-switcher">
           <span className="device-icon"><Cpu size={18} /></span>
-          <div><small>Active project</small><strong>{session.project_name}</strong></div>
+          <div><small>Active project</small><strong>{projectName}</strong></div>
           <ChevronRight size={16} />
         </div>
         <nav>
@@ -194,9 +202,9 @@ function AppShell({
       <main>
         <header className="topbar">
           <button className="mobile-menu" onClick={() => setMobileOpen(true)} aria-label="Open menu"><Menu size={20} /></button>
-          <div className="topbar-title"><span>{nav.find((item) => item.id === active)?.label}</span><small>ESP32 / HC-SR04</small></div>
+          <div className="topbar-title"><span>{nav.find((item) => item.id === active)?.label}</span><small>{projectContext}</small></div>
           <div className="top-actions">
-            <div className="connection-pill"><span /> Hardware connected</div>
+            <div className={`connection-pill ${hardwareConnected ? "" : "waiting"}`}><span /> {hardwareConnected ? "Hardware connected" : "Hardware waiting"}</div>
             <div className="mode-pill"><Radio size={13} /> {source === "api" ? "API simulator" : "Browser simulator"}</div>
             <button className="icon-button" aria-label="Search"><Search size={18} /></button>
             <button className="primary compact" onClick={onNewProject}><Plus size={16} /> New project</button>
@@ -327,16 +335,12 @@ function VerifyView({ session, onReset, busy }: { session: DemoSession; onReset:
   );
 }
 
-function ProfileView() {
-  const [editing, setEditing] = useState(false);
+function ProjectLivePending({ project, profile, plan }: { project: Project; profile: ProjectProfile | null; plan: ProbePlan | null }) {
   return (
     <>
-      <section className="page-heading"><div><p className="kicker">Confirmed project context</p><h1>Project profile</h1><p>AI suggestions remain editable until a person confirms the hardware assumptions.</p></div><button className={editing ? "primary" : "secondary"} onClick={() => setEditing(!editing)}>{editing ? <Check size={16} /> : <Settings size={16} />}{editing ? "Save corrections" : "Correct profile"}</button></section>
-      <section className="profile-grid">
-        <div className="panel profile-summary"><div className="project-visual"><Cpu size={46} /><span>ESP32</span></div><div><span className="eyebrow">Demo project</span><h2>Ultrasonic Distance Sensor</h2><p>Measures distance continuously and reports a return pulse from an HC-SR04 sensor.</p><div className="spec-chips"><span>3.3 V logic</span><span>5 V rail</span><span>Pulse interface</span></div></div></div>
-        <div className="panel"><div className="panel-heading"><div><span className="eyebrow">GPIO map</span><h2>Confirmed connections</h2></div><span className="confirmed"><Check size={13} /> Human confirmed</span></div><div className="pin-map"><div><span>HC-SR04 TRIG</span><b>GPIO 5</b><small>Output · P2</small></div><div><span>HC-SR04 ECHO</span><b>GPIO 18</b><small>Input · P3</small></div><div><span>VCC</span><b>5V rail</b><small>Power · P1</small></div><div><span>GND</span><b>Common</b><small>Reference</small></div></div></div>
-      </section>
-      <section className="panel component-table"><div className="panel-heading"><div><span className="eyebrow">Component catalog</span><h2>Detected hardware</h2></div></div><div className="table-head"><span>Component</span><span>Source</span><span>Confidence</span><span>Status</span></div><div className="table-row"><span><Cpu size={17} /> ESP32 DevKit</span><span>Image + code</span><span>96%</span><span className="status-label stable">Confirmed</span></div><div className="table-row"><span><Radio size={17} /> HC-SR04</span><span>Image + library</span><span>94%</span><span className="status-label stable">Confirmed</span></div><div className="table-row"><span><Box size={17} /> Breadboard + jumpers</span><span>Image</span><span>89%</span><span className="status-label stable">Confirmed</span></div></section>
+      <section className="page-heading"><div><p className="kicker">Live diagnostics · Project ready</p><h1>Waiting for matching telemetry</h1><p>{project.name} is confirmed and its probe plan is connected. Live cards will populate when the ReWeird device sends frames matching this profile.</p></div><div className="live-badge"><span /> Armed</div></section>
+      <section className="panel live-pending-panel"><Cable size={34} /><div><h2>{profile?.project_name ?? project.name}</h2><p>The browser will not substitute HC-SR04 demo measurements for this project. Start the API with this profile and connect the configured ESP32 telemetry source.</p><div className="spec-chips"><span>Profile: {profile?.id}</span><span>{plan?.instructions.length ?? 0} placement steps</span><span>PATCH locked</span></div></div></section>
+      <section className="security-note"><ShieldCheck size={20} /><div><strong>No fabricated measurements</strong><span>Only validated telemetry that matches the confirmed P1–P6 modes can enter the diagnostic engine.</span></div></section>
     </>
   );
 }
@@ -360,21 +364,6 @@ function ReportsView({ session }: { session: DemoSession }) {
   );
 }
 
-function NewProjectModal({ onClose, onCreated }: { onClose: () => void; onCreated: () => void }) {
-  return (
-    <div className="modal-backdrop" role="presentation" onMouseDown={onClose}>
-      <form className="modal" onSubmit={(event) => { event.preventDefault(); onCreated(); }} onMouseDown={(event) => event.stopPropagation()}>
-        <div className="modal-head"><div><span className="eyebrow">New workspace</span><h2>Create a project</h2></div><button type="button" className="icon-button" onClick={onClose}><X size={18} /></button></div>
-        <label>Project name<input required defaultValue="My electronics project" /></label>
-        <label>Description<textarea rows={3} placeholder="What should the project do?" /></label>
-        <div className="form-row"><label>Controller<select defaultValue="ESP32"><option>ESP32</option><option>Arduino Uno</option><option>Raspberry Pi Pico</option></select></label><label>Logic voltage<select defaultValue="3.3 V"><option>3.3 V</option><option>5 V</option></select></label></div>
-        <div className="upload-grid"><label><Upload size={20} /><span>Hardware photo</span><small>PNG, JPG, or video</small><input type="file" accept="image/*,video/*" /></label><label><Upload size={20} /><span>Project code</span><small>.ino, .cpp, .py, or ZIP</small><input type="file" accept=".ino,.cpp,.h,.py,.zip" /></label></div>
-        <div className="modal-actions"><button type="button" className="secondary" onClick={onClose}>Cancel</button><button className="primary" type="submit">Create project <ChevronRight size={16} /></button></div>
-      </form>
-    </div>
-  );
-}
-
 export default function Home() {
   const [session, setSession] = useState<DemoSession>(() => makeDemoSession());
   const [active, setActive] = useState<View>("dashboard");
@@ -382,11 +371,15 @@ export default function Home() {
   const [busy, setBusy] = useState(false);
   const [showNewProject, setShowNewProject] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
+  const [project, setProject] = useState<Project | null>(null);
+  const [profile, setProfile] = useState<ProjectProfile | null>(() => makeDemoProfile());
+  const [probePlan, setProbePlan] = useState<ProbePlan | null>(null);
 
   useEffect(() => {
     demoApi.load().then((remote) => {
       if (remote) { setSession(remote); setSource("api"); }
     });
+    demoApi.profile().then(setProfile).catch(() => undefined);
   }, []);
 
   useEffect(() => {
@@ -407,19 +400,70 @@ export default function Home() {
     if (kind === "reset") { setToast("Demo reset to the initial fault"); setActive("dashboard"); }
   };
 
+  const completeProjectAnalysis = (result: AnalyzeProjectResponse) => {
+    setProject(result.project);
+    setProfile(result.profile);
+    setProbePlan(null);
+    setShowNewProject(false);
+    setActive("profile");
+    setToast("Draft Project Profile generated from real input");
+  };
+
+  const loadDemoProject = async () => {
+    setShowNewProject(false);
+    setProject(null);
+    setProbePlan(null);
+    try { setProfile(await demoApi.profile()); } catch { setProfile(makeDemoProfile()); }
+    setActive("profile");
+    setToast("Built-in ultrasonic demo loaded");
+  };
+
+  const saveProfile = async (nextProfile: ProjectProfile) => {
+    if (!project) return nextProfile;
+    const stored = await projectApi.saveProfileCorrections(project.id, nextProfile);
+    setProfile(stored);
+    setToast("Profile corrections persisted");
+    return stored;
+  };
+
+  const confirmProfile = async (nextProfile: ProjectProfile) => {
+    if (!project) return;
+    const stored = await projectApi.saveProfileCorrections(project.id, nextProfile);
+    const confirmed = await projectApi.confirmProfile(project.id);
+    setProfile(confirmed.profile);
+    setProbePlan(confirmed.probe_plan);
+    setProject(await projectApi.getProject(project.id));
+    setActive("connect");
+    setToast(`Profile confirmed at revision ${stored.version}; probe plan generated`);
+  };
+
+  const confirmConnections = async () => {
+    if (!project) return;
+    const confirmed = await projectApi.confirmProbeConnections(project.id);
+    setProbePlan(confirmed);
+    const remote = await demoApi.load();
+    if (remote && profile && remote.profile_id === profile.id) { setSession(remote); setSource("api"); }
+    setActive("live");
+    setToast("Probe connections confirmed; live diagnostics unlocked");
+  };
+
   const view = useMemo(() => {
     if (active === "dashboard") return <DashboardView session={session} setActive={setActive} />;
-    if (active === "profile") return <ProfileView />;
-    if (active === "live") return <LiveView session={session} />;
+    if (active === "profile") return <ProjectProfileView project={project} profile={profile} onSave={saveProfile} onConfirm={confirmProfile} />;
+    if (active === "connect") return <ProbePlanView project={project} plan={probePlan ?? project?.probe_plan ?? null} onConnected={confirmConnections} />;
+    if (active === "live") {
+      if (project && session.profile_id !== profile?.id) return <ProjectLivePending project={project} profile={profile} plan={probePlan} />;
+      return <LiveView session={session} />;
+    }
     if (active === "diagnosis") return <DiagnosisView session={session} onWiggle={() => action("wiggle")} onRepair={() => action("repair")} busy={busy} />;
     if (active === "verify") return <VerifyView session={session} onReset={() => action("reset")} busy={busy} />;
     return <ReportsView session={session} />;
-  }, [active, session, busy]);
+  }, [active, session, busy, project, profile, probePlan]);
 
   return (
-    <AppShell active={active} setActive={setActive} session={session} source={source} onNewProject={() => setShowNewProject(true)}>
+    <AppShell active={active} setActive={setActive} session={session} source={source} projectName={project?.name ?? session.project_name} projectContext={project ? `${project.controller} · ${project.analysis_status}` : "ESP32 · Built-in demo"} hardwareConnected={!project || session.profile_id === profile?.id ? session.hardware_connected : false} onNewProject={() => setShowNewProject(true)}>
       {view}
-      {showNewProject && <NewProjectModal onClose={() => setShowNewProject(false)} onCreated={() => { setShowNewProject(false); setActive("profile"); setToast("Project shell created — confirm the generated profile next"); }} />}
+      {showNewProject && <NewProjectModal onClose={() => setShowNewProject(false)} onComplete={completeProjectAnalysis} onLoadDemo={loadDemoProject} />}
       {toast && <div className="toast"><CheckCircle2 size={18} />{toast}</div>}
     </AppShell>
   );

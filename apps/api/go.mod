@@ -4,9 +4,12 @@ go 1.25.0
 
 require (
 	github.com/gofiber/fiber/v2 v2.52.9
+	github.com/re-weird/reweird/packages/component-catalog v0.0.0
 	go.bug.st/serial v1.8.0
 	modernc.org/sqlite v1.39.1
 )
+
+replace github.com/re-weird/reweird/packages/component-catalog => ../../packages/component-catalog
 
 require (
 	github.com/andybalholm/brotli v1.1.0 // indirect

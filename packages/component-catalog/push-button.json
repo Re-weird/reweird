@@ -1,0 +1,13 @@
+{
+  "id": "push-button",
+  "name": "Momentary Push Button",
+  "aliases": ["button", "pushbutton", "switch"],
+  "interface_type": "digital input",
+  "pin_roles": [
+    { "name": "CONTACT", "direction": "passive", "signal_types": ["digital state", "transition"], "description": "Contact node read with an appropriate pull-up or pull-down." }
+  ],
+  "expected_behavior": "The contact changes logic state when actuated; polarity depends on project wiring.",
+  "safe_measurement_notes": ["Confirm pull-up/pull-down wiring and logic voltage before interpreting pressed state."],
+  "known_signal_types": ["digital state", "transition"],
+  "sources": [{ "title": "Arduino Digital Input Pull-up Tutorial", "url": "https://docs.arduino.cc/tutorials/generic/digital-input-pullup/" }]
+}

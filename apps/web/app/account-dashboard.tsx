@@ -31,10 +31,16 @@ function useCalendar() {
     today.setHours(0, 0, 0, 0);
     const start = new Date(today.getTime() - (today.getDay() + (WEEKS - 1) * 7) * DAY_MS);
     const weeks = Array.from({ length: WEEKS }, (_, w) => new Date(start.getTime() + w * 7 * DAY_MS));
-    const months = weeks.map((week, index) => {
+    // One label per month, starting at the week the month begins. A month that
+    // gets fewer than 3 week columns before the next label is skipped (as
+    // GitHub does), otherwise e.g. a partial "Sep" collides with "Oct".
+    const starts = weeks.flatMap((week, index) => {
       const previous = weeks[index - 1];
-      return !previous || previous.getMonth() !== week.getMonth() ? week.toLocaleString("en", { month: "short" }) : "";
+      return !previous || previous.getMonth() !== week.getMonth() ? [{ start: index, label: week.toLocaleString("en", { month: "short" }) }] : [];
     });
+    const months = starts
+      .map((month, index) => ({ ...month, span: (starts[index + 1]?.start ?? WEEKS) - month.start }))
+      .filter((month) => month.span >= 3);
     return { weeks, months };
   }, []);
 }
@@ -91,16 +97,18 @@ function ActivityHeatmap() {
   return (
     <div className="relative w-full">
       <div className="relative grid gap-[3px] font-mono text-[10px] text-subtle" style={{ gridTemplateColumns: columns }}>
-        <span />
-        {months.map((label, index) => <span key={index} className="overflow-visible whitespace-nowrap">{label}</span>)}
+        <span style={{ gridColumn: 1, gridRow: 1 }} />
+        {months.map((month) => (
+          <span key={month.start} className="truncate" style={{ gridColumn: `${month.start + 2} / span ${month.span}`, gridRow: 1 }}>{month.label}</span>
+        ))}
         {Array.from({ length: 7 }, (_, day) => (
           <div key={day} className="contents">
-            <span className="flex items-center leading-none">{day % 2 === 1 ? ["", "Mon", "", "Wed", "", "Fri", ""][day] : ""}</span>
+            <span className="flex items-center leading-none" style={{ gridColumn: 1, gridRow: day + 2 }}>{day % 2 === 1 ? ["", "Mon", "", "Wed", "", "Fri", ""][day] : ""}</span>
             {weeks.map((week, column) => (
               <span
                 key={week.getTime()}
                 className="aspect-square w-full rounded-[2px] bg-line-soft motion-reduce:[animation:none]"
-                style={{ animation: `heat-in 520ms cubic-bezier(0.16, 1, 0.3, 1) ${column * 14 + day * 10}ms both` }}
+                style={{ gridColumn: column + 2, gridRow: day + 2, animation: `heat-in 520ms cubic-bezier(0.16, 1, 0.3, 1) ${column * 14 + day * 10}ms both` }}
                 title={`${new Date(week.getTime() + day * DAY_MS).toLocaleDateString()}: 0 sessions`}
               />
             ))}

@@ -5,7 +5,8 @@
   "scripts": {
     "dev": "next dev --hostname 127.0.0.1",
     "build": "next build",
-    "start": "next start",
+    "postbuild": "mkdir -p .next/standalone/apps/web/.next && cp -r public .next/standalone/apps/web/public && cp -r .next/static .next/standalone/apps/web/.next/static",
+    "start": "node .next/standalone/apps/web/server.js",
     "test:circuit-map": "node --test lib/circuit-map.test.mjs",
     "typecheck": "tsc --noEmit"
   },

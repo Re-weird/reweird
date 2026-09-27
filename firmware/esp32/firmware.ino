@@ -4,23 +4,28 @@
 #include <Adafruit_SSD1306.h>
 
 // ======================================================
-// REWIRE V1 - DIRECT MODE
+// REWIRE V1.2 - DIRECT MODE + DUAL I2C BUS
+// Two SSD1306 displays, one per hardware I2C peripheral,
+// so both can keep the default 0x3C address.
 // ======================================================
-
-// ---------------- OLED ----------------
 
 #define SCREEN_WIDTH 128
 #define SCREEN_HEIGHT 64
+#define OLED_ADDR 0x3C
 
-#define OLED_SDA 17
-#define OLED_SCL 18
+#define BUS_A_SDA 17
+#define BUS_A_SCL 18
+#define BUS_B_SDA 4
+#define BUS_B_SCL 5
 
-Adafruit_SSD1306 display(
-    SCREEN_WIDTH,
-    SCREEN_HEIGHT,
-    &Wire,
-    -1
-);
+TwoWire I2C_A = TwoWire(0);
+TwoWire I2C_B = TwoWire(1);
+
+Adafruit_SSD1306 dispA(SCREEN_WIDTH, SCREEN_HEIGHT, &I2C_A, -1);
+Adafruit_SSD1306 dispB(SCREEN_WIDTH, SCREEN_HEIGHT, &I2C_B, -1);
+
+bool dispAOk = false;
+bool dispBOk = false;
 
 // ---------------- PROBES ----------------
 
@@ -34,215 +39,152 @@ Adafruit_SSD1306 display(
 // ---------------- TIMING ----------------
 
 const unsigned long TELEMETRY_INTERVAL_MS = 250;
-const unsigned long DISPLAY_INTERVAL_MS = 500;
+const unsigned long DISPLAY_INTERVAL_MS = 250;
 
 unsigned long lastTelemetry = 0;
 unsigned long lastDisplay = 0;
 
-bool displayPage = false;
-
 // ======================================================
-// ANALOG READING
-//
-// P1 and P5 use your 22k / 22k divider.
-//
-// Incoming voltage is divided by 2,
-// so multiply the measured GPIO voltage by 2.
+// INPUT HELPERS
 // ======================================================
 
+// 22k / 22k divider halves the incoming voltage.
 float readDividedVoltage(int pin) {
-    uint32_t millivolts = analogReadMilliVolts(pin);
-
-    float gpioVoltage = millivolts / 1000.0;
-
-    return gpioVoltage * 2.0;
+    uint32_t mv = analogReadMilliVolts(pin);
+    return (mv / 1000.0) * 2.0;
 }
 
-// ======================================================
-// PULSE READING
-// ======================================================
-
-unsigned long readPulseUS(
-    int pin,
-    unsigned long timeoutUS
-) {
+unsigned long readPulseUS(int pin, unsigned long timeoutUS) {
     return pulseIn(pin, HIGH, timeoutUS);
 }
 
 // ======================================================
-// OLED BOOT SCREEN
+// DISPLAYS
 // ======================================================
 
-void showBootScreen() {
+void drawInputs(float railVoltage,
+                unsigned long trigUS,
+                unsigned long echoUS) {
+    if (!dispAOk) return;
 
-    display.clearDisplay();
-    display.setTextColor(SSD1306_WHITE);
+    dispA.clearDisplay();
+    dispA.setTextColor(SSD1306_WHITE);
+    dispA.setTextSize(1);
 
-    display.setTextSize(2);
-    display.setCursor(18, 8);
-    display.println("REWIRE");
+    dispA.setCursor(0, 0);
+    dispA.println("REWIRE | INPUTS");
 
-    display.setTextSize(1);
-    display.setCursor(25, 36);
-    display.println("DIRECT MODE");
+    dispA.setCursor(0, 17);
+    dispA.print("POWER ");
+    dispA.print(railVoltage, 2);
+    dispA.println(" V");
 
-    display.setCursor(38, 51);
-    display.println("READY");
-
-    display.display();
-}
-
-// ======================================================
-// OLED LIVE PAGE 1
-// ======================================================
-
-void showLivePage1(
-    float railVoltage,
-    unsigned long trigUS,
-    unsigned long echoUS
-) {
-
-    display.clearDisplay();
-    display.setTextColor(SSD1306_WHITE);
-    display.setTextSize(1);
-
-    display.setCursor(0, 0);
-    display.println("REWIRE | LIVE");
-
-    display.setCursor(0, 17);
-    display.print("POWER: ");
-    display.print(railVoltage, 2);
-    display.println(" V");
-
-    display.setCursor(0, 31);
-    display.print("TRIG:  ");
-
+    dispA.setCursor(0, 31);
+    dispA.print("TRIG  ");
     if (trigUS > 0) {
-        display.print(trigUS);
-        display.println(" us");
+        dispA.print(trigUS);
+        dispA.println(" us");
     } else {
-        display.println("NONE");
+        dispA.println("NONE");
     }
 
-    display.setCursor(0, 45);
-    display.print("ECHO:  ");
-
+    dispA.setCursor(0, 45);
+    dispA.print("DIST  ");
     if (echoUS > 0) {
-        display.print(echoUS);
-        display.println(" us");
+        dispA.print(echoUS * 0.0343 / 2.0, 1);
+        dispA.println(" cm");
     } else {
-        display.println("MISSING");
+        dispA.println("--");
     }
 
-    display.display();
+    dispA.display();
 }
 
-// ======================================================
-// OLED LIVE PAGE 2
-// ======================================================
+void drawStatus(unsigned long servoUS,
+                float zmptVoltage,
+                int p6State) {
+    if (!dispBOk) return;
 
-void showLivePage2(
-    unsigned long servoUS,
-    float zmptVoltage,
-    int p6State
-) {
+    dispB.clearDisplay();
+    dispB.setTextColor(SSD1306_WHITE);
+    dispB.setTextSize(1);
 
-    display.clearDisplay();
-    display.setTextColor(SSD1306_WHITE);
-    display.setTextSize(1);
+    dispB.setCursor(0, 0);
+    dispB.println("REWIRE | STATUS");
 
-    display.setCursor(0, 0);
-    display.println("REWIRE | LIVE");
-
-    display.setCursor(0, 17);
-    display.print("SERVO: ");
-
+    dispB.setCursor(0, 17);
+    dispB.print("SERVO ");
     if (servoUS > 0) {
-        display.print(servoUS);
-        display.println(" us");
+        dispB.print(servoUS);
+        dispB.println(" us");
     } else {
-        display.println("NONE");
+        dispB.println("NONE");
     }
 
-    display.setCursor(0, 31);
-    display.print("ZMPT:  ");
-    display.print(zmptVoltage, 2);
-    display.println(" V");
+    dispB.setCursor(0, 31);
+    dispB.print("ZMPT  ");
+    dispB.print(zmptVoltage, 2);
+    dispB.println(" V");
 
-    display.setCursor(0, 45);
-    display.print("P6:    ");
-    display.println(p6State ? "HIGH" : "LOW");
+    dispB.setCursor(0, 45);
+    dispB.print("P6    ");
+    dispB.println(p6State ? "HIGH" : "LOW");
 
-    display.display();
+    dispB.display();
 }
 
 // ======================================================
-// SEND JSON TELEMETRY
+// JSON TELEMETRY
 // ======================================================
 
-void sendTelemetry(
-    float p1Voltage,
-    unsigned long trigUS,
-    unsigned long echoUS,
-    unsigned long servoUS,
-    float zmptVoltage,
-    int p6State
-) {
-
+void sendTelemetry(float railVoltage,
+                   unsigned long trigUS,
+                   unsigned long echoUS,
+                   unsigned long servoUS,
+                   float zmptVoltage,
+                   int p6State) {
     Serial.print("{");
-
     Serial.print("\"type\":\"telemetry\",");
 
     Serial.print("\"timestamp\":");
     Serial.print(millis());
     Serial.print(",");
 
-    // ---------------- P1 ----------------
-
     Serial.print("\"P1\":{");
     Serial.print("\"name\":\"power_rail\",");
     Serial.print("\"type\":\"voltage\",");
     Serial.print("\"value\":");
-    Serial.print(p1Voltage, 3);
+    Serial.print(railVoltage, 3);
     Serial.print("},");
-
-    // ---------------- P2 ----------------
 
     Serial.print("\"P2\":{");
     Serial.print("\"name\":\"ultrasonic_trig\",");
     Serial.print("\"type\":\"pulse\",");
     Serial.print("\"pulse_us\":");
     Serial.print(trigUS);
-    Serial.print(",");
-    Serial.print("\"detected\":");
+    Serial.print(",\"detected\":");
     Serial.print(trigUS > 0 ? "true" : "false");
     Serial.print("},");
-
-    // ---------------- P3 ----------------
 
     Serial.print("\"P3\":{");
     Serial.print("\"name\":\"ultrasonic_echo\",");
     Serial.print("\"type\":\"pulse\",");
     Serial.print("\"pulse_us\":");
     Serial.print(echoUS);
-    Serial.print(",");
-    Serial.print("\"detected\":");
+    Serial.print(",\"distance_cm\":");
+    Serial.print(echoUS > 0 ? (echoUS * 0.0343 / 2.0) : -1.0, 1);
+    Serial.print(",\"detected\":");
     Serial.print(echoUS > 0 ? "true" : "false");
     Serial.print("},");
-
-    // ---------------- P4 ----------------
 
     Serial.print("\"P4\":{");
     Serial.print("\"name\":\"servo_pwm\",");
     Serial.print("\"type\":\"pwm\",");
     Serial.print("\"pulse_us\":");
     Serial.print(servoUS);
-    Serial.print(",");
-    Serial.print("\"detected\":");
+    Serial.print(",\"detected\":");
     Serial.print(servoUS > 0 ? "true" : "false");
     Serial.print("},");
-
-    // ---------------- P5 ----------------
 
     Serial.print("\"P5\":{");
     Serial.print("\"name\":\"zmpt\",");
@@ -251,14 +193,11 @@ void sendTelemetry(
     Serial.print(zmptVoltage, 3);
     Serial.print("},");
 
-    // ---------------- P6 ----------------
-
     Serial.print("\"P6\":{");
     Serial.print("\"name\":\"spare\",");
     Serial.print("\"type\":\"digital\",");
     Serial.print("\"value\":");
     Serial.print(p6State);
-
     Serial.print("}");
 
     Serial.println("}");
@@ -269,12 +208,8 @@ void sendTelemetry(
 // ======================================================
 
 void setup() {
-
     Serial.begin(115200);
-
     delay(500);
-
-    // ---------------- INPUTS ----------------
 
     pinMode(P1, INPUT);
     pinMode(P2, INPUT);
@@ -285,36 +220,48 @@ void setup() {
 
     analogReadResolution(12);
 
-    // ---------------- OLED ----------------
+    I2C_A.begin(BUS_A_SDA, BUS_A_SCL, 400000);
+    I2C_B.begin(BUS_B_SDA, BUS_B_SCL, 400000);
 
-    Wire.begin(OLED_SDA, OLED_SCL);
+    // periphBegin=false keeps the library from calling Wire.begin()
+    // and resetting these buses back to the default pins.
+    dispAOk = dispA.begin(SSD1306_SWITCHCAPVCC, OLED_ADDR, false, false);
+    dispBOk = dispB.begin(SSD1306_SWITCHCAPVCC, OLED_ADDR, false, false);
 
-    if (!display.begin(
-            SSD1306_SWITCHCAPVCC,
-            0x3C
-        )) {
+    Serial.printf(
+        "{\"type\":\"display_status\",\"bus_a\":%s,\"bus_b\":%s}\n",
+        dispAOk ? "true" : "false",
+        dispBOk ? "true" : "false");
 
-        Serial.println(
-            "{\"type\":\"error\","
-            "\"message\":\"OLED_INIT_FAILED\"}"
-        );
-
-    } else {
-
-        showBootScreen();
+    if (dispAOk) {
+        dispA.clearDisplay();
+        dispA.setTextColor(SSD1306_WHITE);
+        dispA.setTextSize(2);
+        dispA.setCursor(18, 16);
+        dispA.println("REWIRE");
+        dispA.setTextSize(1);
+        dispA.setCursor(38, 44);
+        dispA.println("READY");
+        dispA.display();
     }
 
-    // ---------------- DEVICE STATUS ----------------
+    if (dispBOk) {
+        dispB.clearDisplay();
+        dispB.setTextColor(SSD1306_WHITE);
+        dispB.setTextSize(1);
+        dispB.setCursor(20, 28);
+        dispB.println("DIRECT MODE");
+        dispB.display();
+    }
 
     Serial.println(
         "{\"type\":\"device_status\","
         "\"device\":\"rewire\","
         "\"status\":\"ready\","
         "\"mode\":\"direct\","
-        "\"firmware\":\"rewire-v1.0\"}"
-    );
+        "\"firmware\":\"rewire-v1.2-dualbus\"}");
 
-    delay(1500);
+    delay(1200);
 }
 
 // ======================================================
@@ -322,110 +269,28 @@ void setup() {
 // ======================================================
 
 void loop() {
+    float railVoltage = readDividedVoltage(P1);
 
-    // --------------------------------------------------
-    // P1
-    // Target circuit 5V rail
-    // --------------------------------------------------
+    // Target fires TRIG every ~250ms, so the window must outlast that.
+    unsigned long trigUS = readPulseUS(P2, 400000);
 
-    float railVoltage =
-        readDividedVoltage(P1);
+    // ECHO starts as soon as TRIG ends, so TRIG is the sync point.
+    unsigned long echoUS = trigUS > 0 ? readPulseUS(P3, 30000) : 0;
 
-    // --------------------------------------------------
-    // P2
-    // HC-SR04 TRIG
-    //
-    // Expected approximately 10 us
-    // --------------------------------------------------
+    unsigned long servoUS = readPulseUS(P4, 25000);
 
-    unsigned long trigUS =
-        readPulseUS(P2, 5000);
+    float zmptVoltage = readDividedVoltage(P5);
+    int p6State = digitalRead(P6);
 
-    // --------------------------------------------------
-    // P3
-    // HC-SR04 ECHO
-    //
-    // Width depends on measured distance
-    // --------------------------------------------------
-
-    unsigned long echoUS =
-        readPulseUS(P3, 30000);
-
-    // --------------------------------------------------
-    // P4
-    // Servo PWM
-    //
-    // Expected roughly 500 - 2400 us
-    // --------------------------------------------------
-
-    unsigned long servoUS =
-        readPulseUS(P4, 25000);
-
-    // --------------------------------------------------
-    // P5
-    // ZMPT analog output
-    // --------------------------------------------------
-
-    float zmptVoltage =
-        readDividedVoltage(P5);
-
-    // --------------------------------------------------
-    // P6
-    // Spare digital probe
-    // --------------------------------------------------
-
-    int p6State =
-        digitalRead(P6);
-
-    // --------------------------------------------------
-    // OLED
-    // --------------------------------------------------
-
-    if (
-        millis() - lastDisplay
-        >= DISPLAY_INTERVAL_MS
-    ) {
-
+    if (millis() - lastDisplay >= DISPLAY_INTERVAL_MS) {
         lastDisplay = millis();
-
-        displayPage = !displayPage;
-
-        if (displayPage) {
-
-            showLivePage1(
-                railVoltage,
-                trigUS,
-                echoUS
-            );
-
-        } else {
-
-            showLivePage2(
-                servoUS,
-                zmptVoltage,
-                p6State
-            );
-        }
+        drawInputs(railVoltage, trigUS, echoUS);
+        drawStatus(servoUS, zmptVoltage, p6State);
     }
 
-    // --------------------------------------------------
-    // JSON SERIAL TELEMETRY
-    // --------------------------------------------------
-
-    if (
-        millis() - lastTelemetry
-        >= TELEMETRY_INTERVAL_MS
-    ) {
-
+    if (millis() - lastTelemetry >= TELEMETRY_INTERVAL_MS) {
         lastTelemetry = millis();
-
-        sendTelemetry(
-            railVoltage,
-            trigUS,
-            echoUS,
-            servoUS,
-            zmptVoltage,
-            p6State
-        );
+        sendTelemetry(railVoltage, trigUS, echoUS,
+                      servoUS, zmptVoltage, p6State);
     }
 }

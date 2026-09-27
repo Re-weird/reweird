@@ -156,6 +156,8 @@ func newApp(engine *diagnostics.Engine, repository domain.Repository, source dom
 	api.Post("/github/connect", controller.githubConnect)
 	api.Post("/github/disconnect", controller.githubDisconnect)
 	api.Get("/github/repos", controller.githubRepositories)
+	api.Post("/projects/:id/measurements", controller.createProjectMeasurement)
+	api.Get("/projects/:id/diagnose", controller.getProjectDiagnosis)
 	api.Get("/projects/:id/probe-plan", controller.getProbePlan)
 	api.Post("/projects/:id/probe-plan/confirm", controller.confirmProbePlan)
 	api.Post("/projects/:id/physical-commits", controller.createPhysicalCommit)

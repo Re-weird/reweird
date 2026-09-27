@@ -13,6 +13,7 @@ import { ApiError } from "@/lib/api";
 import { projectPath } from "@/lib/project-routes";
 import { cn } from "@/lib/utils";
 import { CircuitMap } from "./circuit-map";
+import { PartThumb, partKind } from "./part-art";
 
 type Destination = "connect" | "live" | "diagnosis" | "guided" | "history";
 
@@ -36,6 +37,14 @@ const behaviorOptions: [string, string][] = [
   ["voltage_rail", "Power rail"], ["ground", "Ground"], ["i2c_sda", "I2C SDA"], ["i2c_scl", "I2C SCL"], ["uart", "UART"],
 ];
 const behaviorKey = (value: string | undefined) => (value ?? "").trim().toLowerCase().replace(/[\s-]+/g, "_");
+/** Signal family for the dot color in the connections table. */
+function behaviorFamily(value: string | undefined) {
+  const key = behaviorKey(value);
+  if (key === "voltage_rail" || key === "ground" || key.includes("power")) return { dot: "bg-warn" };
+  if (key.includes("pulse") || key.includes("pwm")) return { dot: "bg-pass" };
+  if (key.startsWith("i2c") || key === "uart") return { dot: "bg-muted-foreground" };
+  return { dot: "bg-signal" };
+}
 const behaviorLabel = (value: string | undefined) => behaviorOptions.find(([key]) => key === behaviorKey(value))?.[1] ?? (value || "Not set");
 
 function SourceBadges({ sources = [] }: { sources?: ProjectFactSource[] }) {
@@ -314,30 +323,33 @@ export function ProjectOverviewView({
         <CircuitMap profile={draft} plan={plan} session={session} demoMode={!project} onNavigate={onNavigate} showActions={false} />
       </motion.div>
 
-      <div className="grid grid-cols-1 gap-10 xl:grid-cols-[minmax(0,0.85fr)_minmax(0,1.4fr)]">
+      <div className="grid grid-cols-1 gap-10 border-t border-border pt-10 xl:grid-cols-[minmax(0,0.9fr)_minmax(0,1.35fr)] xl:gap-0">
         {/* Components */}
-        <motion.section variants={reveal} aria-labelledby="components-title" className="min-w-0">
-          <SectionTitle eyebrow="Parts" title="Components" action={editing && (
+        <motion.section variants={reveal} aria-labelledby="components-title" className="min-w-0 xl:pr-10">
+          <SectionTitle eyebrow={`Parts · ${draft.components.length}`} title="Components" action={editing && (
             <Button variant="ghost" size="sm" onClick={() => setDraft({ ...draft, components: [...draft.components, { id: `user-component-${draft.components.length + 1}`, name: "New component", sources: ["USER"], confidence: 1, confirmed: false }] })}><Plus /> Add</Button>
           )} />
           {draft.components.length === 0 ? (
             <p className="mt-4 rounded-lg border border-dashed border-border px-4 py-5 text-sm text-muted-foreground">No component detected. Add one before confirming.</p>
           ) : (
-            <ul className="mt-4 divide-y divide-line-soft border-y border-line-soft">
+            <ul className="mt-5 space-y-3">
               {draft.components.map((component, index) => {
                 const confidence = Math.round((component.confidence ?? 0) * 100);
                 return (
-                  <li key={`${component.id}-${index}`} className="flex items-center gap-3 py-3">
-                    <span className="grid size-8 shrink-0 place-items-center rounded-md bg-surface-2 text-muted-foreground ring-1 ring-border"><Cpu className="size-4" strokeWidth={1.5} /></span>
+                  <li key={`${component.id}-${index}`} className="flex items-center gap-4 rounded-xl bg-surface p-3 ring-1 ring-border">
+                    <span className="grid h-16 w-24 shrink-0 place-items-center overflow-hidden rounded-lg bg-[var(--scope-bg)] ring-1 ring-line-soft">
+                      <PartThumb kind={partKind(component.id, component.name)} className="h-14 w-full" />
+                    </span>
                     <div className="min-w-0 flex-1">
-                      {editing ? <input aria-label="Component name" value={component.name} onChange={(event) => updateComponent(index, { name: event.target.value })} className={fieldClass} /> : <p className="truncate text-sm font-medium text-foreground">{component.name}</p>}
+                      {editing ? <input aria-label="Component name" value={component.name} onChange={(event) => updateComponent(index, { name: event.target.value })} className={fieldClass} /> : <p className="truncate text-sm font-semibold text-foreground">{component.name}</p>}
                       <div className="mt-1 flex flex-wrap items-center gap-2">
                         <span className="text-xs text-muted-foreground">{component.interface_type || "Interface not set"}</span>
                         <SourceBadges sources={component.sources} />
                       </div>
                     </div>
-                    <div className="w-14 shrink-0 text-right" title={`${confidence}% confidence`}>
-                      <p className="font-mono text-xs text-foreground">{confidence}%</p>
+                    <div className="w-16 shrink-0 text-right" title={`${confidence}% confidence`}>
+                      <p className="font-mono text-sm font-semibold text-foreground">{confidence}%</p>
+                      <p className="font-mono text-[9px] tracking-wide text-subtle uppercase">confidence</p>
                       <span className="mt-1 block h-0.5 w-full overflow-hidden rounded-full bg-line-soft"><span className={cn("block h-full origin-left rounded-full", confidence >= 80 ? "bg-pass" : confidence >= 50 ? "bg-warn" : "bg-fail")} style={{ transform: `scaleX(${confidence / 100})` }} /></span>
                     </div>
                     {editing && <Button variant="ghost" size="icon" className="size-8 text-muted-foreground hover:text-fail" aria-label={`Remove ${component.name}`} onClick={() => setDraft({ ...draft, components: draft.components.filter((_, itemIndex) => itemIndex !== index) })}><Trash2 /></Button>}
@@ -349,8 +361,8 @@ export function ProjectOverviewView({
         </motion.section>
 
         {/* Connections */}
-        <motion.section variants={reveal} aria-labelledby="connections-title" className="min-w-0">
-          <SectionTitle eyebrow="Pins & signals" title="Connections" action={editing && (
+        <motion.section variants={reveal} aria-labelledby="connections-title" className="min-w-0 border-t border-border pt-10 xl:border-t-0 xl:border-l xl:pt-0 xl:pl-10">
+          <SectionTitle eyebrow={`Pins & signals · ${connections.length}`} title="Connections" action={editing && (
             <Button variant="ghost" size="sm" onClick={() => { const next = connections.length + 1; setDraft({ ...draft, connections: [...connections, { id: `user-connection-${next}`, component_name: draft.components[0]?.name ?? "Component", role: "SIGNAL", target: "", direction: "unknown", behavior: "digital_input", expected: blankExpected("digital_input"), confidence: 1, sources: ["USER"], required: true, confirmed: false }] }); }}><Plus /> Add</Button>
           )} />
           {connections.length === 0 ? (
@@ -388,22 +400,28 @@ export function ProjectOverviewView({
             <div className="mt-4 overflow-x-auto">
               <table className="w-full min-w-[520px] text-left text-sm">
                 <thead>
-                  <tr className="border-b border-border font-mono text-[10px] tracking-wide text-subtle uppercase">
-                    <th className="py-2 pr-3 font-normal">Role</th><th className="py-2 pr-3 font-normal">GPIO</th><th className="py-2 pr-3 font-normal">Behavior</th><th className="py-2 pr-3 font-normal">Component</th><th className="py-2 font-normal">Source</th>
+                  <tr className="border-b border-border font-mono text-[10px] tracking-[0.12em] text-subtle uppercase">
+                    <th className="pb-2.5 pr-3 font-normal">Signal</th><th className="pb-2.5 pr-3 font-normal">Pin</th><th className="pb-2.5 pr-3 font-normal">Behavior</th><th className="pb-2.5 pr-3 font-normal">Part</th><th className="pb-2.5 font-normal">Source</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-line-soft">
-                  {connections.map((connection) => (
-                    <tr key={connection.id} title={connection.target}>
-                      <td className="py-2.5 pr-3 font-mono text-xs font-medium text-foreground">{connection.role}</td>
-                      <td className="py-2.5 pr-3 font-mono text-xs text-muted-foreground">{connection.gpio ?? "—"}</td>
-                      <td className="py-2.5 pr-3 text-xs text-foreground">{behaviorLabel(connection.behavior)}</td>
-                      <td className="max-w-[12rem] truncate py-2.5 pr-3 text-xs text-muted-foreground">{connection.component_name}</td>
-                      <td className="py-2.5"><SourceBadges sources={connection.sources} /></td>
-                    </tr>
-                  ))}
+                  {connections.map((connection) => {
+                    const family = behaviorFamily(connection.behavior);
+                    return (
+                      <tr key={connection.id} title={connection.target} className="transition-colors duration-150 hover:bg-surface/60">
+                        <td className="py-3 pr-3"><span className="rounded-md bg-surface-2 px-2 py-1 font-mono text-xs font-bold text-foreground ring-1 ring-border">{connection.role}</span></td>
+                        <td className="py-3 pr-3 font-mono text-sm font-semibold text-foreground">{connection.gpio != null ? <>GPIO<span className="text-signal">{connection.gpio}</span></> : <span className="font-normal text-subtle">—</span>}</td>
+                        <td className="py-3 pr-3"><span className="inline-flex items-center gap-2 text-sm font-medium text-foreground"><span className={cn("size-2 rounded-full", family.dot)} />{behaviorLabel(connection.behavior)}</span></td>
+                        <td className="max-w-[11rem] truncate py-3 pr-3 text-xs text-muted-foreground">{connection.component_name}</td>
+                        <td className="py-3"><SourceBadges sources={connection.sources} /></td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
+              <p className="mt-3 flex flex-wrap gap-x-4 gap-y-1 font-mono text-[10px] text-subtle">
+                {[["Power", "bg-warn"], ["Digital", "bg-signal"], ["Pulse / PWM", "bg-pass"], ["Bus", "bg-muted-foreground"]].map(([label, dot]) => <span key={label} className="inline-flex items-center gap-1.5"><span className={cn("size-1.5 rounded-full", dot)} />{label}</span>)}
+              </p>
             </div>
           )}
         </motion.section>

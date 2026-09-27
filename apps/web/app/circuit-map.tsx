@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { useAppState } from "@/lib/app-state";
 import { buildCircuitMap, circuitDisplayState, type CircuitDisplayState, type CircuitMapConnection, type CircuitMapModel } from "@/lib/circuit-map";
 import { cn } from "@/lib/utils";
+import { Esp32Board, PartArt, PartDefs, partKind } from "./part-art";
 
 type Destination = "connect" | "live" | "diagnosis" | "guided" | "history";
 
@@ -43,7 +44,7 @@ const tone: Record<CircuitDisplayState, { text: string; line: string; ring: stri
 // its probe test pad. Geometry is computed, so any profile lays out.
 
 const PIN_GAP = 30;
-const CHIP_W = 196;
+const CHIP_W = 210;
 const CHIP_HEAD = 48; // title block above the pins
 const BOARD_W = 1180;
 const PAD = 30;
@@ -93,10 +94,10 @@ function SchematicBoard({ controller, voltage, groups, selectedID, onSelect, sta
   const parts = groups.map((group, index) => {
     const height = CHIP_HEAD + Math.max(1, group.connections.length) * PIN_GAP + 8;
     const part = { group, ref: `U${index + 2}`, y: cursor, height };
-    cursor += height + 26;
+    cursor += height + 44;
     return part;
   });
-  const rightHeight = cursor - 26 + PAD;
+  const rightHeight = cursor - 44 + PAD;
   const controllerHeight = CHIP_HEAD + n * PIN_GAP + 8;
   const height = Math.max(rightHeight, controllerHeight + PAD * 2 + 20);
   // One part: line the chips up so every trace runs straight. Several parts:
@@ -108,9 +109,9 @@ function SchematicBoard({ controller, voltage, groups, selectedID, onSelect, sta
 
   const traces = parts.flatMap((part) => part.group.connections.map((item, pinIndex) => ({ item, part, pinIndex })))
     .map(({ item, part, pinIndex }, index) => {
-      const x1 = leftX + CHIP_W + 14;
+      const x1 = leftX + CHIP_W - 12;
       const y1 = controllerY + CHIP_HEAD + 14 + index * PIN_GAP;
-      const x2 = rightX - 14;
+      const x2 = rightX + 12;
       const y2 = part.y + CHIP_HEAD + 14 + pinIndex * PIN_GAP;
       const midX = leftX + CHIP_W + span * ((index + 1) / (n + 1));
       const path = route(x1, y1, x2, y2, midX);
@@ -122,35 +123,11 @@ function SchematicBoard({ controller, voltage, groups, selectedID, onSelect, sta
       return { item, x1, y1, x2, y2, ...path, state: stateOf(item), padX, breakX: lastBend + (x2 - lastBend) * (path.bends.length ? 0.5 : 0.62) };
     });
 
-  function Chip({ x, y, h, refdes, title, subtitle, pins, side }: { x: number; y: number; h: number; refdes: string; title: string; subtitle: string; pins: string[]; side: "left" | "right" }) {
-    return (
-      <g>
-        <text x={x} y={y - 8} className="fill-subtle font-mono text-[10px]">{refdes}</text>
-        <rect x={x} y={y} width={CHIP_W} height={h} rx={6} className="fill-[var(--surface-2)] stroke-[var(--line)]" strokeWidth={1} />
-        <path d={`M ${x + CHIP_W / 2 - 9} ${y} a 9 9 0 0 0 18 0`} className="fill-[var(--bg)] stroke-[var(--line)]" strokeWidth={1} />
-        <text x={x + 14} y={y + 24} className="fill-foreground text-[12.5px] font-semibold">{title.length > 26 ? `${title.slice(0, 25)}…` : title}<title>{title}</title></text>
-        <text x={x + 14} y={y + 38} className="fill-subtle font-mono text-[9.5px]">{subtitle}</text>
-        <line x1={x + 10} y1={y + CHIP_HEAD - 2} x2={x + CHIP_W - 10} y2={y + CHIP_HEAD - 2} stroke="var(--line-soft)" />
-        {pins.map((pin, index) => {
-          const py = y + CHIP_HEAD + 14 + index * PIN_GAP;
-          const edge = side === "right" ? x + CHIP_W : x;
-          const out = side === "right" ? 14 : -14;
-          return (
-            <g key={`${pin}-${index}`}>
-              <line x1={edge} y1={py} x2={edge + out} y2={py} className="stroke-[var(--muted)]" strokeWidth={1.5} />
-              <rect x={edge + out - 3} y={py - 3} width={6} height={6} className="fill-[var(--muted)]" />
-              <text x={side === "right" ? edge - 8 : edge + 8} y={py + 3.5} textAnchor={side === "right" ? "end" : "start"} className="fill-muted-foreground font-mono text-[10px]">{pin}</text>
-            </g>
-          );
-        })}
-      </g>
-    );
-  }
-
   return (
     <div className="overflow-x-auto rounded-xl ring-1 ring-border">
       <svg viewBox={`0 0 ${BOARD_W} ${height}`} className="block h-auto w-full min-w-[640px]" role="group" aria-label={`Schematic: ${controller} connected to ${groups.map((group) => group.name).join(", ")}`}>
         <defs>
+          <PartDefs />
           <pattern id="soldermask" width="14" height="14" patternUnits="userSpaceOnUse">
             <circle cx="1" cy="1" r="0.9" fill="var(--line-soft)" />
           </pattern>
@@ -208,10 +185,23 @@ function SchematicBoard({ controller, voltage, groups, selectedID, onSelect, sta
           );
         })}
 
-        <Chip x={leftX} y={controllerY} h={controllerHeight} refdes="U1" title={controller} subtitle={`MCU · ${voltage} V logic`} pins={flat.map(controllerPinLabel)} side="right" />
-        {parts.map((part) => (
-          <Chip key={part.group.key} x={rightX} y={part.y} h={part.height} refdes={part.ref} title={part.group.name} subtitle={`${part.group.connections.length} pin${part.group.connections.length === 1 ? "" : "s"} in profile`} pins={part.group.connections.map((item) => item.connection.role)} side="left" />
-        ))}
+        <text x={leftX} y={controllerY - 10} className="fill-foreground text-[12px] font-semibold">
+          <tspan className="fill-subtle font-mono text-[10px] font-normal">U1  </tspan>{controller}<tspan className="fill-subtle font-mono text-[10px] font-normal">  · {voltage} V logic</tspan>
+        </text>
+        <Esp32Board x={leftX} y={controllerY} w={CHIP_W} h={controllerHeight} pins={traces.map((trace) => ({ y: trace.y1, label: controllerPinLabel(trace.item) }))} />
+        {parts.map((part) => {
+          const kind = partKind(part.group.component?.id, part.group.name);
+          return (
+            <g key={part.group.key}>
+              <text x={rightX} y={part.y - 10} className="fill-foreground text-[12px] font-semibold">
+                <tspan className="fill-subtle font-mono text-[10px] font-normal">{part.ref}  </tspan>{part.group.name.length > 30 ? `${part.group.name.slice(0, 29)}…` : part.group.name}
+                <title>{part.group.name}</title>
+              </text>
+              <PartArt kind={kind} x={rightX} y={part.y} w={CHIP_W} h={part.height}
+                pins={traces.filter((trace) => part.group.connections.includes(trace.item)).map((trace) => ({ y: trace.y2, label: trace.item.connection.role }))} />
+            </g>
+          );
+        })}
       </svg>
     </div>
   );
@@ -286,9 +276,14 @@ export function CircuitMap({
                 transition={{ duration: 0.18, ease: EASE_OUT }}
                 className="mt-4"
               >
-                <div className="flex flex-wrap items-baseline justify-between gap-2">
-                  <h3 className="text-sm font-semibold text-foreground">{selected.connection.component_name} · {selected.connection.role}</h3>
-                  <span className={cn("font-mono text-[11px]", tone[displayState(selected)].text)}>{displayLabel(selected)}</span>
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <h3 className="text-base font-semibold tracking-tight text-foreground">
+                    <span className="font-mono text-sm text-signal">{selected.connection.role}</span>
+                    <span className="mx-2 text-subtle">·</span>{selected.connection.component_name}
+                  </h3>
+                  <span className={cn("inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 font-mono text-[11px] font-semibold ring-1", tone[displayState(selected)].text, tone[displayState(selected)].ring)}>
+                    <span className={cn("size-1.5 rounded-full", tone[displayState(selected)].dot)} />{displayLabel(selected)}
+                  </span>
                 </div>
                 <dl className="mt-3 grid grid-cols-2 gap-x-6 gap-y-3 border-y border-line-soft py-3 lg:grid-cols-4">
                   {[
@@ -298,20 +293,22 @@ export function CircuitMap({
                     ["Observed", model.hasMatchingCapture ? measuredValue(selected) : "Not measured"],
                   ].map(([label, value]) => (
                     <div key={label} className="min-w-0">
-                      <dt className="text-[11px] text-subtle">{label}</dt>
-                      <dd className="mt-0.5 truncate font-mono text-xs text-foreground" title={value}>{value}</dd>
+                      <dt className="font-mono text-[10px] tracking-[0.12em] text-subtle uppercase">{label}</dt>
+                      <dd className="mt-1 truncate font-mono text-sm font-semibold text-foreground" title={value}>{value}</dd>
                     </div>
                   ))}
                 </dl>
                 {selected.instruction?.safe_warning && (
-                  <p className="mt-3 flex items-start gap-2 text-xs leading-relaxed text-warn"><CircleAlert className="mt-px size-3.5 shrink-0" strokeWidth={1.5} />{selected.instruction.safe_warning}</p>
+                  <p className="mt-3 flex items-start gap-2.5 rounded-lg bg-warn/10 px-3 py-2.5 text-sm leading-relaxed font-medium text-warn ring-1 ring-warn/30">
+                    <CircleAlert className="mt-0.5 size-4 shrink-0" strokeWidth={2} /><span><span className="font-semibold">Safety: </span>{selected.instruction.safe_warning}</span>
+                  </p>
                 )}
                 {selected.rules.length > 0 && (
-                  <ul className="mt-3 space-y-1">
+                  <ul className="mt-3 space-y-1.5">
                     {selected.rules.map((rule) => (
-                      <li key={rule.id} className="flex gap-2 text-xs">
-                        <span className={cn("w-8 shrink-0 font-mono uppercase", rule.status === "pass" ? "text-pass" : rule.status === "warn" ? "text-warn" : "text-fail")}>{rule.status}</span>
-                        <span className="text-muted-foreground">{rule.message}</span>
+                      <li key={rule.id} className="flex items-baseline gap-2.5 text-sm">
+                        <span className={cn("w-9 shrink-0 font-mono text-[11px] font-bold uppercase", rule.status === "pass" ? "text-pass" : rule.status === "warn" ? "text-warn" : "text-fail")}>{rule.status}</span>
+                        <span className="font-medium text-foreground">{rule.message}</span>
                       </li>
                     ))}
                   </ul>
@@ -333,7 +330,6 @@ export function CircuitMap({
               </motion.div>
             )}
           </AnimatePresence>
-          <p className="mt-4 text-[11px] text-subtle">Shows the intended wiring from the profile. Status reflects captured probe readings, not a visual check of the physical wires.</p>
         </>
       )}
     </section>

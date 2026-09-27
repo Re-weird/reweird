@@ -543,3 +543,74 @@ func TestPhysicalCommitDiffRouteIsNotShadowedByCommitID(t *testing.T) {
 		t.Fatalf("diff = %#v", diff)
 	}
 }
+
+// TestPhysicalCommitCapturesFrameFromConfiguredCamera proves the real
+// end-to-end path: a project with a saved camera_config, and no manually
+// uploaded file, gets its raw image from the camera automatically.
+func TestPhysicalCommitCapturesFrameFromConfiguredCamera(t *testing.T) {
+	app, _ := testApp(t)
+	project := createTestProject(t, app)
+	server := testMJPEGServer(t, testJPEGFrame(t))
+	defer server.Close()
+	configResponse := doJSON(t, app, http.MethodPut, "/api/v1/projects/"+project.ID+"/camera-config", map[string]any{"url": server.URL})
+	if configResponse.StatusCode != http.StatusOK {
+		t.Fatalf("camera config status = %d body=%s", configResponse.StatusCode, readBody(t, configResponse))
+	}
+
+	commitResponse := doJSON(t, app, http.MethodPost, "/api/v1/projects/"+project.ID+"/physical-commits", nil)
+	if commitResponse.StatusCode != http.StatusCreated {
+		t.Fatalf("commit status = %d body=%s", commitResponse.StatusCode, readBody(t, commitResponse))
+	}
+	var commit domain.PhysicalCommit
+	decodeBody(t, commitResponse, &commit)
+	if commit.Image == nil || commit.Image.ContentType != "image/jpeg" {
+		t.Fatalf("expected a camera-captured image, got %#v", commit.Image)
+	}
+}
+
+// TestPhysicalCommitManualUploadTakesPrecedenceOverCamera proves a caller
+// that explicitly attaches a photo is never silently overridden by an
+// auto-captured camera frame.
+func TestPhysicalCommitManualUploadTakesPrecedenceOverCamera(t *testing.T) {
+	app, _ := testApp(t)
+	project := createTestProject(t, app)
+	server := testMJPEGServer(t, testJPEGFrame(t))
+	defer server.Close()
+	doJSON(t, app, http.MethodPut, "/api/v1/projects/"+project.ID+"/camera-config", map[string]any{"url": server.URL})
+
+	manualImage := []byte{0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x0d}
+	response := doPhysicalCommitMultipart(t, app, "/api/v1/projects/"+project.ID+"/physical-commits", "", "hardware.png", manualImage)
+	if response.StatusCode != http.StatusCreated {
+		t.Fatalf("commit status = %d body=%s", response.StatusCode, readBody(t, response))
+	}
+	var commit domain.PhysicalCommit
+	decodeBody(t, response, &commit)
+	if commit.Image == nil || commit.Image.ContentType != "image/png" {
+		t.Fatalf("expected the manually uploaded PNG to win, got %#v", commit.Image)
+	}
+}
+
+// TestPhysicalCommitSucceedsWithoutImageWhenCameraUnreachable proves camera
+// failure never blocks a commit or destroys other evidence -- it simply
+// proceeds with no image, exactly like a project with no camera at all.
+func TestPhysicalCommitSucceedsWithoutImageWhenCameraUnreachable(t *testing.T) {
+	app, _ := testApp(t)
+	project := createTestProject(t, app)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
+	closedURL := server.URL
+	server.Close()
+	doJSON(t, app, http.MethodPut, "/api/v1/projects/"+project.ID+"/camera-config", map[string]any{"url": closedURL})
+
+	response := doJSON(t, app, http.MethodPost, "/api/v1/projects/"+project.ID+"/physical-commits", map[string]any{"note": "bench check"})
+	if response.StatusCode != http.StatusCreated {
+		t.Fatalf("commit status = %d body=%s (a camera failure must never block a commit)", response.StatusCode, readBody(t, response))
+	}
+	var commit domain.PhysicalCommit
+	decodeBody(t, response, &commit)
+	if commit.Image != nil {
+		t.Fatalf("expected no image when the camera is unreachable, got %#v", commit.Image)
+	}
+	if commit.Note != "bench check" {
+		t.Fatalf("camera failure must not destroy other evidence on the commit: %#v", commit)
+	}
+}

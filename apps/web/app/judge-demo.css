@@ -36,6 +36,9 @@
 .jd-main h2 { margin: 6px 0 10px; font-size: 20px; letter-spacing: -.4px; }
 .jd-panel { padding: 24px; min-width: 0; }
 .jd-narrow { max-width: 780px; margin: 0 auto; }
+.jd-catchphrase { margin: -2px 0 12px; color: var(--muted); font: 500 13px "DM Mono", monospace; letter-spacing: .4px; }
+.jd-catchphrase em { color: var(--cyan); font-style: normal; font-weight: 600; }
+.jd-chooser .jd-catchphrase { margin-top: 4px; }
 .jd-lead { color: var(--muted); font-size: 14px; line-height: 1.65; margin: 0 0 16px; max-width: 62ch; }
 .jd-lead b { color: var(--text); }
 .jd-muted { display: flex; align-items: center; gap: 7px; margin: 0; color: var(--subtle-text); font-size: 12px; }

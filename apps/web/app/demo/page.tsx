@@ -16,6 +16,7 @@ export default function DemoChooserPage() {
     <main className="jd-main jd-chooser">
       <span className="bench-label">ReWeird demo</span>
       <h1>How do you want to see it?</h1>
+      <p className="jd-catchphrase">When hardware gets weird, <em>ReWeird it.</em></p>
       <div className="jd-chooser-grid">
         <Link href={PROJECT_DEMO_HREF} className="bench-panel jd-chooser-card">
           <Cable size={22} />

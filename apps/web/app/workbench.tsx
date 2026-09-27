@@ -47,7 +47,7 @@ export function Workbench({ session, project, profile, source, onNavigate, histo
   return <div className="workbench">
     <div className="workbench-main">
       <section className="bench-welcome">
-        <div className="welcome-copy"><span className="bench-label"></span><h1>Welcome to your<br />workbench.</h1><p>Understand your project.<br />Follow the evidence. Find your next move.</p><span className="welcome-foot"></span></div>
+        <div className="welcome-copy"><span className="bench-label"></span><h1>Welcome to your<br />workbench.</h1><p>Understand your project.<br />Follow the evidence. Find your next move.</p><span className="welcome-foot">When hardware gets weird, ReWeird it.</span></div>
         <div className="welcome-photo" aria-hidden="true" />
         <span className="welcome-caption" aria-hidden="true"></span>
       </section>
@@ -82,7 +82,7 @@ export function Workbench({ session, project, profile, source, onNavigate, histo
       <section className="bench-panel bench-analysis">
         <div className="bench-panel-head"><div><span className="bench-label">02 / Understand</span><h2>Latest analysis</h2></div><span className="analysis-source">{!matchesProject ? "Pending" : telemetryLabel(session, source)}</span></div>
         {matchesProject ? <>
-          {failures.length > 0 && <div className="weird-analysis-kicker">SOMETHING’S WEIRD. <small>{session.evidence.probe} · {session.evidence.role} · {failures.length} failed {failures.length === 1 ? "check" : "checks"}</small></div>}
+          {failures.length > 0 && <div className="weird-analysis-kicker">SOMETHING’S WEIRD. <span className="weird-catch">Time to ReWeird it.</span> <small>{session.evidence.probe} · {session.evidence.role} · {failures.length} failed {failures.length === 1 ? "check" : "checks"}</small></div>}
           <div className="analysis-headline"><span className={`analysis-mark ${failures.length ? "attention" : ""}`}><Activity size={21} /></span><div><h3>{session.diagnosis.headline}</h3><span className="analysis-confidence">{confidence}% confidence <span>· interpretation</span></span></div></div>
           <p className="analysis-summary">{session.diagnosis.summary}</p>
           <div className="hypothesis-heading"><span className="bench-label">Possible causes</span><small>Not yet confirmed</small></div>

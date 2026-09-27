@@ -50,3 +50,7 @@
 .judge-circuit-actions [role=status], .judge-circuit > small { color: var(--muted); font-size: 11px; }
 .judge-circuit > small { display: flex; align-items: flex-start; gap: 6px; margin-top: 16px; line-height: 1.5; }
 @media (max-width: 600px) { .judge-circuit-steps { grid-template-columns: 1fr; } }
+
+/* Catchphrase at the weird moments (Workbench, Diagnosis, VERIFY). */
+.weird-catch { color: var(--cyan); font: 600 12px "DM Mono", monospace; letter-spacing: .4px; }
+p.weird-catch { margin: 2px 0 6px !important; }

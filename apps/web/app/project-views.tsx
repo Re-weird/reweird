@@ -76,7 +76,7 @@ export function SimulatorView({
   const activeScenario = scenarios.find((scenario) => scenario.id === session.scenario_id);
   return (
     <>
-      <section className="page-heading"><div><p className="kicker">{telemetryLabel(session, source)} · simulated project</p><h1>Practice simulator</h1><p>For the team: choose a fault and the real diagnosis engine analyzes simulated samples. Not your physical circuit, and not the judge game at /try.</p></div><div className="live-badge"><span /> PATCH locked</div></section>
+      <section className="page-heading"><div><p className="kicker">{telemetryLabel(session, source)} · simulated project</p><h1>Practice simulator</h1><p>Choose a fault and inspect the generated signals, deterministic checks, and diagnosis. These are simulated values, not a physical circuit.</p></div><div className="live-badge"><span /> PATCH locked</div></section>
       <details className="simulator-details"><summary>How the sample becomes a diagnosis</summary><p>The eight steps below describe the software pipeline. They are not actions you need to perform.</p><div className="pipeline-strip" aria-label="Telemetry processing pipeline">{["Capture", "Check format", "Read signals", "Match project", "Save sample", "Calculate changes", "Check rules", "Explain result"].map((step, index) => <div key={step}><span>{index + 1}</span>{step}</div>)}</div></details>
       <section className="simulator-layout">
         <div className="panel scenario-panel">
@@ -97,7 +97,7 @@ export function SimulatorView({
         </div>
         <div className="panel simulator-result">
           <div className="panel-heading"><div><span className="eyebrow">Step 2 · What ReWeird found</span><h2>{session.diagnosis.headline}</h2></div><span className="session-id">{source === "api" && session.measurement_id ? `Sample #${session.measurement_id}` : "Browser example"}</span></div>
-          <p>{session.stage === "verify" ? "The demo captured a healthy window after the simulated repair." : mysteryPending ? "This hidden scenario was analyzed from simulated raw samples. Inspect the evidence before revealing the scenario." : source === "browser" ? "Illustrative loose connection example. No device or Go API measurement was taken." : activeScenario?.description ?? "Choose a scenario to run a new capture."}</p>
+          <p>{session.stage === "verify" ? "The demo captured a healthy window after the simulated repair." : mysteryPending ? "This hidden scenario was analyzed from simulated raw samples. Inspect the evidence before revealing the scenario." : source === "browser" ? "Browser-generated sample for the selected scenario. No physical measurement was taken." : activeScenario?.description ?? "Choose a scenario to run a new capture."}</p>
           <div className="simulator-summary" aria-live="polite"><strong>{session.evidence.probe} · {session.evidence.role}</strong><p>{session.diagnosis.summary}</p><small>{session.evidence.rule_results.filter((rule) => rule.status === "fail").map((rule) => rule.message).join(" ") || "No failed checks in this sample."}</small></div>
           <details className="simulator-details"><summary>See why ReWeird thinks that</summary><p>{session.diagnosis.summary}</p><ul>{session.evidence.rule_results.map((rule, index) => <li key={`${rule.id}-${index}`}>{rule.probe ? `${rule.probe}: ` : ""}{rule.message}</li>)}</ul><p>Possible causes are hypotheses, not confirmed faults:</p><ul>{session.diagnosis.possible_causes.map((cause) => <li key={cause}>{cause}</li>)}</ul></details>
           <details className="simulator-details"><summary>Show probe readings and raw sample details</summary><div className="result-meta"><span>Contract v{session.raw_telemetry?.schema_version ?? 2}</span><span>{session.raw_telemetry?.device_id ?? "browser fixture"}</span><span>Profile {session.profile_id ?? "ultrasonic-demo"}</span></div>
@@ -116,7 +116,7 @@ export function SimulatorView({
             })}
           </div>
           {!!session.analysis?.simultaneous_dropout_groups?.length && <div className="shared-failure"><TriangleAlert size={17} /> Shared failure group: {session.analysis.simultaneous_dropout_groups.map((group) => group.join(" + ")).join(", ")}</div>}</details>
-          <div className="simulator-actions"><button className="secondary" onClick={onDemoTest} disabled={busy}><TestTube2 size={16} /> Try browser connection test</button><button className="secondary" onClick={onDemoRepair} disabled={busy}><CheckCircle2 size={16} /> Simulate repair</button></div>
+          <div className="simulator-actions"><button className="secondary" onClick={onDemoTest} disabled={busy}><TestTube2 size={16} /> Run simulated follow-up test</button><button className="secondary" onClick={onDemoRepair} disabled={busy}><CheckCircle2 size={16} /> Simulate repair</button></div>
         </div>
       </section>
       <section className="security-note"><ShieldCheck size={20} /><div><strong>Input-only by design</strong><span>The simulator and future ESP32 serial adapter can only supply measurements. The PATCH endpoint remains physically and logically disabled.</span></div></section>

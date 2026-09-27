@@ -5,7 +5,7 @@ import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { Activity, ArrowUpRight, Cable, CircleAlert, History, Radio } from "lucide-react";
 import type { DemoSession, ProbePlan, ProjectProfile } from "@reweird/shared-types";
 import { Button } from "@/components/ui/button";
-import { useAppState } from "@/lib/app-state";
+import { useOptionalAppState } from "@/lib/app-state";
 import { buildCircuitMap, circuitDisplayState, type CircuitDisplayState, type CircuitMapConnection, type CircuitMapModel } from "@/lib/circuit-map";
 import { cn } from "@/lib/utils";
 import { Esp32Board, PartArt, PartDefs, partKind } from "./part-art";
@@ -246,7 +246,7 @@ export function CircuitMap({
   /** Links to the live tabs under the selected connection; pages that already show those tabs can hide them. */
   showActions?: boolean;
 }) {
-  const { workflow } = useAppState();
+  const workflow = useOptionalAppState()?.workflow ?? null;
   const reduce = useReducedMotion();
   const [selectedID, setSelectedID] = useState<string | null>(null);
   const model = buildCircuitMap(profile, plan, session, demoMode);

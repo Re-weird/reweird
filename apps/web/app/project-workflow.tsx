@@ -258,7 +258,7 @@ export function NewProjectModal({
   );
 }
 
-export function ProbePlanView({ project, profile, plan, session, onConnected }: { project: Project | null; profile: ProjectProfile | null; plan: ProbePlan | null; session: DemoSession | null; onConnected: () => Promise<void> }) {
+export function ProbePlanView({ project, profile, plan, session, onConnected, simulated = false }: { simulated?: boolean; project: Project | null; profile: ProjectProfile | null; plan: ProbePlan | null; session: DemoSession | null; onConnected: () => Promise<void> }) {
   const [checked, setChecked] = useState(Boolean(plan?.connected));
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -277,6 +277,6 @@ export function ProbePlanView({ project, profile, plan, session, onConnected }: 
       {plan.instructions.map((instruction) => <motion.article variants={{ hidden: { opacity: 0, y: 10 }, show: { opacity: 1, y: 0, transition: { duration: 0.3, ease: [0.16, 1, 0.3, 1] } } }} className={`probe-instruction ${instruction.probe === "GND" ? "ground" : ""}`} key={instruction.probe}><div className="probe-badge">{instruction.probe}</div><div><span className="eyebrow">{instruction.role}</span><h2>{instruction.target}</h2><p>{instruction.expected} · {instruction.signal_type}</p>{instruction.explanation && <small>{instruction.explanation}</small>}<div className="safety-warning"><ShieldCheck size={13} />{instruction.safe_warning}</div></div></motion.article>)}
       {["P1", "P2", "P3", "P4", "P5", "P6"].filter((probe) => !plan.instructions.some((step) => step.probe === probe)).map((probe) => <motion.article variants={{ hidden: { opacity: 0, y: 10 }, show: { opacity: 1, y: 0, transition: { duration: 0.3, ease: [0.16, 1, 0.3, 1] } } }} className="probe-instruction" key={probe}><div className="probe-badge">{probe}</div><div><span className="eyebrow">Unassigned</span><h2>Spare / disconnected</h2><p>No target node is assigned in this confirmed profile.</p><div className="safety-warning"><ShieldCheck size={13} />Leave this probe disconnected.</div></div></motion.article>)}
     </motion.section>
-    <section className="connection-confirm"><label><input type="checkbox" checked={checked} onChange={(event) => setChecked(event.target.checked)} /><span><strong>I connected the probes exactly as shown</strong><small>I verified circuit ground, voltage range, divider/level-shifter requirements, and that PATCH remains disconnected.</small></span></label><button className="primary" disabled={!checked || busy} onClick={proceed}>{busy ? <RefreshCw className="spin" size={16} /> : <CheckCircle2 size={16} />} Proceed to live diagnostics</button></section>
+    <section className="connection-confirm"><label><input type="checkbox" checked={checked} onChange={(event) => setChecked(event.target.checked)} /><span><strong>{simulated ? "Use the simulated probe connections shown above" : "I connected the probes exactly as shown"}</strong><small>I verified circuit ground, voltage range, divider/level-shifter requirements, and that PATCH remains disconnected.</small></span></label><button className="primary" disabled={!checked || busy} onClick={proceed}>{busy ? <RefreshCw className="spin" size={16} /> : <CheckCircle2 size={16} />} {simulated ? "Open simulated diagnostics" : "Proceed to live diagnostics"}</button></section>
   </>;
 }

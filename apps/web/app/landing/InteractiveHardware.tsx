@@ -21,11 +21,11 @@ function Assembly({ selected, rotation }: { selected: number | null; rotation: n
 }
 
 export function RodinEsp32() {
-  const { scene } = useGLTF("/models/reweird-esp32.glb");
+  const { scene } = useGLTF(`${process.env.NEXT_PUBLIC_DEMO_BASE_PATH ?? ""}/models/reweird-esp32.glb`);
   const [diffuse, normal, pbr] = useTexture([
-    "/models/reweird-esp32-diffuse.jpg",
-    "/models/reweird-esp32-normal.jpg",
-    "/models/reweird-esp32-pbr.jpg",
+    `${process.env.NEXT_PUBLIC_DEMO_BASE_PATH ?? ""}/models/reweird-esp32-diffuse.jpg`,
+    `${process.env.NEXT_PUBLIC_DEMO_BASE_PATH ?? ""}/models/reweird-esp32-normal.jpg`,
+    `${process.env.NEXT_PUBLIC_DEMO_BASE_PATH ?? ""}/models/reweird-esp32-pbr.jpg`,
   ]);
   const model = useMemo(() => {
     const clone = scene.clone(true);
@@ -56,7 +56,7 @@ export function RodinEsp32() {
   return <primitive object={model} rotation={[0, 0, 0]} />;
 }
 
-useGLTF.preload("/models/reweird-esp32.glb");
+useGLTF.preload(`${process.env.NEXT_PUBLIC_DEMO_BASE_PATH ?? ""}/models/reweird-esp32.glb`);
 
 export function InteractiveHardware({ selected, theme }: { selected: number | null; theme: "light" | "dark" }) {
   const [available, setAvailable] = useState(false);

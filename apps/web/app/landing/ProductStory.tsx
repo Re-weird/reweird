@@ -31,6 +31,7 @@ const mapConnections = [
 export function ProductStory() {
   const [theme, toggleTheme] = useTheme();
   const { isSignedIn } = useUser();
+  const judgeMode = process.env.NEXT_PUBLIC_JUDGE_MODE === "true";
   const reduced = useReducedMotion();
   const root = useRef<HTMLDivElement>(null);
   const hero = useRef<HTMLElement>(null);
@@ -71,9 +72,9 @@ export function ProductStory() {
   return <div ref={root} className={s.story}>
     <a href="#understand" className={s.skip}>Skip animation and explore ReWeird</a>
     <header className={s.header}>
-      <Link href="/" className={s.brand} aria-label="ReWeird home"><img src="/images/reweird-logo-mark.png" alt="" width="52" height="26" /><span>ReWeird</span></Link>
-      <nav aria-label="Main navigation"><a href="#understand">The experience</a><Link href="/projects/demo">Try demo <ArrowUpRight size={13} /></Link>
-        {isSignedIn ? <Link href="/dashboard" className={s.navAction}>Workspace <ArrowRight size={14} /></Link> : <ContinueWithGoogle className={s.navAction} />}
+      <Link href="/" className={s.brand} aria-label="ReWeird home"><img src={`${process.env.NEXT_PUBLIC_DEMO_BASE_PATH ?? ""}/images/reweird-logo-mark.png`} alt="" width="52" height="26" /><span>ReWeird</span></Link>
+      <nav aria-label="Main navigation"><a href="#understand">The experience</a><Link href={judgeMode ? "/software" : "/projects/demo"}>Project demo <ArrowUpRight size={13} /></Link>
+        {judgeMode ? <Link href="/try" className={s.navAction}>Try it yourself <ArrowRight size={14} /></Link> : isSignedIn ? <Link href="/dashboard" className={s.navAction}>Workspace <ArrowRight size={14} /></Link> : <ContinueWithGoogle className={s.navAction} />}
         <button className={s.theme} onClick={toggleTheme} aria-label={`Switch to ${theme === "dark" ? "light" : "dark"} mode`}>{theme === "dark" ? <Sun size={16} /> : <Moon size={16} />}</button>
       </nav>
     </header>
@@ -82,7 +83,7 @@ export function ProductStory() {
       <section ref={hero} id="hardware" data-chapter="0" className={`${s.hero} ${reduced ? s.reducedHero : ""}`}>
         <div className={s.heroStage}>
           <div className={s.stageGrid} aria-hidden="true" />
-          <div className={s.heroCopy}><p className={s.eyebrow}><span /> HARDWARE INTELLIGENCE, MADE TANGIBLE</p><h1>Hardware speaks.<br /><em>Understand it.</em></h1><p className={s.lead}>Your code. Your circuit. The missing connection.<br />Follow the evidence from the first signal to the fix.</p><WorkspaceLink className={s.primary}>Enter the workspace <ArrowUpRight size={17} /></WorkspaceLink><small>Explore with simulated hardware. No setup needed.</small></div>
+          <div className={s.heroCopy}><p className={s.eyebrow}><span /> HARDWARE INTELLIGENCE, MADE TANGIBLE</p><h1>Hardware speaks.<br /><em>Understand it.</em></h1><p className={s.lead}>Your code. Your circuit. The missing connection.<br />Follow the evidence from the first signal to the fix.</p>{judgeMode ? <div className="demo-landing-actions"><Link href="/software" className={s.primary}>Project demo <ArrowUpRight size={17} /></Link><Link href="/try" className={s.primary}>Try it yourself <ArrowRight size={17} /></Link></div> : <WorkspaceLink className={s.primary}>Enter the workspace <ArrowUpRight size={17} /></WorkspaceLink>}<small>Explore with simulated hardware. No setup needed.</small></div>
           <div className={s.heroModel}><Hardware progress={progress} reduced={reduced} light={theme === "light"} /></div>
           <div className={s.hardwareLabel}><span>01 / THE STARTING POINT</span><strong>ESP32</strong><p>A whole system.<br />Waiting to be understood.</p><div className={s.labelLine} /><small>DRAG TO EXPLORE ↔</small></div>
           <div className={s.portCopy}><span className={s.eyebrow}>LOOK A LITTLE CLOSER</span><h2>Every connection<br />has a story.</h2><p>Let’s follow one.</p></div>
@@ -149,8 +150,8 @@ export function ProductStory() {
         ].map(([title,body],index) => <div key={title}><button aria-expanded={open===index} aria-controls={`record-${index}`} onClick={() => setOpen(open===index ? null : index)}><span>0{index+1}</span>{title}{open===index ? <Minus size={17}/> : <Plus size={17}/>}</button><p id={`record-${index}`} hidden={open!==index}>{body}</p></div>)}</div>
         <div className={s.sectionFoot}><span>CAPTURE → COMPARE → KEEP THE RECORD</span><span>05 / 05</span></div>
       </section>
-      <section className={s.closing}><p className={s.eyebrow}>YOUR NEXT BUILD DESERVES A CLEARER PICTURE</p><h2>Make the connection.</h2><Link href="/projects/demo" className={s.primary}>Experience ReWeird <ArrowUpRight size={18}/></Link><p>Start with the simulated demo. Bring your own project when you’re ready.</p><a href="#hardware" className={s.replay}><RotateCcw size={13}/> Back to the beginning</a></section>
+      <section className={s.closing}><p className={s.eyebrow}>YOUR NEXT BUILD DESERVES A CLEARER PICTURE</p><h2>Make the connection.</h2><Link href={judgeMode ? "/demo" : "/projects/demo"} className={s.primary}>Experience ReWeird <ArrowUpRight size={18}/></Link><p>Start with the simulated demo. Bring your own project when you’re ready.</p><a href="#hardware" className={s.replay}><RotateCcw size={13}/> Back to the beginning</a></section>
     </main>
-    <footer className={s.footer}><Link href="/" className={s.brand}><img src="/images/reweird-logo-mark.png" alt="" width="52" height="26"/><span>ReWeird</span></Link><span>Built for the questions between code and circuit.</span><WorkspaceLink>Open workspace <ArrowRight size={14}/></WorkspaceLink></footer>
+    <footer className={s.footer}><Link href="/" className={s.brand}><img src={`${process.env.NEXT_PUBLIC_DEMO_BASE_PATH ?? ""}/images/reweird-logo-mark.png`} alt="" width="52" height="26"/><span>ReWeird</span></Link><span>Built for the questions between code and circuit.</span><WorkspaceLink>Open workspace <ArrowRight size={14}/></WorkspaceLink></footer>
   </div>;
 }

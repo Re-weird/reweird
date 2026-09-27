@@ -25,6 +25,7 @@ type Props = {
   onNavigate: (tab: ProjectTabID) => void;
   /** Recent sessions are limited to this project's history. */
   historyProjectID: string;
+  demoHistory?: HistorySummary[];
   plan: ProbePlan | null;
   scenarios: SimulatorScenario[];
   busy: boolean;
@@ -299,15 +300,16 @@ function LatestAnalysis({ session, live, source, onNavigate }: { session: DemoSe
   );
 }
 
-function RecentSessions({ projectID, onNavigate }: { projectID: string; onNavigate: (tab: ProjectTabID) => void }) {
+function RecentSessions({ projectID, onNavigate, demoItems }: { projectID: string; onNavigate: (tab: ProjectTabID) => void; demoItems?: HistorySummary[] }) {
   const [items, setItems] = useState<HistorySummary[] | null>(null);
   const [offline, setOffline] = useState(false);
   useEffect(() => {
+    if (demoItems) { setItems(demoItems.slice(0, 3)); setOffline(false); return; }
     let active = true;
     setItems(null); setOffline(false);
     historyApi.list({ projectID }).then(({ items: list }) => { if (active) setItems(list.slice(0, 3)); }).catch(() => { if (active) setOffline(true); });
     return () => { active = false; };
-  }, [projectID]);
+  }, [projectID, demoItems]);
   return (
     <motion.section variants={reveal} aria-labelledby="recent-title" className="py-7">
       <div className="flex items-center justify-between">
@@ -343,7 +345,7 @@ function RecentSessions({ projectID, onNavigate }: { projectID: string; onNaviga
   );
 }
 
-export function Workbench({ session, project, profile, source, onNavigate, historyProjectID, plan }: Props) {
+export function Workbench({ session, project, profile, source, onNavigate, historyProjectID, plan, demoHistory }: Props) {
   const reduce = useReducedMotion();
   // Live data belongs to this project only when the session is running its profile.
   const matchesProject = !project || (Boolean(profile) && session.profile_id === profile?.id);
@@ -387,7 +389,7 @@ export function Workbench({ session, project, profile, source, onNavigate, histo
         <div className="bench-project-meta"><span>{profile?.components.length ?? 0} components</span><span>{profile?.confirmed ? "Profile confirmed" : "Review profile"}</span></div>
         {project?.repository && <a className="bench-report-link" href={project.repository.html_url} target="_blank" rel="noreferrer"><GitBranch size={15} /><span>{project.repository.full_name}{project.repository.last_commit ? ` @${project.repository.last_commit.sha.slice(0, 7)}` : ""}</span><ArrowUpRight size={14} /></a>}
       </section>
-      <section className="bench-panel bench-history"><div data-tw><RecentSessions projectID={historyProjectID} onNavigate={onNavigate} /></div></section>
+      <section className="bench-panel bench-history"><div data-tw><RecentSessions projectID={historyProjectID} onNavigate={onNavigate} demoItems={demoHistory} /></div></section>
       <p className="bench-safety"><LockKeyhole size={13} /> Passive sensing. Electrical output stays locked.</p>
     </aside>
   </div>;

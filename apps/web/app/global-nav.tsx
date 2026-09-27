@@ -8,7 +8,9 @@ import { AnimatePresence, motion } from "framer-motion";
 import { BarChart3, ChevronDown, FolderGit2, Moon, Plus, Settings, Sun, Waves } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { useAccountActivity } from "@/lib/account-activity";
 import { useAppState } from "@/lib/app-state";
+import { AUTH_ENABLED, useUser } from "@/lib/auth";
 import { DEMO_PROJECT_ID } from "@/lib/project-routes";
 import { cn } from "@/lib/utils";
 
@@ -52,6 +54,12 @@ function AccountMenu({ onLoadDemo }: { onLoadDemo: () => void }) {
     return () => { document.removeEventListener("mousedown", close); document.removeEventListener("keydown", escape); };
   }, [open]);
 
+  const user = useUser();
+  const activity = useAccountActivity();
+  const github = activity.status === "ready" ? activity.data.github : null;
+  const avatar = AUTH_ENABLED && user.isSignedIn && user.imageUrl ? user.imageUrl
+    : github?.connected && github.account_login ? `https://github.com/${encodeURIComponent(github.account_login)}.png?size=64` : null;
+
   const itemClass = "flex items-center gap-2.5 rounded-md px-2.5 py-2 text-[13px] text-foreground transition-colors hover:bg-accent [&_svg]:size-4 [&_svg]:text-muted-foreground";
 
   return (
@@ -61,9 +69,10 @@ function AccountMenu({ onLoadDemo }: { onLoadDemo: () => void }) {
         aria-haspopup="menu"
         aria-expanded={open}
         aria-label="Account menu"
-        className="grid size-8 place-items-center rounded-full border border-border bg-surface-3 font-mono text-[11px] font-medium text-foreground transition-transform active:scale-95"
+        className="grid size-8 place-items-center overflow-hidden rounded-full border border-border bg-surface-3 font-mono text-[11px] font-medium text-foreground transition-transform active:scale-95"
       >
-        RW
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        {avatar ? <img src={avatar} alt="" className="size-full object-cover" /> : "RW"}
       </button>
       <AnimatePresence>
         {open && (

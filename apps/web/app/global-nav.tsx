@@ -109,8 +109,8 @@ export function GlobalNav() {
 
   // The public landing page (/) and the legacy single-page workbench (/app)
   // own their own header/chrome; this global nav is only for the routed
-  // dashboard/projects app.
-  if (pathname === "/" || pathname.startsWith("/app")) return null;
+  // dashboard/projects app. The /demo chooser and /try judge demo own their own shell too.
+  if (pathname === "/" || pathname.startsWith("/app") || pathname.startsWith("/try") || pathname === "/demo") return null;
 
   return (
     <header data-tw className="sticky top-0 z-40 border-b border-border bg-chrome/95 backdrop-blur supports-[backdrop-filter]:bg-chrome/80">

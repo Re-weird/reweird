@@ -7,7 +7,8 @@
     "build": "next build",
     "start": "next start",
     "test:circuit-map": "node --test lib/circuit-map.test.mjs",
-    "test:experience": "node --test lib/circuit-map.test.mjs lib/weird-demo.test.mjs",
+    "test:experience": "node --test lib/circuit-map.test.mjs lib/weird-demo.test.mjs lib/judge-demo.test.mjs",
+    "test:judge-demo": "node --test lib/judge-demo.test.mjs",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

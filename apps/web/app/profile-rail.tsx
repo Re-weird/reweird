@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { formatDuration, medianResolveMS, useAccountActivity } from "@/lib/account-activity";
 import { AUTH_ENABLED, useUser } from "@/lib/auth";
+import { userInitials } from "@/lib/user-display";
 
 const PresencePulse = memo(function PresencePulse({ online }: { online: boolean }) {
   const reduce = useReducedMotion();
@@ -26,11 +27,6 @@ const PresencePulse = memo(function PresencePulse({ online }: { online: boolean 
     </span>
   );
 });
-
-function initials(name: string) {
-  const parts = name.replace(/[^a-zA-Z0-9 ]/g, " ").trim().split(/\s+/).filter(Boolean);
-  return (parts.length > 1 ? parts[0][0] + parts[1][0] : name.slice(0, 2)).toUpperCase();
-}
 
 // Persistent left rail: who is working and their totals, all from the API.
 export function ProfileRail() {
@@ -62,7 +58,7 @@ export function ProfileRail() {
       <div className="relative w-fit">
         <Avatar className="size-24 ring-1 ring-border">
           {image && <AvatarImage src={image} alt="" />}
-          <AvatarFallback className="bg-surface-3 font-mono text-2xl font-medium text-muted-foreground">{initials(name === "Local session" ? "RW" : name)}</AvatarFallback>
+          <AvatarFallback className="bg-surface-3 font-mono text-2xl font-medium text-muted-foreground">{userInitials(name === "Local session" ? "" : name)}</AvatarFallback>
         </Avatar>
         <PresencePulse online={Boolean(signedIn || github?.connected)} />
       </div>

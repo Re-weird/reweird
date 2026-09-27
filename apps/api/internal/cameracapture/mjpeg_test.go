@@ -187,6 +187,27 @@ func TestValidateURLRejectsCredentials(t *testing.T) {
 	}
 }
 
+func TestCaptureDoesNotFollowRedirects(t *testing.T) {
+	// A camera that responds with a redirect (e.g. to a completely
+	// different host/scheme it does not control, or one that was
+	// compromised) must never have that redirect silently followed --
+	// otherwise the redirect target would bypass ValidateURL entirely,
+	// since only the original URL is ever checked.
+	target := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		t.Error("the redirect target must never be contacted")
+	}))
+	defer target.Close()
+	redirector := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, target.URL, http.StatusFound)
+	}))
+	defer redirector.Close()
+
+	result := Test(context.Background(), redirector.URL)
+	if result.Status != StatusInvalidStream {
+		t.Fatalf("status = %s, want INVALID_STREAM for an unfollowed redirect (result=%#v)", result.Status, result)
+	}
+}
+
 func TestValidateURLAcceptsPrivateLANAddress(t *testing.T) {
 	// This is intentionally a LAN camera feature -- a private address like a
 	// real Android phone on the same Wi-Fi must not be rejected.

@@ -139,7 +139,17 @@ func Capture(ctx context.Context, rawURL string) (Frame, error) {
 	if err != nil {
 		return Frame{}, err
 	}
-	client := &http.Client{Timeout: requestTimeout}
+	// A real MJPEG camera has no legitimate reason to redirect. Go's default
+	// client follows redirects to ANY scheme/host, which would let a
+	// malicious or compromised camera bounce this request past ValidateURL
+	// (e.g. to a file:// URL or an unintended internal target) after the
+	// initial URL already passed validation. Refusing to follow redirects
+	// closes that off entirely -- a 3xx response is simply treated as an
+	// invalid stream by the status check below.
+	client := &http.Client{
+		Timeout:       requestTimeout,
+		CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
+	}
 	response, err := client.Do(request)
 	if err != nil {
 		if requestCtx.Err() != nil {

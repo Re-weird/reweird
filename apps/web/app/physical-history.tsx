@@ -247,7 +247,7 @@ function VisionCameraPanel({ projectID, cameraConfig, onChange }: { projectID: s
       <p className="inline-empty" style={{ textAlign: "left" }}>
         Configure an MJPEG camera (e.g. an Android phone running an &quot;IP Webcam&quot;-style app on the same Wi-Fi as this backend) to capture a real raw frame automatically each time you commit physical state with no photo attached.
       </p>
-      <div className="upload-grid" style={{ gridTemplateColumns: "minmax(0,1fr) auto auto auto", alignItems: "center", gap: 8 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "minmax(0,1fr) auto auto auto", alignItems: "center", gap: 8 }}>
         <input
           aria-label="Camera MJPEG URL"
           placeholder="http://10.110.194.207:4444"

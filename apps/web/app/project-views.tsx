@@ -1,5 +1,6 @@
 "use client";
 
+import { motion } from "framer-motion";
 import { Activity, Cable, ChevronRight, Microscope, RefreshCw, ShieldCheck, TestTube2, TriangleAlert, CheckCircle2 } from "lucide-react";
 import type { DemoSession, ProbePlan, Project, ProjectProfile, SimulatorScenario } from "@reweird/shared-types";
 import { ConfidenceRing, RuleRow } from "./signal-components";
@@ -22,11 +23,11 @@ export function DiagnosisView({ session, source, onPlan, busy }: { session: Demo
       <section className="diagnosis-layout">
         <div className="panel evidence-panel">
           <div className="panel-heading"><div><span className="eyebrow">Structured evidence</span><h2>Expected vs. observed</h2></div><span className="probe-tag">{session.evidence.probe} · {session.evidence.role}</span></div>
-          <div className="compare-grid">
-            <div><span>Expected</span><strong>{String(session.evidence.expected.signal ?? "Configured behavior")}</strong>{renderFacts(expected)}</div>
-            <div className="observed"><span>Observed</span><strong>{focus?.dropouts ?? 0} detected dropouts</strong>{renderFacts(observed)}</div>
-            <div><span>Known Good</span><strong>{baselineStatusLabel(session.evidence.baseline.status, session.evidence.baseline.learned_windows)}</strong>{renderFacts(baseline)}</div>
-          </div>
+          <motion.div className="compare-grid" initial="hidden" animate="show" variants={{ hidden: {}, show: { transition: { staggerChildren: 0.07 } } }}>
+            <motion.div variants={{ hidden: { opacity: 0, y: 8 }, show: { opacity: 1, y: 0, transition: { duration: 0.3, ease: [0.16, 1, 0.3, 1] } } }}><span>Expected</span><strong>{String(session.evidence.expected.signal ?? "Configured behavior")}</strong>{renderFacts(expected)}</motion.div>
+            <motion.div className="observed" variants={{ hidden: { opacity: 0, y: 8 }, show: { opacity: 1, y: 0, transition: { duration: 0.3, ease: [0.16, 1, 0.3, 1] } } }}><span>Observed</span><strong>{focus?.dropouts ?? 0} detected dropouts</strong>{renderFacts(observed)}</motion.div>
+            <motion.div variants={{ hidden: { opacity: 0, y: 8 }, show: { opacity: 1, y: 0, transition: { duration: 0.3, ease: [0.16, 1, 0.3, 1] } } }}><span>Known Good</span><strong>{baselineStatusLabel(session.evidence.baseline.status, session.evidence.baseline.learned_windows)}</strong>{renderFacts(baseline)}</motion.div>
+          </motion.div>
           <div className="rules-list">{session.evidence.rule_results.map((rule, index) => <RuleRow rule={rule} key={`${rule.probe ?? ""}-${rule.id}-${index}`} />)}</div>
         </div>
         <div className="panel interpretation-card">

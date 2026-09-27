@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { motion } from "framer-motion";
 import {
   AlertTriangle,
   Cable,
@@ -264,7 +265,10 @@ export function ProbePlanView({ project, plan, onConnected }: { project: Project
   return <>
     <section className="page-heading"><div><p className="kicker">Connect ReWeird</p><h1>Probe placement plan</h1><p>Generated from the confirmed profile for {project?.name ?? "this project"}. Verify voltage and polarity before touching the circuit.</p><p>Physical profile ID: <code>{plan.profile_id}</code>. Firmware and API must use this exact ID before live diagnostics.</p></div><span className="confirmed"><Check size={13} /> Profile confirmed</span></section>
     {error && <div className="form-error page-error"><AlertTriangle size={15} />{error}</div>}
-    <section className="probe-plan-grid">{plan.instructions.map((instruction) => <article className={`probe-instruction ${instruction.probe === "GND" ? "ground" : ""}`} key={instruction.probe}><div className="probe-badge">{instruction.probe}</div><div><span className="eyebrow">{instruction.role}</span><h2>{instruction.target}</h2><p>{instruction.expected} · {instruction.signal_type}</p>{instruction.explanation && <small>{instruction.explanation}</small>}<div className="safety-warning"><ShieldCheck size={13} />{instruction.safe_warning}</div></div></article>)}{["P1", "P2", "P3", "P4", "P5", "P6"].filter((probe) => !plan.instructions.some((step) => step.probe === probe)).map((probe) => <article className="probe-instruction" key={probe}><div className="probe-badge">{probe}</div><div><span className="eyebrow">Unassigned</span><h2>Spare / disconnected</h2><p>No target node is assigned in this confirmed profile.</p><div className="safety-warning"><ShieldCheck size={13} />Leave this probe disconnected.</div></div></article>)}</section>
+    <motion.section className="probe-plan-grid" initial="hidden" animate="show" variants={{ hidden: {}, show: { transition: { staggerChildren: 0.06 } } }}>
+      {plan.instructions.map((instruction) => <motion.article variants={{ hidden: { opacity: 0, y: 10 }, show: { opacity: 1, y: 0, transition: { duration: 0.3, ease: [0.16, 1, 0.3, 1] } } }} className={`probe-instruction ${instruction.probe === "GND" ? "ground" : ""}`} key={instruction.probe}><div className="probe-badge">{instruction.probe}</div><div><span className="eyebrow">{instruction.role}</span><h2>{instruction.target}</h2><p>{instruction.expected} · {instruction.signal_type}</p>{instruction.explanation && <small>{instruction.explanation}</small>}<div className="safety-warning"><ShieldCheck size={13} />{instruction.safe_warning}</div></div></motion.article>)}
+      {["P1", "P2", "P3", "P4", "P5", "P6"].filter((probe) => !plan.instructions.some((step) => step.probe === probe)).map((probe) => <motion.article variants={{ hidden: { opacity: 0, y: 10 }, show: { opacity: 1, y: 0, transition: { duration: 0.3, ease: [0.16, 1, 0.3, 1] } } }} className="probe-instruction" key={probe}><div className="probe-badge">{probe}</div><div><span className="eyebrow">Unassigned</span><h2>Spare / disconnected</h2><p>No target node is assigned in this confirmed profile.</p><div className="safety-warning"><ShieldCheck size={13} />Leave this probe disconnected.</div></div></motion.article>)}
+    </motion.section>
     <section className="connection-confirm"><label><input type="checkbox" checked={checked} onChange={(event) => setChecked(event.target.checked)} /><span><strong>I connected the probes exactly as shown</strong><small>I verified circuit ground, voltage range, divider/level-shifter requirements, and that PATCH remains disconnected.</small></span></label><button className="primary" disabled={!checked || busy} onClick={proceed}>{busy ? <RefreshCw className="spin" size={16} /> : <CheckCircle2 size={16} />} Proceed to live diagnostics</button></section>
   </>;
 }

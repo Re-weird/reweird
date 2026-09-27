@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/re-weird/reweird/apps/api/internal/domain"
+	"github.com/re-weird/reweird/apps/api/internal/patchcontrol"
 	"github.com/re-weird/reweird/apps/api/internal/telemetry"
 	serial "go.bug.st/serial"
 )
@@ -21,12 +22,15 @@ const maxFrameBytes = 256 * 1024
 var ErrNoTelemetry = errors.New("no valid ESP32 telemetry has been received")
 
 type Source struct {
-	mu         sync.RWMutex
-	port       io.ReadCloser
-	latest     *domain.TelemetryEnvelope
-	lastError  error
-	receivedAt time.Time
-	updates    chan struct{}
+	patchMu      sync.Mutex
+	patchReplies chan patchcontrol.Reply
+	mu           sync.RWMutex
+	port         io.ReadCloser
+	latest       *domain.TelemetryEnvelope
+	lastError    error
+	receivedAt   time.Time
+	updates      chan struct{}
+	closed       bool
 }
 
 type Status struct {
@@ -53,12 +57,13 @@ func Open(portName string, baud int) (*Source, error) {
 }
 
 func New(port io.ReadCloser) *Source {
-	return &Source{port: port, updates: make(chan struct{}, 1)}
+	return &Source{port: port, updates: make(chan struct{}, 1), patchReplies: make(chan patchcontrol.Reply, 8)}
 }
 
 func (source *Source) Name() string { return "serial" }
 
 func (source *Source) Run(ctx context.Context) error {
+	defer func() { source.mu.Lock(); source.closed = true; source.mu.Unlock() }()
 	if source.port == nil {
 		return errors.New("serial source has no port")
 	}
@@ -70,6 +75,9 @@ func (source *Source) Run(ctx context.Context) error {
 	scanner := bufio.NewScanner(source.port)
 	scanner.Buffer(make([]byte, 4096), maxFrameBytes)
 	for scanner.Scan() {
+		if source.patchReply(scanner.Bytes()) {
+			continue
+		}
 		envelope, err := DecodeLine(scanner.Bytes())
 		source.mu.Lock()
 		if err == nil && source.latest != nil && envelope.DeviceID != source.latest.DeviceID {

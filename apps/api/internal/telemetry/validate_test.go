@@ -54,7 +54,18 @@ func TestValidateForProfileRejectsCrossProjectTelemetry(t *testing.T) {
 		Probes: []domain.ProbeConfiguration{{Probe: "P1", Role: "RAIL", Mode: domain.ProbeModeAnalog, SafeMeasurement: domain.SafeMeasurementConfig{MaxPinVoltage: 3.3, InputScale: 1}}},
 	}
 	err := ValidateForProfile(envelope, profile)
-	if err == nil || !strings.Contains(err.Error(), "does not match active profile") {
+	if err == nil || !strings.Contains(err.Error(), "firmware reports wrong-profile but this project expects right-profile") {
 		t.Fatalf("ValidateForProfile() error = %v", err)
+	}
+}
+
+func TestValidateForProfileNamesPhysicalModeMismatch(t *testing.T) {
+	envelope := domain.TelemetryEnvelope{SchemaVersion: SchemaVersion, DeviceID: "reweird-001", ProfileID: "physical-project", WindowMS: 1000,
+		Samples: []domain.TelemetrySample{{Probe: "P5", Mode: domain.ProbeModeAnalog, AnalogMV: []float64{1650}}}}
+	profile := domain.ProjectProfile{ID: "physical-project", Confirmed: true,
+		Probes: []domain.ProbeConfiguration{{Probe: "P5", Role: "ZMPT", Mode: domain.ProbeModeDigital,
+			SafeMeasurement: domain.SafeMeasurementConfig{MaxPinVoltage: 3.3, InputScale: 1}}}}
+	if err := ValidateForProfile(envelope, profile); err == nil || !strings.Contains(err.Error(), "P5 mode mismatch: received analog, profile expects digital") {
+		t.Fatalf("mode mismatch error = %v", err)
 	}
 }

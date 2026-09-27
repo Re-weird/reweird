@@ -26,6 +26,8 @@ const sourceStyle: Record<ProjectFactSource, { label: string; className: string 
   CATALOG: { label: "Catalog", className: "text-muted-foreground ring-border" },
   USER: { label: "You", className: "text-pass ring-pass/40" },
   INFERRED: { label: "Inferred", className: "text-subtle ring-border" },
+  REAL_SERIAL_OBSERVATION: { label: "REAL SERIAL", className: "text-signal ring-signal/40" },
+  HARDWARE_CONTRACT: { label: "Probe hardware", className: "text-signal ring-signal/40" },
 };
 
 // Behaviors are stored as "digital pulse" or "digital_pulse" depending on
@@ -60,6 +62,37 @@ function SourceBadges({ sources = [] }: { sources?: ProjectFactSource[] }) {
 function errorMessage(error: unknown): string {
   return error instanceof ApiError ? error.message : error instanceof Error ? error.message : "The request failed. Check the backend and try again.";
 }
+
+const probeChoices = ["", "P1", "P2", "P3", "P4", "P5", "P6"];
+
+function optionalNumber(value: string): number | undefined {
+  if (value.trim() === "") return undefined;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : undefined;
+}
+
+/**
+ * Configured expectations for one connection. These are what the user or the
+ * code says the signal should do; observed behavior and Known Good are kept
+ * elsewhere and are never written back into these fields.
+ */
+function ConnectionMeasurementFields({ connection, editing, onChange }: { connection: ProfileConnection; editing: boolean; onChange: (patch: Partial<ProfileConnection>) => void }) {
+  const expected = connection.expected;
+  const setExpected = (patch: Partial<ProfileConnection["expected"]>) => onChange({ expected: { ...expected, ...patch } });
+  const numberField = (label: string, key: "min_voltage" | "max_voltage" | "min_frequency_hz" | "max_frequency_hz" | "min_pulse_width_us" | "max_pulse_width_us", step: string) =>
+    <label>{label}<input disabled={!editing} type="number" step={step} min="0" value={expected[key] ?? ""} onChange={(event) => setExpected({ [key]: optionalNumber(event.target.value) })} /></label>;
+  return <div className="connection-fields connection-expectations">
+    <label>ReWeird probe<select disabled={!editing} value={connection.probe ?? ""} onChange={(event) => onChange({ probe: event.target.value || undefined })}>{probeChoices.map((probe) => <option key={probe || "auto"} value={probe}>{probe || "Auto"}</option>)}</select></label>
+    <label className="inline-check"><input disabled={!editing} type="checkbox" checked={expected.required} onChange={(event) => setExpected({ required: event.target.checked })} /> Required activity</label>
+    {numberField("Min V", "min_voltage", "0.01")}
+    {numberField("Max V", "max_voltage", "0.01")}
+    {numberField("Min Hz", "min_frequency_hz", "0.01")}
+    {numberField("Max Hz", "max_frequency_hz", "0.01")}
+    {numberField("Min HIGH µs", "min_pulse_width_us", "0.1")}
+    {numberField("Max HIGH µs", "max_pulse_width_us", "0.1")}
+  </div>;
+}
+
 
 function cloneProfile(profile: ProjectProfile): ProjectProfile {
   return JSON.parse(JSON.stringify(profile)) as ProjectProfile;
@@ -187,7 +220,7 @@ function ConflictList({ conflicts, editing, onResolve }: { conflicts: ProfileCon
 const fieldClass = "h-8 w-full rounded-md bg-background px-2 text-sm text-foreground ring-1 ring-border outline-none transition-shadow duration-150 focus:ring-signal disabled:opacity-60";
 
 export function ProjectOverviewView({
-  project, profile, plan, session, onSave, onConfirm, onSync, onNavigate,
+  project, profile, plan, session, onSave, onConfirm, onSync, onRevise, onNavigate,
 }: {
   project: Project | null;
   profile: ProjectProfile | null;
@@ -196,11 +229,12 @@ export function ProjectOverviewView({
   onSave: (profile: ProjectProfile) => Promise<ProjectProfile>;
   onConfirm: (profile: ProjectProfile) => Promise<void>;
   onSync: () => Promise<void>;
+  onRevise?: () => Promise<void>;
   onNavigate: (destination: Destination) => void;
 }) {
   const reduce = useReducedMotion();
   const [draft, setDraft] = useState<ProjectProfile | null>(profile ? cloneProfile(profile) : null);
-  const [busy, setBusy] = useState<"save" | "confirm" | null>(null);
+  const [busy, setBusy] = useState<"save" | "confirm" | "revise" | null>(null);
   const [error, setError] = useState("");
   const [saved, setSaved] = useState(false);
 
@@ -225,7 +259,7 @@ export function ProjectOverviewView({
           <span className="grid size-11 place-items-center rounded-lg bg-surface-2 text-muted-foreground ring-1 ring-border"><Cpu className="size-5" strokeWidth={1.5} /></span>
           <h3 className="text-base font-semibold text-foreground">No profile yet</h3>
           <p className="text-sm leading-relaxed text-muted-foreground">
-            {repo ? `ReWeird builds the profile from ${repo.full_name}. Use Check for new commits above to read ${repo.default_branch} now.` : "This project has no linked repository, so there's no code to analyze. Create a new project from a GitHub repository to get a profile."}
+            {repo ? `ReWeird builds the profile from ${repo.full_name}. Use Check for new commits above to read ${repo.default_branch} now.` : "This project has no linked repository, so there's no code to analyze. Create a project from GitHub or upload local source/photo data to get a profile."}
           </p>
         </div>
       </div>
@@ -255,6 +289,11 @@ export function ProjectOverviewView({
     catch (cause) { setError(errorMessage(cause)); }
     finally { setBusy(null); }
   }
+  async function revise() {
+    if (!onRevise || !window.confirm("Open a new profile revision? The current probe plan and Known Good must be reconfirmed and recalibrated.")) return;
+    setBusy("revise"); setError("");
+    try { await onRevise(); } catch (cause) { setError(errorMessage(cause)); } finally { setBusy(null); }
+  }
   async function confirm() {
     setBusy("confirm"); setError("");
     try { if (draft) await onConfirm(draft); }
@@ -264,6 +303,7 @@ export function ProjectOverviewView({
 
   return (
     <motion.div data-tw initial={reduce ? false : "hidden"} animate="show" variants={{ show: { transition: { staggerChildren: 0.05 } } }} className="space-y-10">
+      {project && <p className="font-mono text-xs text-subtle">Physical profile ID: {draft.id} · Firmware and API must use this ID.</p>}
       {/* Status + expected behavior */}
       <motion.header variants={reveal} className="grid grid-cols-1 gap-6 border-b border-border pb-8 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end">
         <div className="min-w-0">
@@ -304,7 +344,7 @@ export function ProjectOverviewView({
               <p className="text-xs text-muted-foreground">{blockers.length ? `To confirm: ${blockers.join(", ")}.` : "Only you can confirm. It locks the profile and generates the probe plan."}</p>
             </>
           ) : project ? (
-            <Button asChild size="sm" variant="outline" className="active:scale-[0.97]"><Link href={projectPath(project.id, "probe-setup")}>Open probe setup <ArrowRight /></Link></Button>
+            <><Button asChild size="sm" variant="outline" className="active:scale-[0.97]"><Link href={projectPath(project.id, "probe-setup")}>Open probe setup <ArrowRight /></Link></Button>{onRevise && <Button size="sm" variant="outline" disabled={busy !== null} onClick={() => void revise()}>Revise profile</Button>}</>
           ) : null}
           <AnimatePresence>
             {saved && !error && (
@@ -390,6 +430,7 @@ export function ProjectOverviewView({
                           {behaviorOptions.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
                         </select>
                       </label>
+                      <div className="col-span-full"><ConnectionMeasurementFields connection={connection} editing={editing} onChange={(patch) => updateConnection(index, patch)} /></div>
                       <label className="col-span-2 text-[11px] text-subtle sm:col-span-4">Target node<input value={connection.target} onChange={(event) => updateConnection(index, { target: event.target.value })} className={cn(fieldClass, "mt-1")} /></label>
                     </div>
                   </div>

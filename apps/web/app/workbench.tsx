@@ -3,7 +3,7 @@
 import { memo, useEffect, useState } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import {
-  Activity, ArrowRight, ArrowUpRight, Check, ChevronRight, Cpu, FileText, GitBranch, History, LockKeyhole, Radio,
+  Bolt, Activity, ArrowRight, ArrowUpRight, Check, ChevronRight, Cpu, FileText, GitBranch, History, LockKeyhole, Radio,
   TriangleAlert, Waves,
 } from "lucide-react";
 import type { DemoSession, HistorySummary, ProbePlan, ProbeReading, Project, ProjectProfile, RuleResult, SimulatorScenario } from "@reweird/shared-types";
@@ -13,7 +13,9 @@ import { historyApi } from "@/lib/api";
 import type { ProjectTabID } from "@/lib/project-routes";
 import { cn } from "@/lib/utils";
 import { realBreakReady, telemetryLabel } from "@/lib/weird-demo";
+import { CalibrationPanel } from "./calibration-panel";
 import { JudgeCircuit } from "./judge-circuit";
+import { ProbeCard, RuleRow, SignalChart } from "./signal-components";
 
 type Props = {
   session: DemoSession;
@@ -210,7 +212,7 @@ function ActivityTimeline({ probes, windowMS }: { probes: ProbeReading[]; window
         })}
         <div className="grid grid-cols-[88px_minmax(0,1fr)_64px] gap-3">
           <span />
-          <div className="flex justify-between font-mono text-[10px] text-subtle">{ticks.map((tick) => <span key={tick}>{tick}s</span>)}</div>
+          <div className="flex justify-between font-mono text-[10px] text-subtle">{ticks.map((tick, position) => <span key={`tick-${position}`}>{tick}s</span>)}</div>
           <span />
         </div>
       </div>
@@ -252,96 +254,48 @@ function SignalMonitor({ session, live, plan, failures, currentStep, onNavigate 
   const counts = (["fail", "warn", "pass"] as const).map((status) => [status, rules.filter((rule) => rule.status === status).length] as const).filter(([, count]) => count > 0);
   const ordered = [...rules].sort((a, b) => ["fail", "warn", "pass"].indexOf(a.status) - ["fail", "warn", "pass"].indexOf(b.status));
   return (
-    <motion.section variants={reveal} aria-labelledby="signal-monitor-title" className="min-w-0">
-      <div className="flex flex-wrap items-end justify-between gap-5 border-b border-border pb-4">
-        <div>
-          <p className="font-mono text-[11px] tracking-[0.14em] text-subtle uppercase">Observe</p>
-          <h2 id="signal-monitor-title" className="mt-1 text-lg font-semibold tracking-tight text-foreground">Signal monitor</h2>
-        </div>
-        <div className="flex gap-7">
-          <Stat icon={Activity} label="Active probes" value={live ? String(activeProbes.length) : "—"} />
-          <Stat icon={Waves} label="Capture window" value={live && session.raw_telemetry ? `${session.raw_telemetry.window_ms / 1000}s` : "—"} />
-          <Stat icon={Radio} label="Failed checks" value={live ? String(failures) : "—"} alert={live && failures > 0} />
-        </div>
-      </div>
-
-      {live ? (
-        <>
-          <motion.div variants={{ show: { transition: { staggerChildren: 0.05 } } }} className="mt-5 grid grid-cols-2 gap-3 lg:grid-cols-3">
-            {activeProbes.map((reading) => <ProbeTile key={reading.probe} reading={reading} />)}
-          </motion.div>
-          {idleProbes.length > 0 && <p className="mt-3 font-mono text-[11px] text-subtle">{idleProbes.map((probe) => probe.probe).join(", ")} not assigned</p>}
-          <div className="mt-8 grid grid-cols-1 gap-8 xl:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
-            <ActivityTimeline probes={activeProbes.filter((probe) => probe.samples?.length)} windowMS={session.raw_telemetry?.window_ms ?? 60_000} />
-            <div>
-              <div className="flex items-baseline justify-between gap-2">
-                <h3 className="text-sm font-semibold text-foreground">Rule checks</h3>
-                <p className="flex gap-2.5 font-mono text-[11px]">{counts.map(([status, count]) => <span key={status} className={status === "fail" ? "text-fail" : status === "warn" ? "text-warn" : "text-pass"}>{count} {status}</span>)}</p>
-              </div>
-              <ul className="mt-2 divide-y divide-line-soft">{ordered.map((rule, index) => <RuleLine key={`${rule.probe ?? ""}-${rule.id}-${index}`} rule={rule} />)}</ul>
-              <p className="mt-3 text-xs text-subtle">Deterministic checks run on raw readings before any AI interpretation.</p>
+    <section className="bench-panel bench-signals" aria-labelledby="signal-monitor-title">
+      <div className="bench-panel-head"><div><span className="bench-label">01 / Observe</span><h2 id="signal-monitor-title">Signal monitor</h2></div></div>
+      {live ? <>
+        <div className="probe-grid">{session.probes.map((reading) => <ProbeCard key={reading.probe} reading={reading} />)}</div>
+        <div className="two-column wide-left">
+          <div className="panel">
+            <div className="panel-heading"><div><span className="eyebrow">Raw activity buckets</span><h2>Signal activity</h2></div>
+              <div className="chart-legend">{session.probes.filter((probe) => probe.samples?.length).slice(0, 2).map((probe) => <span key={probe.probe}>{probe.probe} {probe.role}</span>)}</div>
             </div>
+            <SignalChart session={session} windowMS={session.raw_telemetry?.window_ms ?? 60_000} />
           </div>
-        </>
-      ) : (
-        <div className="mt-5">
-          <div className="grid grid-cols-2 gap-3 lg:grid-cols-3" aria-hidden>
-            {(plan?.instructions.filter((item) => item.probe !== "GND") ?? Array.from({ length: 6 }, (_, index) => ({ probe: `P${index + 1}`, role: "Unassigned" }))).slice(0, 6).map((slot) => (
-              <div key={slot.probe} className="flex h-28 flex-col justify-between rounded-lg border border-dashed border-border p-4">
-                <p className="font-mono text-[11px] text-subtle">{slot.probe}</p>
-                <p className="truncate text-sm text-muted-foreground">{slot.role}</p>
-              </div>
-            ))}
-          </div>
-          <div className="mt-5 flex flex-wrap items-center justify-between gap-3 rounded-lg bg-surface px-4 py-3 ring-1 ring-border">
-            <p className="text-sm text-muted-foreground">No readings yet.{currentStep ? ` Next step: ${currentStep.title}.` : ""}</p>
-            {currentStep?.action && <Button size="sm" variant="outline" onClick={() => onNavigate(currentStep.action!.tab)}>{currentStep.action.label} <ChevronRight /></Button>}
+          <div className="panel">
+            <div className="panel-heading"><div><span className="eyebrow">Analysis</span><h2>Rule engine</h2></div></div>
+            <div className="rules-list">{ordered.map((rule, index) => <RuleRow key={`${rule.probe ?? ""}-${rule.id}-${index}`} rule={rule} />)}</div>
+            <div className="engine-note"><Bolt size={16} /><span>Deterministic checks run before any AI interpretation.</span></div>
           </div>
         </div>
-      )}
-    </motion.section>
+      </> : <div className="bench-empty"><Radio size={24} /><h3>Waiting for this project’s signals</h3>
+        <p>No readings yet.{currentStep ? ` Next step: ${currentStep.title}.` : ""}</p>
+        {currentStep?.action && <button className="secondary" onClick={() => onNavigate(currentStep.action!.tab)}>{currentStep.action.label} <ChevronRight size={15} /></button>}
+      </div>}
+    </section>
   );
 }
 
-function LatestAnalysis({ session, live, onNavigate }: { session: DemoSession; live: boolean; onNavigate: (tab: ProjectTabID) => void }) {
+function LatestAnalysis({ session, live, source, onNavigate }: { session: DemoSession; live: boolean; source: "api" | "browser"; onNavigate: (tab: ProjectTabID) => void }) {
   const failures = session.evidence.rule_results.filter((rule) => rule.status === "fail").length;
   return (
-    <motion.section variants={reveal} aria-labelledby="analysis-title" className="border-b border-border pb-7">
-      <p className="font-mono text-[11px] tracking-[0.14em] text-subtle uppercase">Understand</p>
-      <h2 id="analysis-title" className="mt-1 text-lg font-semibold tracking-tight text-foreground">Latest analysis</h2>
-      {live ? (
-        <>
-          <div className="mt-4 flex items-start gap-3">
-            <span className={cn("mt-0.5 grid size-8 shrink-0 place-items-center rounded-md ring-1", failures ? "text-fail ring-fail/40" : "text-pass ring-border")}><Activity className="size-4" strokeWidth={1.5} /></span>
-            <div>
-              <p className="text-base font-semibold leading-snug text-foreground">{session.diagnosis.headline}</p>
-              <p className="mt-1 font-mono text-xs text-muted-foreground">{Math.round(session.diagnosis.confidence * 100)}% confidence · interpretation</p>
-            </div>
-          </div>
-          <p className="mt-3 max-w-[65ch] text-sm leading-relaxed text-muted-foreground">{session.diagnosis.summary}</p>
-          {session.diagnosis.possible_causes.length > 0 && (
-            <>
-              <p className="mt-5 flex items-baseline justify-between text-xs"><span className="font-semibold text-foreground">Possible causes</span><span className="text-subtle">Not yet confirmed</span></p>
-              <ol className="mt-2 space-y-2">
-                {session.diagnosis.possible_causes.slice(0, 3).map((cause, index) => (
-                  <li key={cause} className="flex gap-3 text-sm text-muted-foreground"><span className="font-mono text-xs text-subtle">{String(index + 1).padStart(2, "0")}</span><span>{cause}</span></li>
-                ))}
-              </ol>
-            </>
-          )}
-          <div className="mt-5 rounded-lg bg-surface p-4 ring-1 ring-border">
-            <p className="text-xs font-semibold text-foreground">Next diagnostic test</p>
-            <p className="mt-1 text-sm leading-relaxed text-muted-foreground">{session.diagnosis.next_test}</p>
-            <div className="mt-3 flex flex-wrap gap-2">
-              <Button size="sm" className="active:scale-[0.98]" onClick={() => onNavigate("next-test")}>Open test planner <ArrowUpRight /></Button>
-              <Button size="sm" variant="outline" onClick={() => onNavigate("diagnosis")}>Review evidence</Button>
-            </div>
-          </div>
-        </>
-      ) : (
-        <p className="mt-3 text-sm leading-relaxed text-muted-foreground">A diagnosis appears here after the first capture. Rule checks run on the raw readings first; any interpretation is labeled as one.</p>
-      )}
-    </motion.section>
+    <section className="bench-panel bench-analysis" aria-labelledby="analysis-title">
+      <div className="bench-panel-head"><div><span className="bench-label">02 / Understand</span><h2 id="analysis-title">Latest analysis</h2></div><span className="analysis-source">{!live ? "Pending" : telemetryLabel(session, source)}</span></div>
+      {live ? <>
+        {failures > 0 && <div className="weird-analysis-kicker">SOMETHING’S WEIRD. <small>{session.evidence.probe} · {session.evidence.role} · {failures} failed {failures === 1 ? "check" : "checks"}</small></div>}
+        <div className="analysis-headline"><span className={`analysis-mark ${failures ? "attention" : ""}`}><Activity size={21} /></span><div><h3>{session.diagnosis.headline}</h3><span className="analysis-confidence">{Math.round(session.diagnosis.confidence * 100)}% confidence <span>· interpretation</span></span></div></div>
+        <p className="analysis-summary">{session.diagnosis.summary}</p>
+        {session.diagnosis.possible_causes.length > 0 && <>
+          <div className="hypothesis-heading"><span className="bench-label">Possible causes</span><small>Not yet confirmed</small></div>
+          <ol className="bench-hypotheses">{session.diagnosis.possible_causes.slice(0, 3).map((cause, index) => <li key={`cause-${index}`}><span>{String(index + 1).padStart(2, "0")}</span><p>{cause}</p><ChevronRight size={13} /></li>)}</ol>
+        </>}
+        <div className="bench-next-test"><span className="bench-label">Next diagnostic test</span><p>{session.diagnosis.next_test}</p><button className="text-button" onClick={() => onNavigate("next-test")}>Open test planner <ArrowUpRight size={15} /></button></div>
+        <div className="bench-analysis-actions"><button className="secondary" onClick={() => onNavigate("diagnosis")}>Review evidence</button><button className="primary" onClick={() => onNavigate("simulator")}>Simulator <ArrowUpRight size={15} /></button></div>
+      </> : <div className="bench-empty"><Activity size={24} /><h3>Ready when your project is.</h3><p>A diagnosis appears after a matching capture. Rule checks run before interpretation.</p></div>}
+    </section>
   );
 }
 
@@ -401,28 +355,40 @@ export function Workbench({ session, project, profile, source, onNavigate, histo
   const name = project?.name ?? profile?.project_name ?? session.project_name;
   const canBreakPhysical = realBreakReady(session, source, profile, plan);
 
-  return (
-    <div>
-      <motion.div data-tw initial={reduce ? false : "hidden"} animate="show" variants={{ show: { transition: { staggerChildren: 0.07 } } }}>
-        <ProjectHeader project={project} profile={profile} name={name} live={live} stepIndex={Math.max(currentIndex, 0)} source={source} session={session} />
-        <AnimatePresence initial={false}>
-          {!live && <SetupChecklist key="setup" steps={steps} onNavigate={onNavigate} />}
-        </AnimatePresence>
-      </motion.div>
-
-      {canBreakPhysical && <div className="mt-8"><JudgeCircuit key={`${profile?.id}-${session.raw_telemetry?.device_id}`} session={session} onDiagnose={() => onNavigate("diagnosis")} onTest={() => onNavigate("next-test")} onVerify={() => onNavigate("verify")} /></div>}
-
-      <motion.div data-tw initial={reduce ? false : "hidden"} animate="show" variants={{ show: { transition: { staggerChildren: 0.08, delayChildren: 0.1 } } }}
-        className="mt-8 grid grid-cols-1 gap-10 lg:grid-cols-[minmax(0,1fr)_340px] lg:gap-12">
-        <SignalMonitor session={session} live={live} plan={plan} failures={failures} currentStep={steps[currentIndex]} onNavigate={onNavigate} />
-        <aside className="min-w-0">
-          <LatestAnalysis session={session} live={live} onNavigate={onNavigate} />
-          <RecentSessions projectID={historyProjectID} onNavigate={onNavigate} />
-          <motion.p variants={reveal} className="flex items-center gap-2 border-t border-border pt-5 text-xs text-subtle">
-            <LockKeyhole className="size-3.5" strokeWidth={1.5} /> Passive sensing. Electrical output stays locked.
-          </motion.p>
-        </aside>
-      </motion.div>
+  const activeProbes = session.probes.filter((probe) => probe.status !== "idle");
+  const destinations: ProjectTabID[] = ["workbench", "diagnosis", "next-test", "verify"];
+  const currentStep = { detect: 0, diagnose: 1, test: 2, repair: 2, verify: 3 }[session.stage];
+  return <div className="workbench">
+    <div className="workbench-main">
+      <section className="bench-welcome">
+        <div className="welcome-copy"><span className="bench-label"></span><h1>Welcome to your<br />workbench.</h1><p>Understand your project.<br />Follow the evidence. Find your next move.</p><span className="welcome-foot"></span></div>
+        <div className="welcome-photo" aria-hidden="true" /><span className="welcome-caption" aria-hidden="true"></span>
+      </section>
+      <div data-tw><AnimatePresence initial={false}>{!live && <SetupChecklist key="setup" steps={steps} onNavigate={onNavigate} />}</AnimatePresence></div>
+      {canBreakPhysical && <JudgeCircuit key={`${profile?.id}-${session.raw_telemetry?.device_id}`} session={session} onDiagnose={() => onNavigate("diagnosis")} onTest={() => onNavigate("next-test")} onVerify={() => onNavigate("verify")} />}
+      <section className="bench-stats" aria-label="Current project summary">
+        <div><Activity size={17} /><strong>{live ? activeProbes.length : "—"}<small>Active probes</small></strong></div>
+        <div><Waves size={17} /><strong>{live && session.raw_telemetry ? `${session.raw_telemetry.window_ms / 1000}s` : "—"}<small>Capture window</small></strong></div>
+        <div className={live && failures ? "stat-attention" : ""}><Radio size={17} /><strong>{live ? failures : "—"}<small>Failed checks</small></strong></div>
+        <div><LockKeyhole size={17} /><strong>Locked<small>PATCH output</small></strong></div>
+      </section>
+      <SignalMonitor session={session} live={live} plan={plan} failures={failures} currentStep={steps[currentIndex]} onNavigate={onNavigate} />
+      {profile?.confirmed && matchesProject && source === "api" && session.telemetry_mode === "serial" && <CalibrationPanel profileID={profile.id} compact />}
+      <section className="bench-panel bench-flow">
+        <div className="bench-panel-head"><div><span className="bench-label">The diagnostic process</span><h2>Every step, backed by evidence.</h2></div></div>
+        <div className="bench-steps">{session.timeline.map((step, index) => <button key={step.id} className={live && index === currentStep ? "current" : ""} onClick={() => onNavigate(live ? destinations[index] ?? "workbench" : "probe-setup")}><span className="bench-step-number">{live && step.complete ? <Check size={14} /> : `0${index + 1}`}</span><strong>{step.label}</strong><small>{live ? step.detail : "Awaiting project capture"}</small></button>)}</div>
+      </section>
     </div>
-  );
+    <aside className="workbench-rail">
+      <LatestAnalysis session={session} live={live} source={source} onNavigate={onNavigate} />
+      <section className="bench-panel bench-project">
+        <div className="bench-panel-head"><h2>On your bench</h2><span className="bench-label">{project ? "Project" : "Built-in demo"}</span></div>
+        <button className="bench-project-link" onClick={() => onNavigate("overview")}><span className="project-thumbnail"><Cpu size={28} strokeWidth={1.25} /></span><span><strong>{name}</strong><small>{profile?.controller ?? project?.controller ?? "Controller unspecified"} · {profile?.logic_voltage ?? project?.logic_voltage ?? "—"} V logic</small></span><ChevronRight size={16} /></button>
+        <div className="bench-project-meta"><span>{profile?.components.length ?? 0} components</span><span>{profile?.confirmed ? "Profile confirmed" : "Review profile"}</span></div>
+        {project?.repository && <a className="bench-report-link" href={project.repository.html_url} target="_blank" rel="noreferrer"><GitBranch size={15} /><span>{project.repository.full_name}{project.repository.last_commit ? ` @${project.repository.last_commit.sha.slice(0, 7)}` : ""}</span><ArrowUpRight size={14} /></a>}
+      </section>
+      <section className="bench-panel bench-history"><div data-tw><RecentSessions projectID={historyProjectID} onNavigate={onNavigate} /></div></section>
+      <p className="bench-safety"><LockKeyhole size={13} /> Passive sensing. Electrical output stays locked.</p>
+    </aside>
+  </div>;
 }

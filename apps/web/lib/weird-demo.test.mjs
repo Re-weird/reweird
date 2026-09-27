@@ -5,7 +5,7 @@ import ts from "typescript";
 
 const source = readFileSync(new URL("./weird-demo.ts", import.meta.url), "utf8");
 const compiled = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2020 } }).outputText;
-const { availableWeirdChoices, mysteryScenario, realBreakReady, telemetryLabel, testHeadline, verifyHeadline } = await import(`data:text/javascript;base64,${Buffer.from(compiled).toString("base64")}`);
+const { availableWeirdChoices, mysteryScenario, realBreakReady, telemetryLabel, testHeadline, verifyHeadline, isCompatibleSerialSession, sessionForView, serialWorkflowMatches, serialRecommendationMatches } = await import(`data:text/javascript;base64,${Buffer.from(compiled).toString("base64")}`);
 
 const scenarios = ["intermittent-connection", "unstable-power", "dead-signal", "timing-drift"].map((id) => ({ id }));
 
@@ -21,6 +21,28 @@ test("source label distinguishes browser, API simulator, and serial", () => {
   assert.equal(telemetryLabel({ telemetry_mode: "serial" }, "browser"), "BROWSER SIMULATOR");
   assert.equal(telemetryLabel({ telemetry_mode: "simulator" }, "api"), "API SIMULATOR");
   assert.equal(telemetryLabel({ telemetry_mode: "serial" }, "api"), "REAL SERIAL");
+});
+
+test("connected serial status with rejected P5 mode never falls back to browser or cached simulator analysis", () => {
+  const status = { mode: "serial", connected: true, device_id: "reweird-3428B5AD4F7C", profile_id: "ultrasonic-demo" };
+  const cachedSimulator = { telemetry_mode: "simulator", profile_id: "ultrasonic-demo", measurement_id: 1014, raw_telemetry: { device_id: "reweird-simulator-001", profile_id: "ultrasonic-demo" } };
+  assert.equal(isCompatibleSerialSession(status, null), false, "the API returned 503 after P5 analog failed its digital profile check");
+  assert.equal(isCompatibleSerialSession(status, cachedSimulator), false, "a stored simulator window is not the active serial capture");
+  assert.equal(sessionForView(false, null, cachedSimulator), null, "Workbench and Diagnosis must show unavailable, not 5.01 V / 40 kHz fixture data");
+  assert.equal(sessionForView(true, null, cachedSimulator), cachedSimulator, "simulation is visible only in Practice simulator");
+  const serial = { telemetry_mode: "serial", profile_id: "ultrasonic-demo", measurement_id: 1015, raw_telemetry: { device_id: status.device_id, profile_id: status.profile_id } };
+  assert.equal(isCompatibleSerialSession(status, serial), true);
+  assert.equal(sessionForView(false, serial, cachedSimulator), serial, "returning from Practice restores REAL SERIAL rather than cached simulation");
+  assert.equal(isCompatibleSerialSession(status, { ...serial, raw_telemetry: { ...serial.raw_telemetry, profile_id: "other" } }), false);
+});
+
+test("a serial test planner cannot resume a simulator workflow for the same demo profile", () => {
+  const serial = { id: "session-ultrasonic-demo", telemetry_mode: "serial", profile_id: "ultrasonic-demo", raw_telemetry: { device_id: "reweird-3428B5AD4F7C" } };
+  assert.equal(serialWorkflowMatches({ profile_id: serial.profile_id, scenario_id: "intermittent-connection" }, serial), false);
+  assert.equal(serialWorkflowMatches({ profile_id: serial.profile_id, baseline: { source: "simulator", device_id: "reweird-simulator-001" } }, serial), false);
+  assert.equal(serialWorkflowMatches({ profile_id: serial.profile_id, baseline: { source: "serial", device_id: serial.raw_telemetry.device_id } }, serial), true);
+  assert.equal(serialRecommendationMatches({ session_id: serial.id }, serial), true);
+  assert.equal(serialRecommendationMatches({ session_id: "old-browser-demo" }, serial), false);
 });
 
 test("physical break state requires matching real capture and confirmed setup", () => {

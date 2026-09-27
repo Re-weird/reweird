@@ -15,6 +15,7 @@
 @import "./globals.css" layer(legacy);
 @import "./workbench.css" layer(legacy);
 @import "./circuit-map.css" layer(legacy);
+@import "./calibration-panel.css" layer(legacy);
 @import "./weird-demo.css" layer(legacy);
 @import "./judge-demo.css" layer(legacy);
 @import "tailwindcss/theme.css" layer(theme);

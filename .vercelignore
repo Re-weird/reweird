@@ -1,0 +1,7 @@
+node_modules
+.git
+.next
+apps/api/reweird.db
+apps/api/data
+firmware/esp32/.pio
+docs

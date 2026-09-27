@@ -10,6 +10,8 @@ const (
 	SourceCatalog            ProjectFactSource = "CATALOG"
 	SourceUser               ProjectFactSource = "USER"
 	SourceInferred           ProjectFactSource = "INFERRED"
+	SourceRealSerial         ProjectFactSource = "REAL_SERIAL_OBSERVATION"
+	SourceHardwareContract   ProjectFactSource = "HARDWARE_CONTRACT"
 )
 
 type AnalysisStatus string
@@ -190,6 +192,7 @@ const (
 )
 
 type TelemetryEnvelope struct {
+	Patch         *PatchCapability  `json:"patch,omitempty"`
 	SchemaVersion int               `json:"schema_version"`
 	DeviceID      string            `json:"device_id"`
 	ProfileID     string            `json:"profile_id"`
@@ -198,6 +201,16 @@ type TelemetryEnvelope struct {
 	WindowMS      uint32            `json:"window_ms"`
 	Sequence      uint64            `json:"sequence"`
 	Samples       []TelemetrySample `json:"samples"`
+}
+
+// Optional Telemetry-v2 capability advertisement. An advertisement alone is
+// never an arming handshake or permission to drive hardware.
+type PatchCapability struct {
+	Capable       bool   `json:"capable"`
+	State         string `json:"state"`
+	Reason        string `json:"reason"`
+	BootID        uint32 `json:"boot_id"`
+	MaxDurationMS uint32 `json:"max_duration_ms"`
 }
 
 type TelemetrySample struct {
@@ -225,7 +238,10 @@ type ExpectedSignal struct {
 	MinFrequencyHz      *float64 `json:"min_frequency_hz,omitempty"`
 	MaxFrequencyHz      *float64 `json:"max_frequency_hz,omitempty"`
 	NominalFrequencyHz  *float64 `json:"nominal_frequency_hz,omitempty"`
-	MaxDropouts         int      `json:"max_dropouts"`
+	// Pulse-width limits apply to the HIGH time of each captured pulse.
+	MinPulseWidthUS *float64 `json:"min_pulse_width_us,omitempty"`
+	MaxPulseWidthUS *float64 `json:"max_pulse_width_us,omitempty"`
+	MaxDropouts     int      `json:"max_dropouts"`
 }
 
 type SafeMeasurementConfig struct {
@@ -243,6 +259,21 @@ type TrustedBaseline struct {
 	VoltageVariation      *float64       `json:"voltage_variation,omitempty"`
 	FrequencyTolerancePct float64        `json:"frequency_tolerance_pct,omitempty"`
 	VoltageTolerancePct   float64        `json:"voltage_tolerance_pct,omitempty"`
+	// Envelope learned from a multi-window physical observation. These are
+	// recorded observations, never configured expectations.
+	WindowCount            int      `json:"window_count,omitempty"`
+	MinVoltage             *float64 `json:"min_voltage,omitempty"`
+	MaxVoltage             *float64 `json:"max_voltage,omitempty"`
+	MinFrequencyHz         *float64 `json:"min_frequency_hz,omitempty"`
+	MaxFrequencyHz         *float64 `json:"max_frequency_hz,omitempty"`
+	PulseWidthUS           *float64 `json:"pulse_width_us,omitempty"`
+	MinPulseWidthUS        *float64 `json:"min_pulse_width_us,omitempty"`
+	MaxPulseWidthUS        *float64 `json:"max_pulse_width_us,omitempty"`
+	PulseWidthTolerancePct float64  `json:"pulse_width_tolerance_pct,omitempty"`
+	// ComparePulseWidth is true only when the configured expectation says the
+	// pulse width is stable; a data-dependent width (for example an ultrasonic
+	// echo) is recorded but not treated as a deviation.
+	ComparePulseWidth bool `json:"compare_pulse_width,omitempty"`
 }
 
 type ProbeConfiguration struct {
@@ -276,20 +307,23 @@ type ProfileEvidence struct {
 }
 
 type ProfileConnection struct {
-	ID            string              `json:"id"`
-	ComponentID   string              `json:"component_id,omitempty"`
-	ComponentName string              `json:"component_name"`
-	Role          string              `json:"role"`
-	GPIO          *int                `json:"gpio,omitempty"`
-	Target        string              `json:"target"`
-	Direction     string              `json:"direction"`
-	Behavior      string              `json:"behavior"`
-	Expected      ExpectedSignal      `json:"expected"`
-	Confidence    float64             `json:"confidence"`
-	Sources       []ProjectFactSource `json:"sources"`
-	Evidence      []ProfileEvidence   `json:"evidence,omitempty"`
-	Required      bool                `json:"required"`
-	Confirmed     bool                `json:"confirmed"`
+	ID            string `json:"id"`
+	ComponentID   string `json:"component_id,omitempty"`
+	ComponentName string `json:"component_name"`
+	Role          string `json:"role"`
+	GPIO          *int   `json:"gpio,omitempty"`
+	// Probe optionally pins this connection to a physical ReWeird probe (P1-P6)
+	// so the generated probe plan matches the diagnostic board's wiring.
+	Probe      string              `json:"probe,omitempty"`
+	Target     string              `json:"target"`
+	Direction  string              `json:"direction"`
+	Behavior   string              `json:"behavior"`
+	Expected   ExpectedSignal      `json:"expected"`
+	Confidence float64             `json:"confidence"`
+	Sources    []ProjectFactSource `json:"sources"`
+	Evidence   []ProfileEvidence   `json:"evidence,omitempty"`
+	Required   bool                `json:"required"`
+	Confirmed  bool                `json:"confirmed"`
 }
 
 type ConflictOption struct {
@@ -320,6 +354,7 @@ type ProjectProfile struct {
 	ConfirmedBy         string                   `json:"confirmed_by,omitempty"`
 	Components          []ComponentSpecification `json:"components"`
 	Connections         []ProfileConnection      `json:"connections,omitempty"`
+	ReservedProbes      []string                 `json:"reserved_probes,omitempty"`
 	Probes              []ProbeConfiguration     `json:"probes"`
 	ExpectedBehavior    string                   `json:"expected_behavior"`
 	OperatingConditions []string                 `json:"operating_conditions,omitempty"`
@@ -364,12 +399,24 @@ type DerivedFacts struct {
 	FailureBuckets           []int     `json:"failure_buckets,omitempty"`
 	ActivityCounts           []float64 `json:"activity_counts,omitempty"`
 	BaselineDeviationPercent *float64  `json:"baseline_deviation_percent,omitempty"`
+	// PulseWidthOutOfRange is set when a captured HIGH time violates the
+	// configured pulse-width expectation.
+	PulseWidthOutOfRange bool `json:"pulse_width_out_of_range,omitempty"`
+	// CaptureUnreliable means the raw capture is internally inconsistent or
+	// cannot resolve the expected signal, so it cannot support a circuit
+	// conclusion. The raw values are preserved; nothing is clamped.
+	CaptureUnreliable bool     `json:"capture_unreliable,omitempty"`
+	CaptureIssues     []string `json:"capture_issues,omitempty"`
+	// KnownGoodDeviations lists metrics outside a learned physical Known Good
+	// envelope. Empty when no learned baseline applies.
+	KnownGoodDeviations []string `json:"known_good_deviations,omitempty"`
 }
 
 type AnalysisResult struct {
 	SchemaVersion             int            `json:"schema_version"`
 	DeviceID                  string         `json:"device_id"`
 	ProfileID                 string         `json:"profile_id"`
+	ProfileVersion            int            `json:"profile_version,omitempty"`
 	CapturedAtMS              int64          `json:"captured_at_ms"`
 	WindowMS                  uint32         `json:"window_ms"`
 	Probes                    []DerivedFacts `json:"probes"`

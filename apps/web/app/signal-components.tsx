@@ -72,10 +72,10 @@ export function ConfidenceRing({ value }: { value: number }) {
   );
 }
 
-export function SignalChart({ session }: { session: DemoSession }) {
+export function SignalChart({ session, windowMS }: { session: DemoSession; windowMS?: number }) {
   const charted = session.probes.filter((probe) => probe.samples?.length).slice(0, 2);
   const rows = (charted[0]?.samples ?? []).map((_, index) => ({
-    time: `${index * 5}s`,
+    time: `${windowMS == null ? index * 5 : Number((index * windowMS / 1000 / (charted[0]?.samples?.length || 1)).toFixed(3))}s`,
     primary: charted[0]?.samples?.[index],
     secondary: charted[1]?.samples?.[index],
   }));

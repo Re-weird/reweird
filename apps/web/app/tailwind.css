@@ -103,3 +103,19 @@
   88% { opacity: 1; }
   to { transform: translateX(100%); opacity: 0; }
 }
+
+/* Schematic traces use pathLength="100", so these work for any trace length. */
+@keyframes trace-run {
+  from { stroke-dashoffset: 100; }
+  to { stroke-dashoffset: 0; }
+}
+@keyframes trace-flicker {
+  0%, 100% { opacity: 1; }
+  8% { opacity: 0.25; }
+  12% { opacity: 1; }
+  47% { opacity: 1; }
+  50% { opacity: 0.2; }
+  53% { opacity: 0.9; }
+  56% { opacity: 0.3; }
+  60% { opacity: 1; }
+}

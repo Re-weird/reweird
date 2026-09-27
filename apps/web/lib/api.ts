@@ -10,6 +10,7 @@ import type {
   HistorySummary,
   KnownGoodBaseline,
   MeasurementWindow,
+  PhysicalCommit,
   ProbePlan,
   Project,
   ProjectProfile,
@@ -139,6 +140,25 @@ export const projectApi = {
   getProbePlan: (projectID: string) => requestJSON<ProbePlan>(`/api/v1/projects/${projectID}/probe-plan`),
   confirmProbeConnections: (projectID: string) =>
     requestJSON<ProbePlan>(`/api/v1/projects/${projectID}/probe-plan/confirm`, { method: "POST" }),
+};
+
+export const physicalGitApi = {
+  create: (projectID: string, input: { note?: string; file?: File }) => {
+    if (input.file) {
+      const form = new FormData();
+      if (input.note) form.append("note", input.note);
+      form.append("file", input.file, input.file.name);
+      return requestJSON<PhysicalCommit>(`/api/v1/projects/${projectID}/physical-commits`, { method: "POST", body: form });
+    }
+    return requestJSON<PhysicalCommit>(`/api/v1/projects/${projectID}/physical-commits`, {
+      method: "POST",
+      body: JSON.stringify({ note: input.note ?? "" }),
+    });
+  },
+  list: (projectID: string) =>
+    requestJSON<{ items: PhysicalCommit[]; count: number }>(`/api/v1/projects/${projectID}/physical-commits`),
+  get: (projectID: string, commitID: string) =>
+    requestJSON<PhysicalCommit>(`/api/v1/projects/${projectID}/physical-commits/${encodeURIComponent(commitID)}`),
 };
 
 export const testApi = {

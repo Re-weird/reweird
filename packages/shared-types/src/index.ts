@@ -533,6 +533,28 @@ export interface DiagnosticWorkflow {
 }
 
 export interface UserAction { id: string; description: string; timestamp_ms: number }
+
+// PhysicalCommit is a point-in-time snapshot of a real project's physical
+// state (Circuit Map/component state, referenced Device Passport baseline
+// and measurement, optional photo). Every evidence field is independently
+// optional -- a normal project with none of this evidence yet still
+// produces a valid commit. Software fields are reserved for a later GitHub
+// integration milestone and stay undefined for now.
+export interface PhysicalCommit {
+  id: string;
+  project_id: string;
+  sequence: number;
+  display_id: string;
+  note?: string;
+  created_at_ms: number;
+  image?: ProjectMedia;
+  profile_snapshot?: ProjectProfile;
+  passport_baseline_ids?: number[];
+  measurement_id?: number;
+  software_provider?: string;
+  software_repository?: string;
+  software_revision?: string;
+}
 export type HistoryStatus = "OPEN" | "TESTING" | "WAITING_FOR_USER" | "VERIFYING" | "RESOLVED" | "IMPROVED" | "UNRESOLVED" | "CANCELLED" | "INCONCLUSIVE";
 export interface HistorySummary {
   id: string;

@@ -1,4 +1,4 @@
-export type ProjectTabID = "workbench" | "overview" | "probe-setup" | "passport" | "simulator" | "diagnosis" | "next-test" | "verify" | "history" | "reports" | "computer";
+export type ProjectTabID = "workbench" | "overview" | "probe-setup" | "passport" | "simulator" | "diagnosis" | "physical-history" | "next-test" | "verify" | "history" | "reports" | "computer";
 
 export const projectTabs: { id: ProjectTabID; label: string; segment: string }[] = [
   { id: "workbench", label: "Workbench", segment: "" },
@@ -7,6 +7,7 @@ export const projectTabs: { id: ProjectTabID; label: string; segment: string }[]
   { id: "passport", label: "Device passport", segment: "passport" },
   { id: "simulator", label: "Simulator", segment: "simulator" },
   { id: "diagnosis", label: "Diagnosis", segment: "diagnosis" },
+  { id: "physical-history", label: "Physical History", segment: "physical-history" },
   { id: "next-test", label: "Next test", segment: "next-test" },
   { id: "verify", label: "Verify result", segment: "verify" },
   { id: "history", label: "History", segment: "history" },

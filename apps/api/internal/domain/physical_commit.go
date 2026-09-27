@@ -53,3 +53,13 @@ type PhysicalCommitRepository interface {
 	GetPhysicalCommit(projectID, id string) (*PhysicalCommit, error)
 	ListPhysicalCommits(projectID string) ([]PhysicalCommit, error)
 }
+
+// PhysicalCommitDetail is the read-time-enriched view returned by
+// GET .../physical-commits/:commitId/detail. It resolves MeasurementID into
+// the full MeasurementWindow for display; the stored PhysicalCommit itself
+// is never mutated to hold this, and a resolution failure never fails the
+// request -- Measurement is simply omitted, never fabricated.
+type PhysicalCommitDetail struct {
+	Commit      PhysicalCommit     `json:"commit"`
+	Measurement *MeasurementWindow `json:"measurement,omitempty"`
+}

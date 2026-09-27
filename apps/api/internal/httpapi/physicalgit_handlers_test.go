@@ -302,3 +302,244 @@ func TestPhysicalCommitMalformedOrMissingID(t *testing.T) {
 		t.Fatalf("unknown project status = %d body=%s", unknownProject.StatusCode, readBody(t, unknownProject))
 	}
 }
+
+func TestPhysicalCommitDetailResolvesCapturedMeasurement(t *testing.T) {
+	app, repository := testApp(t)
+	project := createTestProject(t, app)
+
+	window, err := repository.SaveMeasurement(domain.MeasurementWindow{ProfileID: project.ID, Source: "serial", DeviceID: "box-1", Sequence: 1, CapturedAtMS: 1000, IngestedAtMS: 1000})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Force the project's profile to exist so the commit's electrical
+	// evidence has a real profile_id to attach a measurement window under.
+	// (createPhysicalCommit resolves the *latest* measurement for the
+	// project id regardless of whether a profile was ever analyzed.)
+	commitResponse := doJSON(t, app, http.MethodPost, "/api/v1/projects/"+project.ID+"/physical-commits", nil)
+	if commitResponse.StatusCode != http.StatusCreated {
+		t.Fatalf("commit status = %d body=%s", commitResponse.StatusCode, readBody(t, commitResponse))
+	}
+	var commit domain.PhysicalCommit
+	decodeBody(t, commitResponse, &commit)
+	if commit.MeasurementID == nil || *commit.MeasurementID != window.ID {
+		t.Fatalf("expected commit to reference measurement %d, got %#v", window.ID, commit.MeasurementID)
+	}
+
+	detailResponse := doJSON(t, app, http.MethodGet, "/api/v1/projects/"+project.ID+"/physical-commits/"+commit.ID+"/detail", nil)
+	if detailResponse.StatusCode != http.StatusOK {
+		t.Fatalf("detail status = %d body=%s", detailResponse.StatusCode, readBody(t, detailResponse))
+	}
+	var detail domain.PhysicalCommitDetail
+	decodeBody(t, detailResponse, &detail)
+	if detail.Commit.ID != commit.ID {
+		t.Fatalf("detail commit = %#v", detail.Commit)
+	}
+	if detail.Measurement == nil || detail.Measurement.ID != window.ID {
+		t.Fatalf("expected detail to resolve measurement %d, got %#v", window.ID, detail.Measurement)
+	}
+}
+
+func TestPhysicalCommitDetailOmitsMeasurementWhenNoneCaptured(t *testing.T) {
+	app, _ := testApp(t)
+	project := createTestProject(t, app)
+
+	commitResponse := doJSON(t, app, http.MethodPost, "/api/v1/projects/"+project.ID+"/physical-commits", nil)
+	var commit domain.PhysicalCommit
+	decodeBody(t, commitResponse, &commit)
+
+	detailResponse := doJSON(t, app, http.MethodGet, "/api/v1/projects/"+project.ID+"/physical-commits/"+commit.ID+"/detail", nil)
+	if detailResponse.StatusCode != http.StatusOK {
+		t.Fatalf("detail status = %d body=%s", detailResponse.StatusCode, readBody(t, detailResponse))
+	}
+	var detail domain.PhysicalCommitDetail
+	decodeBody(t, detailResponse, &detail)
+	if detail.Measurement != nil {
+		t.Fatalf("expected no fabricated measurement, got %#v", detail.Measurement)
+	}
+}
+
+func TestPhysicalCommitDetailProjectIsolationAndMalformedID(t *testing.T) {
+	app, _ := testApp(t)
+	project := createTestProject(t, app)
+
+	malformed := doJSON(t, app, http.MethodGet, "/api/v1/projects/"+project.ID+"/physical-commits/not-a-real-id/detail", nil)
+	if malformed.StatusCode != http.StatusBadRequest {
+		t.Fatalf("malformed id status = %d body=%s", malformed.StatusCode, readBody(t, malformed))
+	}
+
+	missing := doJSON(t, app, http.MethodGet, "/api/v1/projects/"+project.ID+"/physical-commits/pcommit-00000000000000000000000000000000/detail", nil)
+	if missing.StatusCode != http.StatusNotFound {
+		t.Fatalf("missing id status = %d body=%s", missing.StatusCode, readBody(t, missing))
+	}
+}
+
+// TestPhysicalCommitDetailRouteIsNotShadowed proves the "/detail" suffix
+// route is reached and does not get misinterpreted by :commitId matching
+// literally "detail" as a path segment collision at a different depth.
+func TestPhysicalCommitDetailRouteIsNotShadowed(t *testing.T) {
+	app, _ := testApp(t)
+	project := createTestProject(t, app)
+	commitResponse := doJSON(t, app, http.MethodPost, "/api/v1/projects/"+project.ID+"/physical-commits", nil)
+	var commit domain.PhysicalCommit
+	decodeBody(t, commitResponse, &commit)
+
+	detailResponse := doJSON(t, app, http.MethodGet, "/api/v1/projects/"+project.ID+"/physical-commits/"+commit.ID+"/detail", nil)
+	if detailResponse.StatusCode != http.StatusOK {
+		t.Fatalf("detail status = %d body=%s", detailResponse.StatusCode, readBody(t, detailResponse))
+	}
+	var detail domain.PhysicalCommitDetail
+	decodeBody(t, detailResponse, &detail)
+	if detail.Commit.ID != commit.ID {
+		t.Fatalf("detail did not resolve the requested commit: %#v", detail)
+	}
+}
+
+func TestPhysicalCommitDiffComparesTwoCommits(t *testing.T) {
+	app, _ := testApp(t)
+	project := createTestProject(t, app)
+
+	codeResponse := doJSON(t, app, http.MethodPost, "/api/v1/projects/"+project.ID+"/code", map[string]any{
+		"filename":  "distance.ino",
+		"code_text": "#define TRIG 5\n#define ECHO 18\nvoid setup(){pinMode(TRIG, OUTPUT);pinMode(ECHO, INPUT);}\nlong duration=pulseIn(ECHO,HIGH);",
+	})
+	if codeResponse.StatusCode != http.StatusOK {
+		t.Fatalf("code status = %d body=%s", codeResponse.StatusCode, readBody(t, codeResponse))
+	}
+	analyzeResponse := doJSON(t, app, http.MethodPost, "/api/v1/projects/"+project.ID+"/analyze", nil)
+	if analyzeResponse.StatusCode != http.StatusOK {
+		t.Fatalf("analyze status = %d body=%s", analyzeResponse.StatusCode, readBody(t, analyzeResponse))
+	}
+
+	firstCommit := doJSON(t, app, http.MethodPost, "/api/v1/projects/"+project.ID+"/physical-commits", nil)
+	var first domain.PhysicalCommit
+	decodeBody(t, firstCommit, &first)
+
+	// Add a new component to the draft profile before the second commit.
+	var draft domain.ProjectProfile
+	decodeBody(t, doJSON(t, app, http.MethodGet, "/api/v1/projects/"+project.ID+"/profile", nil), &draft)
+	draft.Components = append(draft.Components, domain.ComponentSpecification{ID: "servo-1", Name: "SG90 Servo"})
+	updateResponse := doJSON(t, app, http.MethodPut, "/api/v1/projects/"+project.ID+"/profile", draft)
+	if updateResponse.StatusCode != http.StatusOK {
+		t.Fatalf("update status = %d body=%s", updateResponse.StatusCode, readBody(t, updateResponse))
+	}
+
+	secondCommit := doJSON(t, app, http.MethodPost, "/api/v1/projects/"+project.ID+"/physical-commits", nil)
+	var second domain.PhysicalCommit
+	decodeBody(t, secondCommit, &second)
+
+	diffResponse := doJSON(t, app, http.MethodGet, "/api/v1/projects/"+project.ID+"/physical-commits/diff?from="+first.ID+"&to="+second.ID, nil)
+	if diffResponse.StatusCode != http.StatusOK {
+		t.Fatalf("diff status = %d body=%s", diffResponse.StatusCode, readBody(t, diffResponse))
+	}
+	var diff domain.PhysicalCommitDiff
+	decodeBody(t, diffResponse, &diff)
+	if diff.FromCommit != first.ID || diff.ToCommit != second.ID {
+		t.Fatalf("diff identity = %#v", diff)
+	}
+	if diff.Components.Status != domain.EvidenceChanged {
+		t.Fatalf("components = %#v", diff.Components)
+	}
+	found := false
+	for _, change := range diff.Components.Changes {
+		if change.ComponentID == "servo-1" && change.Status == domain.EvidenceAdded {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("expected servo-1 ADDED, got %#v", diff.Components.Changes)
+	}
+}
+
+func TestPhysicalCommitDiffSelfComparisonIsAllUnchanged(t *testing.T) {
+	app, _ := testApp(t)
+	project := createTestProject(t, app)
+	commitResponse := doJSON(t, app, http.MethodPost, "/api/v1/projects/"+project.ID+"/physical-commits", nil)
+	var commit domain.PhysicalCommit
+	decodeBody(t, commitResponse, &commit)
+
+	diffResponse := doJSON(t, app, http.MethodGet, "/api/v1/projects/"+project.ID+"/physical-commits/diff?from="+commit.ID+"&to="+commit.ID, nil)
+	if diffResponse.StatusCode != http.StatusOK {
+		t.Fatalf("diff status = %d body=%s", diffResponse.StatusCode, readBody(t, diffResponse))
+	}
+	var diff domain.PhysicalCommitDiff
+	decodeBody(t, diffResponse, &diff)
+	if diff.Visual.Status != domain.EvidenceNotCaptured || diff.Components.Status != domain.EvidenceNotCaptured {
+		t.Fatalf("self-diff = %#v", diff)
+	}
+}
+
+func TestPhysicalCommitDiffMalformedOrMissingIDs(t *testing.T) {
+	app, _ := testApp(t)
+	project := createTestProject(t, app)
+	commitResponse := doJSON(t, app, http.MethodPost, "/api/v1/projects/"+project.ID+"/physical-commits", nil)
+	var commit domain.PhysicalCommit
+	decodeBody(t, commitResponse, &commit)
+
+	malformed := doJSON(t, app, http.MethodGet, "/api/v1/projects/"+project.ID+"/physical-commits/diff?from=not-real&to="+commit.ID, nil)
+	if malformed.StatusCode != http.StatusBadRequest {
+		t.Fatalf("malformed status = %d body=%s", malformed.StatusCode, readBody(t, malformed))
+	}
+
+	missing := doJSON(t, app, http.MethodGet, "/api/v1/projects/"+project.ID+"/physical-commits/diff?from="+commit.ID+"&to=pcommit-00000000000000000000000000000000", nil)
+	if missing.StatusCode != http.StatusNotFound {
+		t.Fatalf("missing status = %d body=%s", missing.StatusCode, readBody(t, missing))
+	}
+}
+
+func TestPhysicalCommitDiffCrossProjectRejected(t *testing.T) {
+	app := testOwnedApp(t)
+
+	createA := doJSONAs(t, app, http.MethodPost, "/api/v1/projects", "owner-a", map[string]any{"name": "Project A", "description": "", "controller": "ESP32", "logic_voltage": 3.3})
+	var projectA domain.Project
+	decodeBody(t, createA, &projectA)
+	createB := doJSONAs(t, app, http.MethodPost, "/api/v1/projects", "owner-b", map[string]any{"name": "Project B", "description": "", "controller": "ESP32", "logic_voltage": 3.3})
+	var projectB domain.Project
+	decodeBody(t, createB, &projectB)
+
+	commitA1 := doJSONAs(t, app, http.MethodPost, "/api/v1/projects/"+projectA.ID+"/physical-commits", "owner-a", nil)
+	var a1 domain.PhysicalCommit
+	decodeBody(t, commitA1, &a1)
+	commitA2 := doJSONAs(t, app, http.MethodPost, "/api/v1/projects/"+projectA.ID+"/physical-commits", "owner-a", nil)
+	var a2 domain.PhysicalCommit
+	decodeBody(t, commitA2, &a2)
+	commitB1 := doJSONAs(t, app, http.MethodPost, "/api/v1/projects/"+projectB.ID+"/physical-commits", "owner-b", nil)
+	var b1 domain.PhysicalCommit
+	decodeBody(t, commitB1, &b1)
+
+	// Comparing A's own two commits works.
+	within := doJSONAs(t, app, http.MethodGet, "/api/v1/projects/"+projectA.ID+"/physical-commits/diff?from="+a1.ID+"&to="+a2.ID, "owner-a", nil)
+	if within.StatusCode != http.StatusOK {
+		t.Fatalf("within-project diff status = %d body=%s", within.StatusCode, readBody(t, within))
+	}
+
+	// B's commit cannot be used as one side of a diff scoped to A's project.
+	cross := doJSONAs(t, app, http.MethodGet, "/api/v1/projects/"+projectA.ID+"/physical-commits/diff?from="+a1.ID+"&to="+b1.ID, "owner-a", nil)
+	if cross.StatusCode != http.StatusNotFound {
+		t.Fatalf("cross-project diff status = %d body=%s", cross.StatusCode, readBody(t, cross))
+	}
+}
+
+// TestPhysicalCommitDiffRouteIsNotShadowedByCommitID proves the literal
+// "/diff" route is reached and never falls through to getPhysicalCommit
+// with commitId="diff" (which would 400 on the id-format regex instead of
+// returning a structured diff).
+func TestPhysicalCommitDiffRouteIsNotShadowedByCommitID(t *testing.T) {
+	app, _ := testApp(t)
+	project := createTestProject(t, app)
+	first := doJSON(t, app, http.MethodPost, "/api/v1/projects/"+project.ID+"/physical-commits", nil)
+	var firstCommit domain.PhysicalCommit
+	decodeBody(t, first, &firstCommit)
+	second := doJSON(t, app, http.MethodPost, "/api/v1/projects/"+project.ID+"/physical-commits", nil)
+	var secondCommit domain.PhysicalCommit
+	decodeBody(t, second, &secondCommit)
+
+	diffResponse := doJSON(t, app, http.MethodGet, "/api/v1/projects/"+project.ID+"/physical-commits/diff?from="+firstCommit.ID+"&to="+secondCommit.ID, nil)
+	if diffResponse.StatusCode != http.StatusOK {
+		t.Fatalf("diff route status = %d body=%s (want 200, not 400 INVALID_PHYSICAL_COMMIT_ID from a shadowed :commitId route)", diffResponse.StatusCode, readBody(t, diffResponse))
+	}
+	var diff domain.PhysicalCommitDiff
+	decodeBody(t, diffResponse, &diff)
+	if diff.FromCommit != firstCommit.ID || diff.ToCommit != secondCommit.ID {
+		t.Fatalf("diff = %#v", diff)
+	}
+}

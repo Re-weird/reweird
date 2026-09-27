@@ -9,6 +9,7 @@ import (
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/re-weird/reweird/apps/api/internal/domain"
+	"github.com/re-weird/reweird/apps/api/internal/physicalgit"
 	"github.com/re-weird/reweird/apps/api/internal/projects"
 )
 
@@ -167,4 +168,92 @@ func (controller *Controller) getPhysicalCommit(ctx *fiber.Ctx) error {
 		return apiError(ctx, fiber.StatusNotFound, "PHYSICAL_COMMIT_NOT_FOUND", "No physical commit with this id exists for this project.")
 	}
 	return ctx.JSON(commit)
+}
+
+// getPhysicalCommitDetail is a separate, additive endpoint -- it does not
+// change what GET .../physical-commits/:commitId returns. It resolves the
+// commit's referenced MeasurementWindow for display; a resolution failure
+// never fails the request and is never fabricated, it is simply omitted.
+func (controller *Controller) getPhysicalCommitDetail(ctx *fiber.Ctx) error {
+	project, err := controller.findProject(ctx, ctx.Params("id"))
+	if err != nil {
+		return internalError(ctx, err)
+	}
+	if project == nil {
+		return apiError(ctx, fiber.StatusNotFound, "PROJECT_NOT_FOUND", "The requested project does not exist.")
+	}
+	commitID := ctx.Params("commitId")
+	if !physicalCommitIDPattern.MatchString(commitID) {
+		return apiError(ctx, fiber.StatusBadRequest, "INVALID_PHYSICAL_COMMIT_ID", "The physical commit id is malformed.")
+	}
+	commitRepository, err := controller.physicalCommitRepository(ctx)
+	if err != nil {
+		return err
+	}
+	commit, err := commitRepository.GetPhysicalCommit(project.ID, commitID)
+	if err != nil {
+		return internalError(ctx, err)
+	}
+	if commit == nil {
+		return apiError(ctx, fiber.StatusNotFound, "PHYSICAL_COMMIT_NOT_FOUND", "No physical commit with this id exists for this project.")
+	}
+
+	detail := domain.PhysicalCommitDetail{Commit: *commit}
+	if commit.MeasurementID != nil {
+		if passportRepository, _, err := controller.passportStorage(ctx); err == nil {
+			if measurement, err := passportRepository.GetMeasurement(*commit.MeasurementID); err == nil {
+				detail.Measurement = measurement
+			}
+		}
+	}
+	return ctx.JSON(detail)
+}
+
+// diffPhysicalCommits compares two Physical Commits belonging to the same
+// project. The comparison itself is entirely deterministic (internal/physicalgit)
+// -- no LLM is involved anywhere in this request.
+func (controller *Controller) diffPhysicalCommits(ctx *fiber.Ctx) error {
+	project, err := controller.findProject(ctx, ctx.Params("id"))
+	if err != nil {
+		return internalError(ctx, err)
+	}
+	if project == nil {
+		return apiError(ctx, fiber.StatusNotFound, "PROJECT_NOT_FOUND", "The requested project does not exist.")
+	}
+
+	fromID, toID := ctx.Query("from"), ctx.Query("to")
+	if !physicalCommitIDPattern.MatchString(fromID) || !physicalCommitIDPattern.MatchString(toID) {
+		return apiError(ctx, fiber.StatusBadRequest, "INVALID_PHYSICAL_COMMIT_ID", "Both from and to must be valid physical commit ids.")
+	}
+
+	commitRepository, err := controller.physicalCommitRepository(ctx)
+	if err != nil {
+		return err
+	}
+	from, err := commitRepository.GetPhysicalCommit(project.ID, fromID)
+	if err != nil {
+		return internalError(ctx, err)
+	}
+	to, err := commitRepository.GetPhysicalCommit(project.ID, toID)
+	if err != nil {
+		return internalError(ctx, err)
+	}
+	if from == nil || to == nil {
+		// Identical response regardless of which side is missing -- never
+		// leak which id was invalid, matching this codebase's existing
+		// not-found-hides-existence convention.
+		return apiError(ctx, fiber.StatusNotFound, "PHYSICAL_COMMIT_NOT_FOUND", "No physical commit with this id exists for this project.")
+	}
+
+	var fromMeasurement, toMeasurement *domain.MeasurementWindow
+	if passportRepository, _, err := controller.passportStorage(ctx); err == nil {
+		if from.MeasurementID != nil {
+			fromMeasurement, _ = passportRepository.GetMeasurement(*from.MeasurementID)
+		}
+		if to.MeasurementID != nil {
+			toMeasurement, _ = passportRepository.GetMeasurement(*to.MeasurementID)
+		}
+	}
+
+	return ctx.JSON(physicalgit.Diff(*from, *to, fromMeasurement, toMeasurement))
 }

@@ -75,6 +75,9 @@ func ConfigFromEnv() (Config, bool, error) {
 	if len(missing) > 0 {
 		return Config{}, false, fmt.Errorf("GitHub App is partially configured; missing %s", strings.Join(missing, ", "))
 	}
+	if strings.ContainsAny(config.Slug, "/:") {
+		return Config{}, false, errors.New("GITHUB_APP_SLUG must be the App's URL name only (the <slug> in github.com/apps/<slug>), not a URL")
+	}
 	id, err := strconv.ParseInt(rawID, 10, 64)
 	if err != nil || id <= 0 {
 		return Config{}, false, errors.New("GITHUB_APP_ID must be a positive integer")

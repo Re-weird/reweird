@@ -198,4 +198,12 @@ func TestConfigFromEnv(t *testing.T) {
 	if _, ok, err := ConfigFromEnv(); ok || err == nil {
 		t.Fatal("partial configuration must be an error")
 	}
+	t.Setenv("GITHUB_APP_SLUG", "https://github.com/settings/apps/reweird")
+	t.Setenv("GITHUB_APP_PRIVATE_KEY", "unused")
+	t.Setenv("GITHUB_APP_CLIENT_ID", "cid")
+	t.Setenv("GITHUB_APP_CLIENT_SECRET", "secret")
+	t.Setenv("GITHUB_WEBHOOK_SECRET", "hook")
+	if _, _, err := ConfigFromEnv(); err == nil || !strings.Contains(err.Error(), "GITHUB_APP_SLUG") {
+		t.Fatalf("a URL as the slug must be rejected, got %v", err)
+	}
 }

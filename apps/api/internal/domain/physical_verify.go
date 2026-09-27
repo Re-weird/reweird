@@ -32,8 +32,8 @@ const (
 // Detail is a short, deterministic, factual explanation -- never a causal
 // claim ("X caused Y").
 type VerifyCategoryResult struct {
-	Status  VerifyStatus `json:"status"`
-	Detail  string       `json:"detail,omitempty"`
+	Status  VerifyStatus  `json:"status"`
+	Detail  string        `json:"detail,omitempty"`
 	Changes []FieldChange `json:"changes,omitempty"`
 }
 

@@ -329,5 +329,5 @@ func attachDemoImage(uploadRoot string, commit *domain.PhysicalCommit, fill colo
 	return nil
 }
 
-func intPtr(value int) *int         { return &value }
+func intPtr(value int) *int           { return &value }
 func floatPtr(value float64) *float64 { return &value }

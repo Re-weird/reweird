@@ -205,8 +205,7 @@ function Fix({ state, onApply }: { state: DemoState; onApply: (fix: FixID) => vo
     <div className="jd-choice-grid">
       {FIX_ORDER.map((id) => <button key={id} className={`jd-choice ${tried.has(id) ? "tried" : ""}`} disabled={applying !== null || tried.has(id)} onClick={() => apply(id)}>
         <Wrench size={16} />
-        <span><b>{applying === id ? "Re-measuring…" : FIXES[id].label}</b><small>{tried.has(id) ? "Tried it. Still weird." : FIXES[id].detail}</small>
-          {FAULTS[fault].fix === id && !tried.has(id) && <em className="jd-supported">Evidence points here</em>}</span>
+        <span><b>{applying === id ? "Re-measuring…" : FIXES[id].label}</b><small>{tried.has(id) ? "Tried it. Still weird." : FIXES[id].detail}</small></span>
       </button>)}
     </div>
     <p className="jd-footnote"><LockKeyhole size={13} /> Simulated repair. Nothing is sent to any hardware.</p>

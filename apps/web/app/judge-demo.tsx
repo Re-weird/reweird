@@ -360,7 +360,7 @@ function Result({ state, file, onNext }: { state: DemoState; file: CaseFile; onN
     <div className="jd-actions">
       <button className="primary jd-big" onClick={onNext}><Zap size={15} /> Next case</button>
       <button className="secondary" onClick={download}><Download size={15} /> Download record</button>
-      <Link className="text-button" href="/demo">Back to demo choices</Link>
+      <Link className="text-button" href="/">Back to demo start</Link>
     </div>
     <p className="jd-footnote"><LockKeyhole size={13} /> Simulated record. Not a physical baseline, and not saved to any server.</p>
   </section>;
@@ -422,10 +422,10 @@ export function JudgeDemo() {
     <div className="jd-banner" role="note">
       <span className="jd-banner-tag">SIMULATED DEMO</span>
       <span>No hardware connected. Every reading here is generated in your browser.</span>
-      <Link href="/demo" className="jd-banner-exit">Exit</Link>
+      <Link href="/" className="jd-banner-exit">Exit</Link>
     </div>
     <header className="jd-header">
-      <Link href="/demo" className="jd-brand" aria-label="Back to demo choices"><img src="/images/reweird-logo-mark.png" alt="" width={52} height={26} /><span>ReWeird</span></Link>
+      <Link href="/" className="jd-brand" aria-label="Back to demo start"><img src={`${process.env.NEXT_PUBLIC_DEMO_BASE_PATH ?? ""}/images/reweird-logo-mark.png`} alt="" width={52} height={26} /><span>ReWeird</span></Link>
       <ol className="jd-journey" aria-label="Progress">
         {STEPS.map((label, index) => <li key={label} className={index === step ? "current" : index < step ? "done" : ""} aria-current={index === step ? "step" : undefined}>
           <b>{index < step ? <Check size={10} /> : index + 1}</b><span>{label}</span>

@@ -1,6 +1,7 @@
 // Package patchcontrol owns active-test authorization. It is deliberately
-// separate from PROBE and measurement ingestion. Production has no physical
-// driver: neither a connected serial device nor an environment flag unlocks it.
+// separate from PROBE and measurement ingestion. A provisioned capability and
+// explicit approval are required; a serial connection or environment flag alone
+// never unlocks physical output.
 package patchcontrol
 
 import (
@@ -18,7 +19,6 @@ import (
 
 const MaxDurationMS = 250
 const MaxApprovalAgeMS = 15000
-const PhysicalInterfaceVerified = false
 
 var ErrLocked = errors.New("PATCH_LOCKED: dedicated output/protection stage and physical driver are not verified")
 
@@ -110,14 +110,21 @@ type Controller struct {
 	mu               sync.Mutex
 	store            Store
 	now              func() time.Time
-	physicalVerified bool
+	qualified        func(Parameters) bool
+}
+
+// SetQualification installs a trusted hardware adapter, not an HTTP flag.
+// The adapter must verify the provisioned device/session before every action.
+func (c *Controller) SetQualification(check func(Parameters) bool) { c.qualified = check }
+func (c *Controller) hardwareReady(p Parameters) bool {
+	return c.qualified != nil && c.qualified(p)
 }
 
 func New(store Store) (*Controller, error) {
 	if err := store.InterruptPatchActions(time.Now().UnixMilli()); err != nil {
 		return nil, err
 	}
-	return &Controller{store: store, now: time.Now, physicalVerified: PhysicalInterfaceVerified}, nil
+	return &Controller{store: store, now: time.Now}, nil
 }
 
 func Digest(p Parameters) string {
@@ -138,7 +145,7 @@ func Validate(p Parameters, now int64) error {
 	}
 	// Measurement pins, OLED bus, USB and flash pins can never be PATCH.
 	switch p.PatchPin {
-	case 8, 3, 16, 21, 9, 48, 17, 18, 19, 20, 0, 45, 46:
+	case 8, 3, 4, 5, 16, 21, 9, 48, 17, 18, 19, 20, 0, 45, 46:
 		return errors.New("reserved/measurement pin cannot be PATCH")
 	}
 	if p.PatchPin >= 26 && p.PatchPin <= 37 {
@@ -165,6 +172,9 @@ func Validate(p Parameters, now int64) error {
 			return errors.New("frequency/duty not allowed for this mode")
 		}
 	case "PULSE_TRAIN":
+		if p.Source == "REAL_SERIAL" {
+			return errors.New("physical driver supports bounded digital/pulse only")
+		}
 		if p.LogicLevel != "HIGH" || p.FrequencyHz < 1 || p.FrequencyHz > 100 || p.DutyCycle < .1 || p.DutyCycle > .9 || p.FrequencyHz*float64(p.DurationMS) < 1000 {
 			return errors.New("pulse train requires 1-100 Hz, 10-90% duty, HIGH, and at least one cycle")
 		}
@@ -200,7 +210,7 @@ func (c *Controller) Propose(p Parameters, actor string) (*Action, error) {
 	if err := c.event(a, "VALIDATED", "schema/limits validated; not physical safety certification"); err != nil {
 		return nil, err
 	}
-	if p.Source == "REAL_SERIAL" && !c.physicalVerified {
+	if p.Source == "REAL_SERIAL" && !c.hardwareReady(p) {
 		if err := c.event(a, "LOCKED", ErrLocked.Error()); err != nil {
 			return nil, err
 		}
@@ -234,6 +244,20 @@ func (c *Controller) Approve(id, digest, actor string) (*Action, error) {
 	return a, c.event(a, "ARMED", "one-use human approval; output not yet executed")
 }
 
+func (c *Controller) Cancel(id, actor string) (*Action, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	a, e := c.store.GetPatchAction(id)
+	if e != nil || a == nil || a.Owner != actor {
+		return nil, errors.New("action not found")
+	}
+	if a.State == "VERIFY" || a.State == "ABORTED" || a.State == "CANCELLED" {
+		return a, nil
+	}
+	a.Approval = nil
+	return a, c.event(a, "CANCELLED", "human cancelled; approval invalidated")
+}
+
 func matches(p Parameters, d DeviceContext) error {
 	if !d.Ready || !d.Connected {
 		return errors.New("capability handshake missing or telemetry lost")
@@ -256,8 +280,8 @@ func evidenceMatches(p Parameters, e Evidence) bool {
 	return e.MeasurementID > 0 && e.Source == p.Source && e.DeviceID == p.DeviceID && e.BootID == p.BootID && e.ProfileID == p.ProfileID && e.ProfileRevision == p.ProfileRevision && e.ProbeMapHash == p.ProbeMapHash
 }
 
-// Run is only used with a trusted driver. No production serial output driver
-// exists. The watchdog is supplemental: a future physical interface MUST also
+// Run is only used with a trusted driver. The watchdog is supplemental: the
+// provisioned physical interface MUST also
 // enforce a hardware/firmware deadline independent of this process.
 func (c *Controller) Run(ctx context.Context, id string, d Driver) (action *Action, err error) {
 	c.mu.Lock()
@@ -274,7 +298,7 @@ func (c *Controller) Run(ctx context.Context, id string, d Driver) (action *Acti
 	if err := Validate(p, now); err != nil {
 		return a, err
 	}
-	if p.Source == "REAL_SERIAL" && !c.physicalVerified {
+	if p.Source == "REAL_SERIAL" && !c.hardwareReady(p) {
 		return a, ErrLocked
 	}
 	if err := matches(p, d.Context()); err != nil {

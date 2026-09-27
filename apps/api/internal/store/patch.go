@@ -76,7 +76,7 @@ func (s *SQLiteStore) InterruptPatchActions(now int64) error {
 			return err
 		}
 		switch a.State {
-		case "LOCKED", "ABORTED", "VERIFY":
+		case "LOCKED", "ABORTED", "VERIFY", "CANCELLED":
 			continue
 		}
 		a.State = "ABORTED"

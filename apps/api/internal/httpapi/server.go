@@ -26,6 +26,7 @@ import (
 
 type Controller struct {
 	patch         *patchcontrol.Controller
+	patchEnabled  map[string]string
 	mu            sync.RWMutex
 	testMu        sync.Mutex
 	profileMu     sync.Mutex
@@ -82,6 +83,7 @@ func newApp(engine *diagnostics.Engine, repository domain.Repository, source dom
 	app.Use(ownerMiddleware)
 
 	controller := &Controller{
+		patchEnabled:  map[string]string{},
 		stage:         domain.StageDiagnose,
 		engine:        engine,
 		repository:    repository,
@@ -102,6 +104,9 @@ func newApp(engine *diagnostics.Engine, repository domain.Repository, source dom
 	if audit, ok := repository.(patchcontrol.Store); ok {
 		var err error
 		controller.patch, err = patchcontrol.New(audit)
+		if err == nil {
+			controller.patch.SetQualification(controller.patchQualified)
+		}
 		if err != nil {
 			log.Printf("PATCH remains locked: audit storage initialization failed: %v", err)
 		}
@@ -124,6 +129,9 @@ func newApp(engine *diagnostics.Engine, repository domain.Repository, source dom
 	api.Get("/projects/:id/patch/actions", controller.patchActions)
 	api.Post("/projects/:id/patch/proposals", controller.proposePatch)
 	api.Post("/projects/:id/patch/actions/:action/approve", controller.approvePatch)
+	api.Post("/projects/:id/patch/master", controller.patchMasterEnable)
+	api.Post("/projects/:id/patch/prepare", controller.preparePatch)
+	api.Post("/projects/:id/patch/actions/:action/cancel", controller.cancelPatch)
 	api.Get("/measurements", controller.listMeasurements)
 	api.Get("/computer/status", controller.computerStatus)
 	api.Get("/computer/scenarios", controller.computerScenarios)

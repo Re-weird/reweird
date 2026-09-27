@@ -8,6 +8,7 @@ export const weirdChoices = [
 ] as const;
 
 export interface TelemetryStatus {
+	transport?: "direct" | "usb_bridge";
   mode: string;
   connected: boolean;
   error?: string;

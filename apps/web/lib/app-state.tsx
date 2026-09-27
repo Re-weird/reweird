@@ -187,6 +187,9 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     if (!telemetryStatus?.connected || telemetryStatus.mode !== "serial") return;
+    // Cloud bridges are project-scoped and polled with the owner's JWT. Never
+    // subscribe them to the legacy global (simulator/direct USB) WebSocket.
+    if (telemetryStatus.transport === "usb_bridge") return;
     const url = demoApi.telemetryWebSocketURL();
     if (!url) return;
     let cancelled = false;
@@ -224,7 +227,7 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
       if (retry) clearTimeout(retry);
       socket?.close();
     };
-  }, [telemetryStatus?.connected, telemetryStatus?.mode, telemetryStatus?.device_id, telemetryStatus?.profile_id]);
+  }, [telemetryStatus?.connected, telemetryStatus?.mode, telemetryStatus?.device_id, telemetryStatus?.profile_id, telemetryStatus?.transport]);
 
   const runTestAction = useCallback(async (action: "plan" | "start" | "capture" | "remeasure" | "cancel") => {
     setLegacyVerify(false);

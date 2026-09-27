@@ -25,21 +25,26 @@ import (
 )
 
 type Controller struct {
-	patch         *patchcontrol.Controller
-	patchEnabled  map[string]string
-	mu            sync.RWMutex
-	testMu        sync.Mutex
-	profileMu     sync.Mutex
-	syncMu        sync.Mutex
-	stage         domain.Stage
-	reference     *domain.AnalysisResult
-	engine        *diagnostics.Engine
-	repository    domain.Repository
-	source        domain.TelemetrySource
-	profileID     string
-	understanding *projectunderstanding.Service
-	uploadRoot    string
-	github        *githubapp.Client
+	bridgeMu          sync.Mutex
+	bridgeIngestMu    sync.Mutex
+	bridgeControllers map[string]*Controller
+	bridgeSessionMu   sync.RWMutex
+	bridgeSession     *domain.Session
+	patch             *patchcontrol.Controller
+	patchEnabled      map[string]string
+	mu                sync.RWMutex
+	testMu            sync.Mutex
+	profileMu         sync.Mutex
+	syncMu            sync.Mutex
+	stage             domain.Stage
+	reference         *domain.AnalysisResult
+	engine            *diagnostics.Engine
+	repository        domain.Repository
+	source            domain.TelemetrySource
+	profileID         string
+	understanding     *projectunderstanding.Service
+	uploadRoot        string
+	github            *githubapp.Client
 	// product is nil when this deployment has no MongoDB configured;
 	// every equipment/me/product-data handler must check for nil and fail
 	// clearly (productUnavailable) rather than panic or silently no-op.
@@ -83,17 +88,18 @@ func newApp(engine *diagnostics.Engine, repository domain.Repository, source dom
 	app.Use(ownerMiddleware)
 
 	controller := &Controller{
-		patchEnabled:  map[string]string{},
-		stage:         domain.StageDiagnose,
-		engine:        engine,
-		repository:    repository,
-		source:        source,
-		profileID:     profileID,
-		understanding: projectServices.Understanding,
-		uploadRoot:    projectServices.UploadRoot,
-		github:        projectServices.GitHub,
-		product:       projectServices.Product,
-		catalog:       projectServices.Catalog,
+		bridgeControllers: map[string]*Controller{},
+		patchEnabled:      map[string]string{},
+		stage:             domain.StageDiagnose,
+		engine:            engine,
+		repository:        repository,
+		source:            source,
+		profileID:         profileID,
+		understanding:     projectServices.Understanding,
+		uploadRoot:        projectServices.UploadRoot,
+		github:            projectServices.GitHub,
+		product:           projectServices.Product,
+		catalog:           projectServices.Catalog,
 	}
 	if projectServices.GitHub != nil && projectServices.PollInterval > 0 {
 		go controller.PollRepositories(context.Background(), projectServices.PollInterval)
@@ -120,11 +126,15 @@ func newApp(engine *diagnostics.Engine, repository domain.Repository, source dom
 	app.Post("/webhooks/github", controller.githubWebhook)
 
 	api := app.Group("/api/v1", apiAccessControl(os.Getenv("REWEIRD_API_TOKEN")))
+	api.Post("/projects/:id/bridge/pair", controller.pairBridge)
+	api.Delete("/projects/:id/bridge", controller.revokeBridge)
+	api.Post("/bridge/:id/frames", controller.ingestBridge)
+	api.Get("/bridge/:id/view", controller.judgeBridge)
 	api.Get("/ws/telemetry", telemetryWebSocketUpgrade, controller.telemetryWebSocket())
-	api.Get("/session", controller.current)
+	api.Get("/session", controller.bridgeScoped((*Controller).current))
 	api.Get("/status", controller.systemStatus)
 	api.Get("/report", controller.report)
-	api.Get("/telemetry/status", controller.telemetryStatus)
+	api.Get("/telemetry/status", controller.bridgeScoped((*Controller).telemetryStatus))
 	api.Get("/patch/status", controller.patchStatus)
 	api.Get("/projects/:id/patch/actions", controller.patchActions)
 	api.Post("/projects/:id/patch/proposals", controller.proposePatch)
@@ -143,15 +153,15 @@ func newApp(engine *diagnostics.Engine, repository domain.Repository, source dom
 	api.Get("/history", controller.listHistory)
 	api.Get("/history/:id", controller.historyDetail)
 	api.Get("/reports/:id", controller.detailedReport)
-	api.Get("/tests/recommendation", controller.recommendTest)
-	api.Get("/tests/current", controller.currentTest)
-	api.Post("/tests", controller.createTest)
-	api.Get("/tests/:id", controller.getTest)
-	api.Post("/tests/:id/start", controller.startTest)
-	api.Post("/tests/:id/capture", controller.captureTest)
-	api.Post("/tests/:id/remeasure", controller.remeasureTest)
-	api.Post("/tests/:id/cancel", controller.cancelTest)
-	api.Post("/tests/:id/actions", controller.recordTestAction)
+	api.Get("/tests/recommendation", controller.bridgeScoped((*Controller).recommendTest))
+	api.Get("/tests/current", controller.bridgeScoped((*Controller).currentTest))
+	api.Post("/tests", controller.bridgeScoped((*Controller).createTest))
+	api.Get("/tests/:id", controller.bridgeScoped((*Controller).getTest))
+	api.Post("/tests/:id/start", controller.bridgeScoped((*Controller).startTest))
+	api.Post("/tests/:id/capture", controller.bridgeScoped((*Controller).captureTest))
+	api.Post("/tests/:id/remeasure", controller.bridgeScoped((*Controller).remeasureTest))
+	api.Post("/tests/:id/cancel", controller.bridgeScoped((*Controller).cancelTest))
+	api.Post("/tests/:id/actions", controller.bridgeScoped((*Controller).recordTestAction))
 	api.Get("/simulator/scenarios", controller.listSimulatorScenarios)
 	api.Post("/simulator/scenario", controller.selectSimulatorScenario)
 	api.Get("/profiles", controller.listProfiles)
@@ -199,9 +209,9 @@ func newApp(engine *diagnostics.Engine, repository domain.Repository, source dom
 	// see demo_physicalgit_handlers.go. No equivalent exists for real projects.
 	api.Post("/projects/:id/demo/apply-restoration", controller.applyPhysicalGitDemoRestoration)
 	api.Post("/projects/:id/demo/apply-break", controller.applyPhysicalGitDemoBreak)
-	api.Get("/profiles/:id/passport", controller.devicePassport)
-	api.Post("/profiles/:id/known-good", controller.saveKnownGood)
-	api.Get("/profiles/:id/calibration", controller.calibration)
+	api.Get("/profiles/:id/passport", controller.bridgeScoped((*Controller).devicePassport))
+	api.Post("/profiles/:id/known-good", controller.bridgeScoped((*Controller).saveKnownGood))
+	api.Get("/profiles/:id/calibration", controller.bridgeScoped((*Controller).calibration))
 
 	api.Get("/me", controller.me)
 	api.Get("/catalog", controller.listCatalog)
@@ -380,17 +390,23 @@ func (controller *Controller) profileWithKnownGood(profile domain.ProjectProfile
 }
 
 func (controller *Controller) telemetryStatus(ctx *fiber.Ctx) error {
+	transport := "direct"
+	if _, ok := controller.source.(*bridgeSource); ok {
+		transport = "usb_bridge"
+	}
 	envelope, err := controller.source.Latest(ctx.Context())
 	if err != nil {
 		return ctx.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{
 			"mode":      controller.source.Name(),
 			"connected": false,
+			"transport": transport,
 			"error":     err.Error(),
 		})
 	}
 	return ctx.JSON(fiber.Map{
 		"mode":           controller.source.Name(),
 		"connected":      true,
+		"transport":      transport,
 		"device_id":      envelope.DeviceID,
 		"profile_id":     envelope.ProfileID,
 		"schema_version": envelope.SchemaVersion,
@@ -414,6 +430,11 @@ func (controller *Controller) listMeasurements(ctx *fiber.Ctx) error {
 		controller.mu.RLock()
 		profileID = controller.profileID
 		controller.mu.RUnlock()
+	}
+	if project, err := controller.repository.GetProject(profileID); err != nil {
+		return internalError(ctx, err)
+	} else if project != nil && project.OwnerID != ownerID(ctx) {
+		return apiError(ctx, fiber.StatusNotFound, "PROJECT_NOT_FOUND", "Project not found.")
 	}
 	limit, err := strconv.Atoi(ctx.Query("limit", "50"))
 	if err != nil || limit < 1 || limit > 200 {
@@ -487,10 +508,27 @@ func (controller *Controller) listProfiles(ctx *fiber.Ctx) error {
 	if err != nil {
 		return internalError(ctx, err)
 	}
-	return ctx.JSON(items)
+	visible := items[:0:0]
+	for _, item := range items {
+		project, err := controller.repository.GetProject(item.ID)
+		if err != nil {
+			return internalError(ctx, err)
+		}
+		if project == nil || project.OwnerID == ownerID(ctx) {
+			visible = append(visible, item)
+		}
+	}
+	return ctx.JSON(visible)
 }
 
 func (controller *Controller) getProfile(ctx *fiber.Ctx) error {
+	project, err := controller.repository.GetProject(ctx.Params("id"))
+	if err != nil {
+		return internalError(ctx, err)
+	}
+	if project != nil && project.OwnerID != ownerID(ctx) {
+		return apiError(ctx, 404, "PROFILE_NOT_FOUND", "Profile not found.")
+	}
 	profile, err := controller.repository.GetProfile(ctx.Params("id"))
 	if err != nil {
 		return internalError(ctx, err)

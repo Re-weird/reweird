@@ -4,6 +4,8 @@
 
 **Evidence-first diagnostics for physical electronics projects.**
 
+For the hosted physical demo, see [USB-to-cloud bridge and read-only judge links](docs/usb-cloud-bridge.md).
+
 ReWeird combines real measurements, project context, deterministic engineering
 rules, guided follow-up tests, and repair verification. It is deliberately not a
 chatbot that guesses at hardware failures.

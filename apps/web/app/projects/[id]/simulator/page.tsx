@@ -2,14 +2,12 @@
 
 import { SimulatorView } from "../../../project-views";
 import { useAppState } from "@/lib/app-state";
-import { useRouter } from "next/navigation";
-import { projectPath, DEMO_PROJECT_ID } from "@/lib/project-routes";
+import { SimulatedPatch } from "../../../simulated-patch";
 
 export default function SimulatorPage() {
-  const router = useRouter();
-  const { session, source, scenarios, selectedScenario, setSelectedScenario, scenarioError, mysteryPending, revealMystery, runScenario, runTestAction, runOriginalDemo, busy } = useAppState();
-  return <SimulatorView
-    session={session}
+  const { practiceSession, source, scenarios, selectedScenario, setSelectedScenario, scenarioError, mysteryPending, revealMystery, runScenario, runOriginalDemo, busy } = useAppState();
+  return <><SimulatorView
+    session={practiceSession}
     source={source}
     scenarios={scenarios}
     selected={selectedScenario}
@@ -18,10 +16,8 @@ export default function SimulatorPage() {
     mysteryPending={mysteryPending}
     onRevealMystery={revealMystery}
     onRun={() => runScenario(selectedScenario)}
-    onDiagnose={() => router.push(projectPath(DEMO_PROJECT_ID, "diagnosis"))}
-    onPlan={() => runTestAction("plan")}
     onDemoTest={() => runOriginalDemo("wiggle")}
     onDemoRepair={() => runOriginalDemo("repair")}
     busy={busy}
-  />;
+  /><SimulatedPatch /></>;
 }

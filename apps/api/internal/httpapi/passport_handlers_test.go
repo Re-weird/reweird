@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/re-weird/reweird/apps/api/internal/domain"
+	"github.com/re-weird/reweird/apps/api/internal/passport"
 	"github.com/re-weird/reweird/apps/api/internal/profiles"
 	"github.com/re-weird/reweird/apps/api/internal/simulator"
 )
@@ -119,17 +120,30 @@ func TestPhysicalKnownGoodRequiresConfirmedProbePlanAndStoredSerial(t *testing.T
 	if tooEarly.StatusCode != http.StatusConflict {
 		t.Fatalf("pre-confirmation capture accepted after connection: %d", tooEarly.StatusCode)
 	}
-	postConnection := stored
-	postConnection.ID = 0
-	postConnection.Sequence = 2
-	postConnection.Raw.Sequence = 2
-	postConnection.IngestedAtMS = project.ProbePlan.ConnectedAtMS + 1
-	postConnection.CapturedAtMS = 0
-	postConnection.Raw.CapturedAtMS = 0
-	postConnection.Analysis.CapturedAtMS = 0
-	postConnection, err = repository.SaveMeasurement(postConnection)
-	if err != nil {
-		t.Fatal(err)
+	saveAfterConnection := func(sequence uint64) domain.MeasurementWindow {
+		t.Helper()
+		next := stored
+		next.ID = 0
+		next.Sequence = sequence
+		next.Raw.Sequence = sequence
+		next.IngestedAtMS = project.ProbePlan.ConnectedAtMS + int64(sequence)
+		next.CapturedAtMS = 0
+		next.Raw.CapturedAtMS = 0
+		next.Analysis.CapturedAtMS = 0
+		saved, err := repository.SaveMeasurement(next)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return saved
+	}
+	postConnection := saveAfterConnection(2)
+	body["measurement_id"] = postConnection.ID
+	single := doJSON(t, app, http.MethodPost, path, body)
+	if single.StatusCode != http.StatusUnprocessableEntity {
+		t.Fatalf("a single physical window became Known Good: %d", single.StatusCode)
+	}
+	for sequence := uint64(3); sequence < 2+passport.CalibrationWindows; sequence++ {
+		postConnection = saveAfterConnection(sequence)
 	}
 	body["measurement_id"] = postConnection.ID
 	accepted := doJSON(t, app, http.MethodPost, path, body)
@@ -141,6 +155,9 @@ func TestPhysicalKnownGoodRequiresConfirmedProbePlanAndStoredSerial(t *testing.T
 	if baseline.Source != domain.BaselinePhysical || baseline.DeviceID != window.DeviceID {
 		t.Fatalf("client changed source: %+v", baseline)
 	}
+	if baseline.Provenance != domain.ProvenanceRealSerial || baseline.WindowCount != passport.CalibrationWindows || baseline.ProbeMappingHash == "" || baseline.ProfileVersion != profile.Version {
+		t.Fatalf("physical baseline lost provenance or binding: %+v", baseline)
+	}
 	passportResponse := doJSON(t, app, http.MethodGet, "/api/v1/profiles/"+project.ID+"/passport", nil)
 	var device domain.DevicePassport
 	decodeBody(t, passportResponse, &device)
@@ -150,14 +167,7 @@ func TestPhysicalKnownGoodRequiresConfirmedProbePlanAndStoredSerial(t *testing.T
 	if device.PhysicalBaseline == nil || device.PhysicalBaseline.MeasurementID != postConnection.ID || device.SimulatedBaseline != nil {
 		t.Fatalf("passport did not expose physical source separately: %+v", device)
 	}
-	later := postConnection
-	later.ID = 0
-	later.Sequence = 3
-	later.Raw.Sequence = 3
-	later.IngestedAtMS += 1000
-	if _, err := repository.SaveMeasurement(later); err != nil {
-		t.Fatal(err)
-	}
+	saveAfterConnection(2 + passport.CalibrationWindows)
 	passportResponse = doJSON(t, app, http.MethodGet, "/api/v1/profiles/"+project.ID+"/passport", nil)
 	decodeBody(t, passportResponse, &device)
 	if device.Status != domain.PassportHealthy {

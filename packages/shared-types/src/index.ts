@@ -135,12 +135,20 @@ export interface DerivedSignalFacts {
   failure_buckets?: number[];
   activity_counts?: number[];
   baseline_deviation_percent?: number;
+  /** A captured HIGH time violated the configured pulse-width expectation. */
+  pulse_width_out_of_range?: boolean;
+  /** The raw capture is internally inconsistent; raw values are unchanged. */
+  capture_unreliable?: boolean;
+  capture_issues?: string[];
+  /** Metrics outside a learned physical Known Good envelope. */
+  known_good_deviations?: string[];
 }
 
 export interface SignalAnalysis {
   schema_version: number;
   device_id: string;
   profile_id: string;
+  profile_version?: number;
   captured_at_ms: number;
   window_ms: number;
   probes: DerivedSignalFacts[];
@@ -172,7 +180,38 @@ export interface MeasurementWindow {
 }
 
 export type BaselineSource = "PHYSICAL" | "SIMULATED";
-export type PassportStatus = "NO_PHYSICAL_BASELINE" | "NEEDS_VERIFICATION" | "HEALTHY" | "DEVIATION_DETECTED" | "SIMULATED_BASELINE" | "SIMULATED_MATCH" | "SIMULATED_DEVIATION";
+export type PassportStatus = "NO_PHYSICAL_BASELINE" | "NEEDS_VERIFICATION" | "HEALTHY" | "DEVIATION_DETECTED" | "SIMULATED_BASELINE" | "SIMULATED_MATCH" | "SIMULATED_DEVIATION" | "BASELINE_INCOMPATIBLE";
+export type MeasurementProvenance = "REAL_SERIAL" | "SIMULATED";
+
+/** Recorded physical behavior. Never a configured expectation. */
+export interface TrustedBaseline {
+  status: "USER_CONFIRMED_HEALTHY" | "KNOWN_GOOD_CAPTURE" | "MANUFACTURER_SPEC" | "UNKNOWN";
+  captured_at_ms?: number;
+  average_voltage?: number;
+  frequency_hz?: number;
+  dropouts_per_window?: number;
+  voltage_variation?: number;
+  frequency_tolerance_pct?: number;
+  voltage_tolerance_pct?: number;
+  window_count?: number;
+  min_voltage?: number;
+  max_voltage?: number;
+  min_frequency_hz?: number;
+  max_frequency_hz?: number;
+  pulse_width_us?: number;
+  min_pulse_width_us?: number;
+  max_pulse_width_us?: number;
+  pulse_width_tolerance_pct?: number;
+  compare_pulse_width?: boolean;
+}
+
+export interface ProbeMappingEntry {
+  probe: string;
+  role: string;
+  mode: "analog" | "digital" | "pulse";
+  input_scale: number;
+  required: boolean;
+}
 
 export interface KnownGoodBaseline {
   id: number;
@@ -190,8 +229,71 @@ export interface KnownGoodBaseline {
     probe: string;
     role: string;
     facts: DerivedSignalFacts;
-    trusted: Record<string, unknown>;
+    trusted: TrustedBaseline;
   }>;
+  provenance?: MeasurementProvenance;
+  probe_mapping?: ProbeMappingEntry[];
+  probe_mapping_hash?: string;
+  window_count?: number;
+  first_measurement_id?: number;
+  last_measurement_id?: number;
+}
+
+export type CalibrationStatus =
+  | "NOT_CALIBRATED"
+  | "OBSERVING"
+  | "ATTENTION_REQUIRED"
+  | "REVIEW_REQUIRED"
+  | "CALIBRATED"
+  | "BASELINE_INCOMPATIBLE"
+  | "SIMULATED_SOURCE";
+
+export interface ObservedSummary {
+  windows: number;
+  stable_windows: number;
+  unreliable_windows: number;
+  max_dropouts: number;
+  active_windows: number;
+  min_voltage?: number;
+  average_voltage?: number;
+  max_voltage?: number;
+  max_voltage_variation?: number;
+  min_frequency_hz?: number;
+  average_frequency_hz?: number;
+  max_frequency_hz?: number;
+  min_pulse_width_us?: number;
+  average_pulse_width_us?: number;
+  max_pulse_width_us?: number;
+  capture_issues?: string[];
+}
+
+export interface CalibrationProbe {
+  probe: string;
+  role: string;
+  mode: "analog" | "digital" | "pulse";
+  required: boolean;
+  expected: ExpectedSignal;
+  observed: ObservedSummary;
+  known_good?: TrustedBaseline;
+  issues?: string[];
+}
+
+export interface CalibrationState {
+  status: CalibrationStatus;
+  detail: string;
+  profile_id: string;
+  profile_version: number;
+  device_id?: string;
+  provenance?: MeasurementProvenance;
+  windows_observed: number;
+  windows_required: number;
+  candidate_measurement_id?: number;
+  first_measurement_id?: number;
+  can_save_known_good: boolean;
+  blockers?: string[];
+  probes: CalibrationProbe[];
+  known_good?: KnownGoodBaseline;
+  probe_mapping_hash: string;
 }
 
 export interface PassportCapture {
@@ -231,6 +333,7 @@ export interface ProjectProfile {
   expected_behavior: string;
   components: ProfileComponent[];
   connections?: ProfileConnection[];
+  reserved_probes?: string[];
   conflicts?: ProfileConflict[];
   unresolved_questions?: string[];
   operating_conditions?: string[];
@@ -257,7 +360,9 @@ export type ProjectFactSource =
   | "VISION_AI"
   | "CATALOG"
   | "USER"
-  | "INFERRED";
+  | "INFERRED"
+  | "REAL_SERIAL_OBSERVATION"
+  | "HARDWARE_CONTRACT";
 
 export interface ProfileComponent {
   id: string;
@@ -284,6 +389,8 @@ export interface ExpectedSignal {
   min_frequency_hz?: number;
   max_frequency_hz?: number;
   nominal_frequency_hz?: number;
+  min_pulse_width_us?: number;
+  max_pulse_width_us?: number;
   max_dropouts: number;
 }
 
@@ -299,6 +406,8 @@ export interface ProfileConnection {
   component_name: string;
   role: string;
   gpio?: number;
+  /** Pins this connection to a physical ReWeird probe (P1-P6). */
+  probe?: string;
   target: string;
   direction: string;
   behavior: string;
@@ -408,6 +517,30 @@ export interface ProjectCode {
   sha256: string;
 }
 
+/** A project's optional vision camera source (an MJPEG stream over HTTP). */
+export interface CameraConfig {
+  source_type: "mjpeg";
+  url: string;
+}
+
+export type CameraStatus = "CONNECTED" | "UNREACHABLE" | "INVALID_STREAM" | "TIMEOUT" | "NOT_CONFIGURED";
+
+export interface CameraTestResult {
+  status: CameraStatus;
+  content_type?: string;
+  frame_available?: boolean;
+  latency_ms?: number;
+  message?: string;
+}
+
+export interface CameraTestFrame {
+  content_type: string;
+  width: number;
+  height: number;
+  size_bytes: number;
+  image_base64: string;
+}
+
 export interface ProbeInstruction {
   probe: string;
   role: string;
@@ -437,6 +570,8 @@ export interface Project {
   logic_voltage: number;
   image?: ProjectMedia;
   code?: ProjectCode;
+  /** The project's configured vision camera source, if any. */
+  camera_config?: CameraConfig;
   /** The GitHub repo the project's code comes from; pushes to its default branch are analyzed. */
   repository?: LinkedRepository;
   analysis?: ProjectAnalysis;
@@ -702,6 +837,66 @@ export interface PhysicalCommitDiff {
   electrical: ElectricalDiff;
   software: SoftwareDiff;
   semantic_visual: SemanticVisualDiff;
+  // A small, bounded list of plain factual observations derived
+  // deterministically from the sections above -- never a causal claim, never
+  // generated by an LLM.
+  diagnostic_context?: string[];
+}
+
+// ---- Physical Restore ----
+
+export type RestoreStatus = "MATCH" | "ACTION_REQUIRED" | "NOT_CAPTURED" | "UNAVAILABLE" | "VERIFY_REQUIRED";
+export type RestoreActionCategory = "COMPONENTS" | "CIRCUIT" | "ELECTRICAL" | "VISUAL" | "SOFTWARE";
+
+export interface RestoreAction {
+  category: RestoreActionCategory;
+  status: RestoreStatus;
+  title: string;
+  description?: string;
+  target_value?: string;
+  current_value?: string;
+  // True when this action was derived only from a persisted Gemini Vision
+  // analysis, never from measured/structured evidence -- must never be
+  // rendered the same way as a raw-evidence action.
+  ai_interpreted?: boolean;
+}
+
+export interface RestoreSection { status: RestoreStatus; actions?: RestoreAction[] }
+
+// PhysicalRestorePlan is a deterministic restoration checklist for returning
+// a project's OBSERVABLE state to target_commit. It never physically
+// modifies hardware and is never computed by an LLM.
+export interface PhysicalRestorePlan {
+  project_id: string;
+  target_commit: string;
+  source_commit?: string;
+  has_source: boolean;
+  components: RestoreSection;
+  circuit: RestoreSection;
+  electrical: RestoreSection;
+  visual: RestoreSection;
+  software: RestoreSection;
+}
+
+// ---- Physical Verify ----
+
+export type VerifyStatus = "SUPPORTED" | "NOT_SUPPORTED" | "INCONCLUSIVE" | "NOT_CAPTURED" | "UNAVAILABLE";
+
+export interface VerifyCategoryResult { status: VerifyStatus; detail?: string; changes?: FieldChange[] }
+
+// PhysicalVerifyResult answers whether newly observed evidence supports
+// having restored a project to target_commit's captured state -- it is
+// evidence-based, never a simple user "done" confirmation.
+export interface PhysicalVerifyResult {
+  project_id: string;
+  target_commit: string;
+  components: VerifyCategoryResult;
+  circuit: VerifyCategoryResult;
+  electrical: VerifyCategoryResult;
+  visual: VerifyCategoryResult;
+  software: VerifyCategoryResult;
+  overall: VerifyStatus;
+  summary: string;
 }
 
 export type HistoryStatus ="OPEN" | "TESTING" | "WAITING_FOR_USER" | "VERIFYING" | "RESOLVED" | "IMPROVED" | "UNRESOLVED" | "CANCELLED" | "INCONCLUSIVE";

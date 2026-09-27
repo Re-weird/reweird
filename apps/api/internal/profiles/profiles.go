@@ -91,6 +91,13 @@ func Validate(profile domain.ProjectProfile) error {
 	if len(profile.Probes) > 6 {
 		return errors.New("profile must contain at most 6 probe configurations")
 	}
+	reserved := map[string]bool{}
+	for _, probe := range profile.ReservedProbes {
+		if !regexp.MustCompile(`^P[1-6]$`).MatchString(probe) || reserved[probe] {
+			return fmt.Errorf("invalid or duplicate reserved probe %q", probe)
+		}
+		reserved[probe] = true
+	}
 	if profile.Confirmed && len(profile.Probes) == 0 {
 		return errors.New("a confirmed profile must contain a generated probe configuration")
 	}
@@ -116,6 +123,7 @@ func Validate(profile domain.ProjectProfile) error {
 			return fmt.Errorf("%s input_scale must be greater than 0 and at most 20", probe.Probe)
 		}
 	}
+	pinned := map[string]bool{}
 	for _, connection := range profile.Connections {
 		if connection.ID == "" || len(connection.ID) > 100 {
 			return errors.New("each connection requires an id of at most 100 characters")
@@ -125,6 +133,18 @@ func Validate(profile domain.ProjectProfile) error {
 		}
 		if connection.GPIO != nil && (*connection.GPIO < 0 || *connection.GPIO > 99) {
 			return fmt.Errorf("connection %s has an invalid GPIO", connection.ID)
+		}
+		if connection.Probe != "" {
+			if !regexp.MustCompile(`^P[1-6]$`).MatchString(connection.Probe) {
+				return fmt.Errorf("connection %s is pinned to invalid probe %q", connection.ID, connection.Probe)
+			}
+			if pinned[connection.Probe] {
+				return fmt.Errorf("probe %s is pinned to more than one connection", connection.Probe)
+			}
+			pinned[connection.Probe] = true
+		}
+		if err := validatePulseWidths(connection.ID, connection.Expected); err != nil {
+			return err
 		}
 	}
 	return nil
@@ -149,6 +169,16 @@ func ValidateConfirmable(profile domain.ProjectProfile) error {
 		if connection.Required && (connection.Target == "" || connection.Behavior == "") {
 			return fmt.Errorf("connection %s is incomplete", connection.Role)
 		}
+	}
+	return nil
+}
+
+func validatePulseWidths(owner string, expected domain.ExpectedSignal) error {
+	if expected.MinPulseWidthUS != nil && *expected.MinPulseWidthUS < 0 || expected.MaxPulseWidthUS != nil && *expected.MaxPulseWidthUS <= 0 {
+		return fmt.Errorf("%s pulse-width limits must be positive", owner)
+	}
+	if expected.MinPulseWidthUS != nil && expected.MaxPulseWidthUS != nil && *expected.MinPulseWidthUS > *expected.MaxPulseWidthUS {
+		return fmt.Errorf("%s minimum pulse width exceeds its maximum", owner)
 	}
 	return nil
 }

@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/re-weird/reweird/apps/api/internal/domain"
+	"github.com/re-weird/reweird/apps/api/internal/signalanalysis"
 	"github.com/re-weird/reweird/apps/api/internal/telemetry"
 )
 
@@ -58,10 +59,16 @@ func BuildKnownGood(profile domain.ProjectProfile, window domain.MeasurementWind
 		ProfileID: profile.ID, ProfileVersion: profile.Version, MeasurementID: window.ID,
 		Source: source, DeviceID: window.DeviceID, CapturedAtMS: window.CapturedAtMS, IngestedAtMS: window.IngestedAtMS,
 		SavedAtMS: time.Now().UTC().UnixMilli(), ConfirmedBy: "local_user_reported", Note: strings.TrimSpace(note),
-		Probes: make([]domain.BaselineProbe, 0, len(profile.Probes)),
+		Probes:       make([]domain.BaselineProbe, 0, len(profile.Probes)),
+		Provenance:   domain.ProvenanceSimulatedInput,
+		ProbeMapping: ProbeMapping(profile), ProbeMappingHash: MappingHash(profile),
+		WindowCount: 1, FirstMeasurementID: window.ID, LastMeasurementID: window.ID,
+	}
+	if source == domain.BaselinePhysical {
+		record.Provenance = domain.ProvenanceRealSerial
 	}
 	for _, configuration := range profile.Probes {
-		if !configuration.Expected.Required || strings.EqualFold(configuration.Role, "UNASSIGNED") {
+		if strings.EqualFold(configuration.Role, "UNASSIGNED") {
 			continue
 		}
 		rawPresent := false
@@ -72,10 +79,28 @@ func BuildKnownGood(profile domain.ProjectProfile, window domain.MeasurementWind
 			}
 		}
 		if !rawPresent {
+			if !configuration.Expected.Required {
+				continue
+			}
 			return domain.KnownGoodBaseline{}, fmt.Errorf("%s has no raw sample in the stored capture", configuration.Probe)
 		}
 		facts, present := window.Analysis.Probe(configuration.Probe)
-		if !present || facts.Mode != configuration.Mode || !facts.Stable || facts.MissingExpectedActivity || facts.DropoutEvents > configuration.Expected.MaxDropouts {
+		if !present || facts.Mode != configuration.Mode {
+			if !configuration.Expected.Required {
+				continue
+			}
+			return domain.KnownGoodBaseline{}, fmt.Errorf("%s is missing from the derived evidence", configuration.Probe)
+		}
+		if facts.CaptureUnreliable {
+			if !configuration.Expected.Required {
+				continue
+			}
+			return domain.KnownGoodBaseline{}, fmt.Errorf("%s capture is unreliable (%s)", configuration.Probe, strings.Join(facts.CaptureIssues, "; "))
+		}
+		if !facts.Stable || facts.MissingExpectedActivity || facts.DropoutEvents > configuration.Expected.MaxDropouts || facts.PulseWidthOutOfRange {
+			if !configuration.Expected.Required {
+				continue
+			}
 			return domain.KnownGoodBaseline{}, fmt.Errorf("%s is missing or outside its expected stable behavior", configuration.Probe)
 		}
 		voltageTolerance := configuration.Expected.VoltageTolerancePct
@@ -129,7 +154,10 @@ func ApplyKnownGood(profile domain.ProjectProfile, source domain.BaselineSource,
 		if source == domain.BaselinePhysical && configuration.Baseline != nil && configuration.Baseline.Status != domain.BaselineManufacturerSpec {
 			configuration.Baseline = nil
 		}
-		if baseline == nil || baseline.ProfileID != profile.ID || baseline.ProfileVersion != profile.Version || baseline.Source != source {
+		if baseline == nil || baseline.Source != source {
+			continue
+		}
+		if compatible, _ := BaselineCompatible(profile, baseline); !compatible {
 			continue
 		}
 		for _, probe := range baseline.Probes {
@@ -158,8 +186,10 @@ func CurrentStatus(profile domain.ProjectProfile, window *domain.MeasurementWind
 		window.DeviceID == "" || window.Raw.DeviceID != window.DeviceID || window.Analysis.DeviceID != window.DeviceID {
 		return domain.PassportNeedsVerification, "The latest capture has inconsistent profile or device identity."
 	}
-	if baseline != nil && baseline.ProfileVersion != profile.Version {
-		return domain.PassportNeedsVerification, "The Project Profile changed since this baseline was saved; capture and confirm a new reference."
+	if baseline != nil {
+		if compatible, reason := BaselineCompatible(profile, baseline); !compatible {
+			return domain.PassportBaselineIncompatible, "Known Good is incompatible: " + reason + ". Observe the circuit again and confirm a new reference."
+		}
 	}
 	if baseline == nil || baseline.Source != source || baseline.DeviceID != window.DeviceID || baseline.ProfileID != window.ProfileID {
 		if source == domain.BaselineSimulated {
@@ -183,8 +213,18 @@ func CurrentStatus(profile domain.ProjectProfile, window *domain.MeasurementWind
 			issues = append(issues, probe.Probe+" missing from current capture")
 			continue
 		}
-		if !facts.Stable || facts.MissingExpectedActivity || facts.DropoutEvents > probe.Facts.DropoutEvents {
+		allowedDropouts := probe.Facts.DropoutEvents
+		if probe.Trusted.DropoutsPerWindow != nil && *probe.Trusted.DropoutsPerWindow > allowedDropouts {
+			allowedDropouts = *probe.Trusted.DropoutsPerWindow
+		}
+		if facts.CaptureUnreliable {
+			issues = append(issues, probe.Probe+" capture is unreliable")
+		}
+		if !facts.Stable || facts.MissingExpectedActivity || facts.DropoutEvents > allowedDropouts {
 			issues = append(issues, probe.Probe+" activity or stability changed")
+		}
+		for _, deviation := range signalanalysis.KnownGoodDeviations(facts, &probe.Trusted) {
+			issues = append(issues, probe.Probe+" "+deviation)
 		}
 		configuration, configured := profile.Probe(probe.Probe)
 		if !configured || configuration.Mode != facts.Mode {
@@ -201,6 +241,9 @@ func CurrentStatus(profile domain.ProjectProfile, window *domain.MeasurementWind
 		}
 		if probe.Trusted.AverageVoltage != nil && facts.AverageVoltage == nil || probe.Trusted.FrequencyHz != nil && facts.FrequencyHz == nil {
 			issues = append(issues, probe.Probe+" comparable measurement is missing")
+		}
+		if probe.Trusted.WindowCount > 0 {
+			continue // learned envelopes were compared above
 		}
 		if facts.AverageVoltage != nil && probe.Trusted.AverageVoltage != nil &&
 			percentDifference(*facts.AverageVoltage, *probe.Trusted.AverageVoltage) > probe.Trusted.VoltageTolerancePct {

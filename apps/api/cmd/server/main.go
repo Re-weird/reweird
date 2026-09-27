@@ -13,6 +13,7 @@ import (
 
 	"github.com/joho/godotenv"
 	"github.com/re-weird/reweird/apps/api/internal/codeanalysis"
+	"github.com/re-weird/reweird/apps/api/internal/demodata"
 	"github.com/re-weird/reweird/apps/api/internal/diagnostics"
 	"github.com/re-weird/reweird/apps/api/internal/domain"
 	"github.com/re-weird/reweird/apps/api/internal/githubapp"
@@ -33,7 +34,10 @@ func main() {
 	loadLocalDotEnv()
 
 	databasePath := environment("DATABASE_PATH", "./reweird.db")
-	port := environment("API_PORT", "8080")
+	// Railway (and most PaaS hosts) assign a dynamic port via $PORT and expect
+	// the app to bind it directly; API_PORT remains the override for local/
+	// self-hosted runs that don't set PORT.
+	port := environment("PORT", environment("API_PORT", "8080"))
 	host := environment("API_HOST", "127.0.0.1")
 	address := net.ParseIP(host)
 	if address == nil {
@@ -57,6 +61,12 @@ func main() {
 
 	if err := seedDemoProfile(repository); err != nil {
 		log.Fatalf("seed demo Project Profile: %v", err)
+	}
+	// The Physical Git demo is optional, judge-facing convenience, not core
+	// functionality -- a failure here (e.g. this dev database's unrelated
+	// measurement-retention limit) must never take down the whole API.
+	if err := demodata.Seed(repository, uploadRoot); err != nil {
+		log.Printf("seed Physical Git demo: %v (Physical Git demo project unavailable this run)", err)
 	}
 	activeProfile, err := repository.GetProfile(profileID)
 	if err != nil {

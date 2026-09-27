@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"bytes"
 	"crypto/rand"
 	"encoding/hex"
 	"mime/multipart"
@@ -8,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/gofiber/fiber/v2"
+	"github.com/re-weird/reweird/apps/api/internal/cameracapture"
 	"github.com/re-weird/reweird/apps/api/internal/domain"
 	"github.com/re-weird/reweird/apps/api/internal/physicalgit"
 	"github.com/re-weird/reweird/apps/api/internal/projects"
@@ -112,6 +114,18 @@ func (controller *Controller) createPhysicalCommit(ctx *fiber.Ctx) error {
 			return internalError(ctx, closeErr)
 		}
 		commit.Image = image
+	} else if project.CameraConfig != nil {
+		// A configured camera is used only when no photo was manually
+		// uploaded. Any failure here (not reachable, timeout, invalid
+		// stream, or the captured frame failing to save) never blocks the
+		// commit -- it simply proceeds with no image, exactly like a
+		// project with no camera configured at all. Gemini is never
+		// involved in this path.
+		if frame, captureErr := cameracapture.Capture(ctx.Context(), project.CameraConfig.URL); captureErr == nil {
+			if image, saveErr := projects.SavePhysicalCommitImage(controller.uploadRoot, project.ID, commit.ID, bytes.NewReader(frame.Bytes)); saveErr == nil {
+				commit.Image = image
+			}
+		}
 	}
 
 	commitRepository, err := controller.physicalCommitRepository(ctx)

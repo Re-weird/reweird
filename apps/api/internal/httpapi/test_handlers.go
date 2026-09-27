@@ -87,6 +87,7 @@ func (controller *Controller) currentTest(ctx *fiber.Ctx) error {
 	if workflow == nil {
 		return ctx.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "TEST_NOT_FOUND"})
 	}
+	testplanner.New().ReconcileRemeasure(workflow)
 	return ctx.JSON(workflow)
 }
 
@@ -102,6 +103,7 @@ func (controller *Controller) getTest(ctx *fiber.Ctx) error {
 	if workflow == nil {
 		return ctx.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "TEST_NOT_FOUND"})
 	}
+	testplanner.New().ReconcileRemeasure(workflow)
 	return ctx.JSON(workflow)
 }
 
@@ -274,7 +276,11 @@ func (controller *Controller) advanceTest(ctx *fiber.Ctx, action string) error {
 		if workflow.During == nil {
 			return testConflict(ctx, "MISSING_TEST_WINDOW", "Capture the test window before verifying.")
 		}
-		verification := testplanner.New().Verify(*profile, workflow.Plan.Recommendation.TargetProbes, *workflow.During, window)
+		criteriaProfile := profile
+		if workflow.ProfileSnapshot != nil {
+			criteriaProfile = workflow.ProfileSnapshot
+		}
+		verification := testplanner.New().Verify(*criteriaProfile, workflow.Plan.Recommendation.TargetProbes, *workflow.During, window)
 		workflow.Verification = &verification
 		if verification.Status == "RESOLVED" {
 			workflow.Status = domain.TestResolved
@@ -283,6 +289,7 @@ func (controller *Controller) advanceTest(ctx *fiber.Ctx, action string) error {
 		} else {
 			workflow.Status = domain.TestUnresolved
 		}
+		testplanner.New().ReconcileRemeasure(workflow)
 	}
 	if err := saveTestState(workflows, workflow); err != nil {
 		return internalError(ctx, err)

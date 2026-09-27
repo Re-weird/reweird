@@ -442,7 +442,9 @@ it never controls electrical output.
 ## Safety model
 
 - The LLM never receives or controls raw GPIO directly.
-- Firmware and backend perform input-only sensing; PATCH output is locked.
+- P1–P6 remain input-only sensing. The PATCH lifecycle is implemented, but the
+  current board's physical output stays locked without qualified dedicated
+  hardware. See [PATCH provisioning and safety](docs/patch-safety.md).
 - ESP32 frames are schema-versioned and bounded. Telemetry v2 requires a
   `profile_id`, and the backend rejects frames that do not match the active
   confirmed profile. It also rejects unknown
@@ -464,8 +466,11 @@ it never controls electrical output.
 - Gemini can only suggest `VISION_AI` facts. Conflicts are preserved, and only a
   user can confirm a Project Profile.
 - An inference cannot overwrite measured evidence.
-- A future PATCH controller must validate pin, voltage, waveform, frequency, and
-  duration before requesting explicit user approval.
+- PATCH validates the dedicated target/pin, voltage, mode, duration, device boot,
+  profile/mapping and action digest before explicit user approval. Master enable
+  defaults OFF. Firmware enforces bounded output and lease shutdown independently;
+  fresh REAL_SERIAL capture and VERIFY follow acknowledged disable. Practice
+  PATCH is an explicitly simulated lifecycle rehearsal, never physical evidence.
 - Git synchronization is disabled by default. The report adapter scans for
   secrets and requires local configuration and explicit per-commit approval;
   remote push needs an additional opt-in and approval.

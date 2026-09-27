@@ -67,6 +67,7 @@ func (controller *Controller) saveKnownGood(ctx *fiber.Ctx) error {
 	if demo && window.Source != "simulator" {
 		return apiError(ctx, fiber.StatusConflict, "DEMO_SOURCE_REQUIRED", "The built-in demo accepts simulated baselines only.")
 	}
+	var record domain.KnownGoodBaseline
 	if window.Source == "serial" {
 		if project == nil || project.ProbePlan == nil || !project.ProbePlan.Connected || project.ProbePlan.ProfileID != profile.ID {
 			return apiError(ctx, fiber.StatusConflict, "PROBES_NOT_CONFIRMED", "Confirm the generated probe plan before saving a physical baseline.")
@@ -74,10 +75,21 @@ func (controller *Controller) saveKnownGood(ctx *fiber.Ctx) error {
 		if project.ProbePlan.ConnectedAtMS <= 0 || window.IngestedAtMS < project.ProbePlan.ConnectedAtMS {
 			return apiError(ctx, fiber.StatusConflict, "CAPTURE_PRECEDES_PROBE_CONFIRMATION", "Take a new physical capture after confirming the probe connections.")
 		}
-	}
-	record, err := passport.BuildKnownGood(*profile, *window, request.Note)
-	if err != nil {
-		return apiError(ctx, fiber.StatusUnprocessableEntity, "CAPTURE_NOT_HEALTHY", err.Error())
+		// A physical Known Good is learned from a run of consecutive REAL
+		// SERIAL windows, never from a single capture.
+		learned, refusal, err := controller.learnPhysicalKnownGood(*profile, *window, project.ProbePlan.ConnectedAtMS, request.Note)
+		if err != nil {
+			return internalError(ctx, err)
+		}
+		if refusal != nil {
+			return apiError(ctx, refusal.status, refusal.code, refusal.detail)
+		}
+		record = learned
+	} else {
+		record, err = passport.BuildKnownGood(*profile, *window, request.Note)
+		if err != nil {
+			return apiError(ctx, fiber.StatusUnprocessableEntity, "CAPTURE_NOT_HEALTHY", err.Error())
+		}
 	}
 	stored, err := repository.SaveKnownGood(record)
 	if errors.Is(err, domain.ErrKnownGoodExists) {

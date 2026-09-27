@@ -153,3 +153,11 @@ export function LiveTelemetryUnavailable({ error, onRetry, onPractice }: { error
 export function DemoProbePlanView({ plan, onContinue }: { plan: ProbePlan | null; onContinue: () => void }) {
   return <section><div className="page-heading"><div><span className="eyebrow">BUILT-IN SIMULATOR</span><h1>Demo probe plan</h1><p>This illustrative plan is generated from the confirmed demo profile. No physical probe connection is claimed.</p></div></div>{plan ? <div className="probe-plan-grid">{plan.instructions.map((step) => <article className={`probe-instruction ${step.probe === "GND" ? "ground" : ""}`} key={step.probe}><div className="probe-badge">{step.probe}</div><div><span className="eyebrow">{step.role}</span><h2>{step.target}</h2><p>{step.expected} · {step.signal_type}</p><div className="safety-warning"><ShieldCheck size={13} />{step.safe_warning}</div></div></article>)}</div> : <div className="empty-state panel"><p>Start the API to generate the demo placement plan from the profile.</p></div>}<button className="primary" onClick={onContinue}>Continue to simulator <ChevronRight size={15} /></button></section>;
 }
+
+export function DemoPlaceholderNotice({ onPractice }: { onPractice: () => void }) {
+  return <section className="demo-placeholder-notice" role="note">
+    <span className="demo-placeholder-tag">Placeholder data</span>
+    <p>Built-in demo only. These readings come from the simulated HC-SR04 example, not a physical circuit. A real project shows live REAL SERIAL telemetry here.</p>
+    <button className="text-button" onClick={onPractice}>Open Practice simulator <ChevronRight size={14} /></button>
+  </section>;
+}

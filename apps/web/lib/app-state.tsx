@@ -14,6 +14,7 @@ export type ProjectLoadResult = "ready" | "missing" | "unavailable";
 interface AppState {
   session: DemoSession | null;
   practiceSession: DemoSession;
+  practiceSource: "api" | "browser";
   source: "api" | "browser";
   liveAvailable: boolean;
   liveError: string | null;
@@ -452,7 +453,7 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
   }, [project, router, refreshLive]);
 
   const value: AppState = {
-    session, practiceSession, source, liveAvailable, liveError: viewLiveError, refreshLive, busy, toast, project, profile, probePlan, scenarios, selectedScenario, scenarioError, setSelectedScenario, mysteryPending, revealMystery: () => setMysteryPending(false),
+    session, practiceSession, practiceSource, source, liveAvailable, liveError: viewLiveError, refreshLive, busy, toast, project, profile, probePlan, scenarios, selectedScenario, scenarioError, setSelectedScenario, mysteryPending, revealMystery: () => setMysteryPending(false),
     recommendation, workflow: scopedWorkflow, testError, legacyVerify, showNewProject, setShowNewProject, currentProjectID, historyProjectID, sessionReady,
     runTestAction, runOriginalDemo, recordUserAction, runScenario, loadProject, completeProjectAnalysis,
     loadDemoProject, saveProfile, syncRepository, confirmProfile, reviseProfile, confirmConnections,

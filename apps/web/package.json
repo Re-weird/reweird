@@ -5,8 +5,7 @@
   "scripts": {
     "dev": "next dev --hostname 127.0.0.1",
     "build": "next build",
-    "postbuild": "mkdir -p .next/standalone/apps/web/.next && cp -r public .next/standalone/apps/web/public && cp -r .next/static .next/standalone/apps/web/.next/static",
-    "start": "node .next/standalone/apps/web/server.js",
+    "start": "node ../../scripts/serve-demo.mjs",
     "test:circuit-map": "node --test lib/circuit-map.test.mjs",
     "test:experience": "node --test lib/circuit-map.test.mjs lib/weird-demo.test.mjs lib/judge-demo.test.mjs lib/calibration.test.mjs lib/project-input.test.mjs lib/workbench.test.mjs lib/patch.test.mjs",
     "test:judge-demo": "node --test lib/judge-demo.test.mjs",

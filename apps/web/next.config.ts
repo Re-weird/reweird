@@ -1,6 +1,6 @@
 import type { NextConfig } from "next";
 
-const nextConfig: NextConfig = {
+const hardwareConfig: NextConfig = {
   output: "standalone",
   transpilePackages: ["@reweird/shared-types"],
   // Hosts (e.g. an ngrok tunnel) allowed to use the dev server's live-reload
@@ -20,4 +20,15 @@ const nextConfig: NextConfig = {
   },
 };
 
-export default nextConfig;
+// Judge builds contain only the explicitly named demo routes. Auth handlers,
+// project uploads, API rewrites, and live hardware pages are not deployed.
+const judgeConfig: NextConfig = {
+  output: "export",
+  pageExtensions: ["judge.tsx", "judge.ts"],
+  trailingSlash: true,
+  basePath: process.env.REWEIRD_BASE_PATH ?? "",
+  env: { NEXT_PUBLIC_DEMO_BASE_PATH: process.env.REWEIRD_BASE_PATH ?? "" },
+  images: { unoptimized: true },
+};
+
+export default process.env.REWEIRD_APP_MODE === "hardware" ? hardwareConfig : judgeConfig;

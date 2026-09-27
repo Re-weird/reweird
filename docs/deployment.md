@@ -62,13 +62,69 @@ vercel --prod --yes
 needs to leave this machine), `apps/api/data`, and the PlatformIO build
 cache. Keep it in sync if new large/generated paths show up.
 
-## API (Go) — not yet deployed
+## API (Go) — Railway
 
-Planned host: Railway. Not set up yet. Once it is:
+The Go API (`apps/api`) is hosted on Railway as service `reweird-api` in
+project `ReWierd` (workspace "Evin Bento's Projects"), built from
+`apps/api/Dockerfile` with the repo root as build context — `railway.json`
+at the repo root tells Railway's builder to use that Dockerfile instead of
+auto-detecting a builder. `.railwayignore` excludes `node_modules`, `.git`,
+`.next`, and the local dev sqlite db from the build context.
 
-1. Add the Railway URL as `API_INTERNAL_URL` in Vercel's env vars (all
-   targets that should reach it) and redeploy the web app.
-2. Point the GitHub App's webhook URL (`docs/github-app.md`) at the Railway
-   URL's `/webhooks/github`.
-3. Add a deploy job here for the API once Railway's deploy method (CLI,
-   GitHub integration, or Docker registry push) is decided.
+Railway assigns a dynamic `$PORT`; `apps/api/cmd/server/main.go` reads
+`PORT`, falling back to `API_PORT`, then `8080`, so it binds whatever
+Railway expects.
+
+A Railway volume is mounted at `/data`. `DATABASE_PATH=/data/reweird.db` and
+`UPLOAD_DIR=/data/uploads` point the app at it so the sqlite db and uploaded
+files survive redeploys. The Dockerfile runs as a non-root user; a small
+`docker-entrypoint.sh` chowns those paths under `/data` at container start
+(Railway mounts volumes owned by root, unwritable by the app's user,
+regardless of the image's `USER`) before dropping privileges.
+
+Public URL: `https://reweird-api-production.up.railway.app`.
+
+### Required env vars (on Railway, not GitHub)
+
+Set via `railway variable set <NAME> --service reweird-api`:
+
+- `API_HOST=0.0.0.0`, `API_TRUSTED_NETWORK=true` — the app refuses to bind a
+  non-loopback host without either `REWEIRD_API_TOKEN` (a static bearer
+  token gate) or this flag. `REWEIRD_API_TOKEN` isn't used here because the
+  same `Authorization: Bearer` header already carries each user's session
+  JWT (verified against `AUTH_TOKEN_SECRET`, see `apps/api/internal/httpapi/auth.go`)
+  — a static token would collide with that. `API_TRUSTED_NETWORK=true`
+  means this deployment relies on that per-user JWT check instead; requests
+  with no token are treated as anonymous/Demo Mode, same as running on a
+  trusted LAN.
+- `AUTH_TOKEN_SECRET` — must match the value set on Vercel, so tokens
+  `apps/web`'s `/api/auth/token` route mints verify here.
+- `TELEMETRY_MODE=simulator` — no serial hardware is attached to Railway.
+- `DATABASE_PATH=/data/reweird.db`, `UPLOAD_DIR=/data/uploads` — see above.
+- `PROJECT_PROFILE_ID=ultrasonic-demo` — the seeded demo profile.
+- `GITHUB_APP_ID`, `GITHUB_APP_SLUG`, `GITHUB_APP_CLIENT_ID`,
+  `GITHUB_APP_CLIENT_SECRET`, `GITHUB_WEBHOOK_SECRET` — same values as local
+  `.env`.
+- `GITHUB_APP_PRIVATE_KEY` — the PEM contents directly (not
+  `GITHUB_APP_PRIVATE_KEY_PATH`; there's no local file to point at on
+  Railway).
+- `GEMINI_API_KEY` — optional, not currently set; vision analysis stays
+  disabled without it, same as local dev without the key.
+
+### Required repo secrets (for `.github/workflows/deploy-api.yml`)
+
+| Secret | Where to get it |
+|---|---|
+| `RAILWAY_TOKEN` | Railway dashboard → project `ReWierd` → Settings → Tokens. Scope it to this project if possible. |
+
+Railway's own GitHub integration (connected via `railway service source connect`)
+also redeploys on every push to `main`, independent of CI. The GitHub Actions
+workflow adds an explicit CI-gated redeploy on top of that, matching the web
+deploy's pattern.
+
+### Remaining steps
+
+1. Add `API_INTERNAL_URL=https://reweird-api-production.up.railway.app` to
+   Vercel's env vars (all targets) and redeploy the web app.
+2. Point the GitHub App's webhook URL (`docs/github-app.md`) at
+   `https://reweird-api-production.up.railway.app/webhooks/github`.

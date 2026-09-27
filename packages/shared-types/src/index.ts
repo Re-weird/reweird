@@ -364,16 +364,32 @@ export interface VisionRelationship {
   source: "VISION_AI";
 }
 
+export interface VisionAnalysis {
+  status: string;
+  model?: string;
+  components: VisionComponent[];
+  relationships: VisionRelationship[];
+  warnings: string[];
+}
+
 export interface ProjectAnalysis {
   code: CodeAnalysis;
-  vision: {
-    status: string;
-    model?: string;
-    components: VisionComponent[];
-    relationships: VisionRelationship[];
-    warnings: string[];
-  };
+  vision: VisionAnalysis;
   generated_at_ms: number;
+}
+
+// PhysicalCommitVisionAnalysis is a persisted AI interpretation of a
+// Physical Commit's raw image -- never the raw image itself, and never
+// merged into the ProjectProfile/Circuit Map. Only ever exists when Gemini
+// genuinely succeeded (status "VISION_COMPLETE"); a skipped or failed
+// attempt is never stored.
+export interface PhysicalCommitVisionAnalysis {
+  id: string;
+  project_id: string;
+  physical_commit_id: string;
+  provider: string;
+  analysis: VisionAnalysis;
+  created_at_ms: number;
 }
 
 export interface ProjectMedia {

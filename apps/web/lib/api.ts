@@ -13,6 +13,7 @@ import type {
   PhysicalCommit,
   PhysicalCommitDetail,
   PhysicalCommitDiff,
+  PhysicalCommitVisionAnalysis,
   ProbePlan,
   Project,
   ProjectProfile,
@@ -165,6 +166,16 @@ export const physicalGitApi = {
     requestJSON<PhysicalCommitDetail>(`/api/v1/projects/${projectID}/physical-commits/${encodeURIComponent(commitID)}/detail`),
   diff: (projectID: string, fromID: string, toID: string) =>
     requestJSON<PhysicalCommitDiff>(`/api/v1/projects/${projectID}/physical-commits/diff?from=${encodeURIComponent(fromID)}&to=${encodeURIComponent(toID)}`),
+  analyzeHardware: (projectID: string, commitID: string) =>
+    requestJSON<PhysicalCommitVisionAnalysis>(`/api/v1/projects/${projectID}/physical-commits/${encodeURIComponent(commitID)}/analyze-hardware`, { method: "POST" }, 35_000),
+  getVisionAnalysis: async (projectID: string, commitID: string): Promise<PhysicalCommitVisionAnalysis | null> => {
+    try {
+      return await requestJSON<PhysicalCommitVisionAnalysis>(`/api/v1/projects/${projectID}/physical-commits/${encodeURIComponent(commitID)}/vision-analysis`);
+    } catch (error) {
+      if (error instanceof ApiError && error.code === "VISION_ANALYSIS_NOT_FOUND") return null;
+      throw error;
+    }
+  },
 };
 
 export const testApi = {

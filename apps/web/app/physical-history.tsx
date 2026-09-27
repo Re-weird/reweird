@@ -10,6 +10,7 @@ import type {
   PhysicalCommit,
   PhysicalCommitDetail,
   PhysicalCommitDiff,
+  PhysicalCommitVisionAnalysis,
   ProbeElectricalChange,
   Project,
 } from "@reweird/shared-types";
@@ -179,6 +180,103 @@ function CommitPhysicalStateModal({
   );
 }
 
+// Confidence below this threshold is flagged "Needs confirmation" in the UI.
+// This is purely a display grouping, not a new backend fact -- every
+// component already carries its real confidence value regardless.
+const NEEDS_CONFIRMATION_THRESHOLD = 0.9;
+
+function VisualEvidenceSection({ commit }: { commit: PhysicalCommit }) {
+  const [visionAnalysis, setVisionAnalysis] = useState<PhysicalCommitVisionAnalysis | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [loaded, setLoaded] = useState(false);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    setVisionAnalysis(null);
+    setLoaded(false);
+    setError("");
+    if (!commit.image) return;
+    let active = true;
+    physicalGitApi.getVisionAnalysis(commit.project_id, commit.id)
+      .then((result) => { if (active) { setVisionAnalysis(result); setLoaded(true); } })
+      .catch((caught) => { if (active) { setError(errorMessage(caught)); setLoaded(true); } });
+    return () => { active = false; };
+  }, [commit.id, commit.project_id, commit.image]);
+
+  async function analyze() {
+    setBusy(true);
+    setError("");
+    try {
+      setVisionAnalysis(await physicalGitApi.analyzeHardware(commit.project_id, commit.id));
+    } catch (caught) {
+      setError(errorMessage(caught));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (!commit.image) {
+    return (
+      <>
+        <p className="inline-empty">Not captured</p>
+        <p className="inline-empty">Hardware image analysis unavailable because this commit has no captured image.</p>
+      </>
+    );
+  }
+
+  const needsConfirmation = visionAnalysis?.analysis.components.filter((component) => component.confidence < NEEDS_CONFIRMATION_THRESHOLD) ?? [];
+
+  return (
+    <>
+      <div className="analysis-source-row">
+        <ImageIcon size={17} />
+        <div><strong>{commit.image.original_filename}</strong><span>{commit.image.content_type} &middot; {(commit.image.size_bytes / 1024).toFixed(0)} KB</span></div>
+      </div>
+      <p className="inline-empty" style={{ textAlign: "left", padding: "4px 0" }}>Raw image evidence &mdash; captured {formatTimestamp(commit.created_at_ms)}.</p>
+
+      <div style={{ border: "1px solid var(--line-soft)", borderRadius: 10, padding: 12, marginTop: 8 }}>
+        <div className="panel-heading"><div><span className="eyebrow">AI interpretation, not evidence</span><h2 style={{ fontSize: 12, margin: "3px 0" }}>AI Analysis</h2></div></div>
+
+        {!loaded && !error && <div className="analysis-progress"><RefreshCw className="spin" size={15} /><span>Loading&hellip;</span></div>}
+        {error && <div className="form-error" role="alert"><AlertTriangle size={15} />{error}</div>}
+
+        {loaded && !visionAnalysis && (
+          <>
+            <p className="inline-empty">Not analyzed</p>
+            <button type="button" className="secondary" disabled={busy} onClick={analyze}>{busy ? <RefreshCw className="spin" size={16} /> : <Zap size={16} />} Analyze Hardware</button>
+          </>
+        )}
+
+        {visionAnalysis && (
+          <>
+            {visionAnalysis.analysis.status === "VISION_COMPLETE" && visionAnalysis.analysis.components.length === 0 && (
+              <p className="inline-empty">Gemini Vision did not identify any components in this photo.</p>
+            )}
+            <div className="git-files">
+              {visionAnalysis.analysis.components.map((component, index) => (
+                <div key={`${component.catalog_id || component.name}-${index}`}>
+                  <code>{component.name}</code>
+                  <small>confidence: {Math.round(component.confidence * 100)}%</small>
+                </div>
+              ))}
+            </div>
+            {needsConfirmation.length > 0 && (
+              <div style={{ marginTop: 8 }}>
+                <span className="eyebrow">Needs confirmation</span>
+                <ul style={{ margin: "4px 0 0", paddingLeft: 16, fontSize: 9, color: "var(--muted)" }}>
+                  {needsConfirmation.map((component, index) => <li key={index}>{component.name} &mdash; confidence below {Math.round(NEEDS_CONFIRMATION_THRESHOLD * 100)}%</li>)}
+                </ul>
+              </div>
+            )}
+            <div className="spec-chips" style={{ marginTop: 8 }}><span>Analyzed {formatTimestamp(visionAnalysis.created_at_ms)}</span></div>
+            <button type="button" className="text-button" disabled={busy} onClick={analyze} style={{ marginTop: 8 }}>{busy ? <RefreshCw className="spin" size={14} /> : <Upload size={14} />} Re-analyze</button>
+          </>
+        )}
+      </div>
+    </>
+  );
+}
+
 function CommitDetailPanel({ detail }: { detail: PhysicalCommitDetail }) {
   const { commit, measurement } = detail;
   const components = commit.profile_snapshot?.components ?? null;
@@ -193,9 +291,7 @@ function CommitDetailPanel({ detail }: { detail: PhysicalCommitDetail }) {
       {commit.note && <p>{commit.note}</p>}
 
       <h3>Visual</h3>
-      {commit.image ? (
-        <div className="analysis-source-row"><ImageIcon size={17} /><div><strong>{commit.image.original_filename}</strong><span>{commit.image.content_type} &middot; {(commit.image.size_bytes / 1024).toFixed(0)} KB</span></div></div>
-      ) : <p className="inline-empty">Not captured</p>}
+      <VisualEvidenceSection commit={commit} />
 
       <h3>Hardware</h3>
       {components === null ? (

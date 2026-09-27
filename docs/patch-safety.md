@@ -7,6 +7,14 @@ LOCKED. `/api/v1/patch` remains HTTP 423: arbitrary GPIO commands are never allo
 `REWEIRD_PATCH_ENABLE=true` cannot unlock anything. Master enable starts OFF on
 every backend restart and is bound to device boot, profile and mapping.
 
+The same production API/web build discovers a newly qualified device without
+an application-code rewrite: LOCKED → READY → ARMED → ACTIVE → DISABLED.
+Readiness alone never enables output or grants approval. Device firmware must
+carry its reviewed hardware qualification record and detect its physical
+interlock; a client capability claim or environment variable is insufficient.
+On the current board the UI reads **PATCH SOFTWARE READY** and
+**PHYSICAL PATCH LOCKED — protected output hardware not detected**.
+
 ## Implemented
 
 - Backend parameter allowlist and hard limits; server-generated action ID;

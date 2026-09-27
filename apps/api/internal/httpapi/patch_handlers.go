@@ -24,12 +24,12 @@ func (c *Controller) patchStatus(ctx *fiber.Ctx) error {
 		c.mu.RLock()
 		master := c.patchEnabled[r.ProfileID] == r.DeviceID+":"+r.BootID+":"+r.ProbeMapHash
 		c.mu.RUnlock()
-		return ctx.JSON(fiber.Map{"state": "PATCH " + r.State, "physical_enabled": master, "master_enabled": master, "software_ready": true, "capability": r, "detail": "PATCH software ready — physical output requires verified PATCH hardware. One bounded action requires explicit approval."})
+		return ctx.JSON(fiber.Map{"state": "PATCH " + r.State, "physical_enabled": master, "master_enabled": master, "software_ready": true, "capability": r, "detail": "Verified protected output capability detected. Master enable and explicit approval are required for each bounded action."})
 	}
 	return ctx.JSON(fiber.Map{"state": "PATCH LOCKED", "physical_enabled": false, "master_enabled": false,
 		"software_ready":              true,
 		"physical_interface_verified": false, "physical_driver_available": false,
-		"supported_physical_actions": []string{}, "detail": "PATCH software ready — physical output requires verified PATCH hardware."})
+		"supported_physical_actions": []string{}, "detail": "PHYSICAL PATCH LOCKED — protected output hardware not detected"})
 }
 
 func (c *Controller) patchActions(ctx *fiber.Ctx) error {

@@ -37,9 +37,9 @@ export function PatchStatus() {
   };
   return <section className="panel guided-panel" aria-label="PATCH hardware safety">
     <p className="kicker">{status?.state ?? "PATCH LOCKED"} · Master enable {status?.master_enabled ? "ON" : "OFF"}</p>
-    <h2>PATCH software ready — physical output requires verified PATCH hardware.</h2>
+    <h2>{status?.software_ready ? "PATCH SOFTWARE READY" : "PATCH CONTROLLER UNAVAILABLE"}</h2>
     <p>{status?.detail ?? "Controller unavailable; physical execution is not available."}</p>
-    <p>P1–P6 remain measurement inputs. Current unprovisioned hardware cannot drive a node.</p>
+    <p>P1–P6 remain measurement inputs. Physical output requires a verified dedicated protected interface.</p>
     {qualified && <>
       <button className="secondary" disabled={busy || !!pending} onClick={() => void run(() => patchApi.master(currentProjectID, !status?.master_enabled))}>{status?.master_enabled ? "Disable master output" : "Enable master for this verified hardware session"}</button>
       {!pending && <div>

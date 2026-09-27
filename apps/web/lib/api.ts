@@ -98,7 +98,7 @@ export interface PatchAction {
   events: { state: string; at_ms: number; detail: string }[];
   before?: { measurement_id: number; source: string }; after?: { measurement_id: number; source: string };
 }
-export interface PatchStatusResponse { state: string; physical_enabled: boolean; master_enabled: boolean; detail: string; capability?: { profile_id: string; target_node: string; pin: number } }
+export interface PatchStatusResponse { state: string; physical_enabled: boolean; master_enabled: boolean; software_ready?: boolean; detail: string; capability?: { profile_id: string; target_node: string; pin: number } }
 const patchPath = (id: string) => `/api/v1/projects/${encodeURIComponent(id)}/patch`;
 export const patchApi = {
   status: () => requestJSON<PatchStatusResponse>("/api/v1/patch/status"),

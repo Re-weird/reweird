@@ -18,12 +18,14 @@ import (
 // Emulates only the wire; all HTTP authorization, driver, persisted capture and
 // existing VERIFY code run unchanged. This is NOT physical qualification.
 type qualifiedWire struct {
-	mu      sync.Mutex
-	profile domain.ProjectProfile
-	reply   patchcontrol.Reply
-	seq     uint64
-	outputs int
-	dead    bool
+	mu          sync.Mutex
+	profile     domain.ProjectProfile
+	reply       patchcontrol.Reply
+	seq         uint64
+	outputs     int
+	dead        bool
+	unqualified bool
+	commands    int
 }
 
 func (s *qualifiedWire) Name() string    { return "serial" }
@@ -33,7 +35,7 @@ func (s *qualifiedWire) Latest(context.Context) (domain.TelemetryEnvelope, error
 	defer s.mu.Unlock()
 	f := physicalfixture.Frame(s.seq)
 	f.UptimeMS = uint64(1000 + s.seq*1000)
-	f.Patch = &domain.PatchCapability{Capable: true, BootID: 1, State: s.reply.State, MaxDurationMS: 250}
+	f.Patch = &domain.PatchCapability{Capable: !s.unqualified, BootID: 1, State: s.reply.State, MaxDurationMS: 250}
 	return f, nil
 }
 func (s *qualifiedWire) WaitNext(ctx context.Context, seq uint64) (domain.TelemetryEnvelope, error) {
@@ -45,6 +47,7 @@ func (s *qualifiedWire) WaitNext(ctx context.Context, seq uint64) (domain.Teleme
 func (s *qualifiedWire) PatchExchange(ctx context.Context, c patchcontrol.Command) (patchcontrol.Reply, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	s.commands++
 	r := s.reply
 	r.Type = "patch_status"
 	r.OK = true
@@ -86,6 +89,27 @@ func TestPatchHTTPFullQualifiedLifecycleAndRestart(t *testing.T) {
 	}
 	app := makeApp()
 	path := "/api/v1/projects/" + p.ID + "/patch"
+	// SAME app instance: no environment flag can fabricate qualification;
+	// replacing the device capability enables READY without an app rewrite.
+	t.Setenv("REWEIRD_PATCH_ENABLE", "true")
+	source.unqualified = true
+	var capabilityStatus struct {
+		State         string `json:"state"`
+		Detail        string `json:"detail"`
+		SoftwareReady bool   `json:"software_ready"`
+	}
+	decodeBody(t, doJSON(t, app, "GET", "/api/v1/patch/status", nil), &capabilityStatus)
+	if capabilityStatus.State != "PATCH LOCKED" || !capabilityStatus.SoftwareReady || capabilityStatus.Detail != "PHYSICAL PATCH LOCKED — protected output hardware not detected" || source.commands != 0 {
+		t.Fatalf("unqualified device must stay locked without receiving commands: %+v", capabilityStatus)
+	}
+	if r := doJSON(t, app, "POST", path+"/master", map[string]any{"enabled": true, "confirm": true}); r.StatusCode != 423 {
+		t.Fatal("master enabled unqualified hardware", r.StatusCode)
+	}
+	source.unqualified = false
+	decodeBody(t, doJSON(t, app, "GET", "/api/v1/patch/status", nil), &capabilityStatus)
+	if capabilityStatus.State != "PATCH READY" || source.outputs != 0 {
+		t.Fatalf("qualified capability did not unlock readiness in same app: %+v", capabilityStatus)
+	}
 	var a patchcontrol.Action
 	decodeBody(t, doJSON(t, app, "POST", path+"/prepare", map[string]any{"level": "HIGH", "duration_ms": 10}), &a)
 	if a.State != "AWAITING_APPROVAL" || source.outputs != 0 {
@@ -109,6 +133,10 @@ func TestPatchHTTPFullQualifiedLifecycleAndRestart(t *testing.T) {
 	decodeBody(t, r, &result)
 	if r.StatusCode != 200 || result.State != "VERIFY" || result.Before == nil || result.After == nil || result.Before.MeasurementID == result.After.MeasurementID || result.After.Source != "REAL_SERIAL" || source.outputs != 1 {
 		t.Fatalf("lifecycle failed: status=%d %+v", r.StatusCode, result)
+	}
+	decodeBody(t, doJSON(t, app, "GET", "/api/v1/patch/status", nil), &capabilityStatus)
+	if capabilityStatus.State != "PATCH DISABLED" {
+		t.Fatal("output did not return disabled", capabilityStatus.State)
 	}
 	if r := doJSON(t, app, "POST", approve, map[string]any{"digest": a.Digest, "confirm": true}); r.StatusCode != 409 {
 		t.Fatal("replay accepted")

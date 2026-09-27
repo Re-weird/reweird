@@ -49,6 +49,13 @@ func (controller *Controller) listHistory(ctx *fiber.Ctx) error {
 			return internalError(ctx, err)
 		}
 		for _, workflow := range page {
+			project, err := controller.repository.GetProject(workflow.ProjectID)
+			if err != nil {
+				return internalError(ctx, err)
+			}
+			if project != nil && project.OwnerID != ownerID(ctx) {
+				continue
+			}
 			summary := history.Summary(workflow)
 			if projectID != "" && summary.ProjectID != projectID {
 				continue
@@ -108,6 +115,13 @@ func (controller *Controller) historyWorkflow(ctx *fiber.Ctx) (*domain.Diagnosti
 	}
 	if workflow == nil {
 		return nil, ctx.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "HISTORY_NOT_FOUND"})
+	}
+	project, err := controller.repository.GetProject(workflow.ProjectID)
+	if err != nil {
+		return nil, internalError(ctx, err)
+	}
+	if project != nil && project.OwnerID != ownerID(ctx) {
+		return nil, fiber.NewError(fiber.StatusNotFound, "History not found.")
 	}
 	return workflow, nil
 }

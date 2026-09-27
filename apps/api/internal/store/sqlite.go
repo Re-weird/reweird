@@ -49,6 +49,14 @@ func Open(path string) (*SQLiteStore, error) {
 		return nil, err
 	}
 	store := &SQLiteStore{db: database}
+	if _, err := database.Exec(`CREATE TABLE IF NOT EXISTS bridge_bindings(project_id TEXT PRIMARY KEY, data TEXT NOT NULL)`); err != nil {
+		_ = database.Close()
+		return nil, err
+	}
+	if _, err := database.Exec(`CREATE TABLE IF NOT EXISTS bridge_capture_audit(project_id TEXT NOT NULL, sent_at_ms INTEGER NOT NULL, profile_hash TEXT NOT NULL, raw_payload TEXT NOT NULL, PRIMARY KEY(project_id,sent_at_ms))`); err != nil {
+		_ = database.Close()
+		return nil, err
+	}
 	if err := store.migrate(); err != nil {
 		_ = database.Close()
 		return nil, err

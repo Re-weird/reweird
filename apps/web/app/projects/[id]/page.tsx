@@ -5,8 +5,14 @@ import { Workbench } from "../../workbench";
 import { DemoPlaceholderNotice, LiveTelemetryUnavailable, ProjectLivePending } from "../../project-views";
 import { useAppState } from "@/lib/app-state";
 import { projectPath } from "@/lib/project-routes";
+import { USBBridgePanel } from "../../usb-bridge-panel";
 
 export default function ProjectWorkbenchPage() {
+  const {project} = useAppState();
+  return <>{project && <USBBridgePanel key={project.id} projectID={project.id} />}<ProjectWorkbenchContent /></>;
+}
+
+function ProjectWorkbenchContent() {
   const router = useRouter();
   const { session, practiceSession, practiceSource, project, profile, probePlan, source, liveAvailable, liveError, refreshLive, scenarios, busy, runScenario, runOriginalDemo, currentProjectID, historyProjectID } = useAppState();
   const openPractice = () => router.push(projectPath(currentProjectID, "simulator"));

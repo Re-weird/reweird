@@ -30,6 +30,7 @@ import type {
   TestRecommendation,
 } from "@reweird/shared-types";
 import { getAuthToken } from "./auth-token";
+import { scopeLiveRequest } from "./bridge-scope.mjs";
 import type { TelemetryStatus } from "./weird-demo";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "";
@@ -46,6 +47,7 @@ export class ApiError extends Error {
 }
 
 async function requestJSON<T>(path: string, init?: RequestInit, timeoutMS = 8_000, acceptUnavailableStatus = false): Promise<T> {
+	if (typeof window !== "undefined") path = scopeLiveRequest(path, window.location.pathname);
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMS);
   try {
@@ -107,6 +109,11 @@ export const patchApi = {
   prepare: (id: string, level: string, duration_ms: number) => requestJSON<PatchAction>(`${patchPath(id)}/prepare`, { method: "POST", body: JSON.stringify({ level, duration_ms }) }),
   approve: (id: string, action: PatchAction) => requestJSON<PatchAction>(`${patchPath(id)}/actions/${encodeURIComponent(action.id)}/approve`, { method: "POST", body: JSON.stringify({ digest: action.digest, confirm: true }) }, 10_000),
   cancel: (id: string, action: PatchAction) => requestJSON<PatchAction>(`${patchPath(id)}/actions/${encodeURIComponent(action.id)}/cancel`, { method: "POST", body: "{}" }),
+};
+
+export const bridgeApi = {
+  pair: (id: string, deviceID: string, wireProfileID: string) => requestJSON<{token: string; share_token: string; expires_at_ms: number}>(`/api/v1/projects/${encodeURIComponent(id)}/bridge/pair`, {method: "POST", body: JSON.stringify({device_id: deviceID, wire_profile_id: wireProfileID, confirm_mapping: true})}),
+  revoke: (id: string) => requestJSON(`/api/v1/projects/${encodeURIComponent(id)}/bridge`, {method: "DELETE"}),
 };
 
 export const demoApi = {

@@ -146,6 +146,7 @@ func newApp(engine *diagnostics.Engine, repository domain.Repository, source dom
 	api.Get("/projects/:id/profile", controller.getProjectProfile)
 	api.Put("/projects/:id/profile", controller.updateProjectProfile)
 	api.Post("/projects/:id/profile/confirm", controller.confirmProjectProfile)
+	api.Post("/projects/:id/profile/revise", controller.reviseProjectProfile)
 	api.Put("/projects/:id/visibility", controller.updateProjectVisibility)
 	api.Post("/projects/:id/sync", controller.syncProjectRepository)
 	api.Get("/github/status", controller.githubStatus)
@@ -167,6 +168,7 @@ func newApp(engine *diagnostics.Engine, repository domain.Repository, source dom
 	api.Get("/projects/:id/physical-commits/:commitId/vision-analysis", controller.getPhysicalCommitVisionAnalysis)
 	api.Get("/profiles/:id/passport", controller.devicePassport)
 	api.Post("/profiles/:id/known-good", controller.saveKnownGood)
+	api.Get("/profiles/:id/calibration", controller.calibration)
 
 	api.Get("/me", controller.me)
 	api.Get("/catalog", controller.listCatalog)

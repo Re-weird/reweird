@@ -100,7 +100,7 @@ func TestPassportStatusRequiresLaterMatchingCapture(t *testing.T) {
 	}
 	revised := profile
 	revised.Version++
-	if status, _ := CurrentStatus(revised, &later, &baseline, true); status != domain.PassportNeedsVerification {
+	if status, _ := CurrentStatus(revised, &later, &baseline, true); status != domain.PassportBaselineIncompatible {
 		t.Fatalf("outdated profile baseline verified current capture: %s", status)
 	}
 	later.Analysis.Probes = append([]domain.DerivedFacts(nil), later.Analysis.Probes...)

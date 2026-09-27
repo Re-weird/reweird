@@ -10,6 +10,7 @@ import type {
   HistoryDetail,
   HistoryStatus,
   HistorySummary,
+  CalibrationState,
   KnownGoodBaseline,
   MeasurementWindow,
   PhysicalCommit,
@@ -107,6 +108,7 @@ export const passportApi = {
     `/api/v1/profiles/${encodeURIComponent(profileID)}/known-good`,
     { method: "POST", body: JSON.stringify({ measurement_id: measurementID, confirm_healthy: true, note }) },
   ),
+  calibration: (profileID: string) => requestJSON<CalibrationState>(`/api/v1/profiles/${encodeURIComponent(profileID)}/calibration`),
 };
 
 export interface CreateProjectInput {
@@ -151,6 +153,9 @@ export const projectApi = {
   getProbePlan: (projectID: string) => requestJSON<ProbePlan>(`/api/v1/projects/${projectID}/probe-plan`),
   confirmProbeConnections: (projectID: string) =>
     requestJSON<ProbePlan>(`/api/v1/projects/${projectID}/probe-plan/confirm`, { method: "POST" }),
+  /** Opens profile revision N+1 as a draft; Known Good from revision N becomes incompatible. */
+  reviseProfile: (projectID: string) =>
+    requestJSON<ProjectProfile>(`/api/v1/projects/${projectID}/profile/revise`, { method: "POST" }),
 };
 
 export const githubApi = {

@@ -183,6 +183,8 @@ func componentForPin(pin domain.CodePinFinding) string {
 		return "hc-sr04"
 	case strings.Contains(name, "servo"):
 		return "sg90-servo"
+	case strings.Contains(name, "zmpt"):
+		return "zmpt101b"
 	case strings.Contains(name, "led"):
 		return "led"
 	case strings.Contains(name, "button") || strings.Contains(name, "switch"):

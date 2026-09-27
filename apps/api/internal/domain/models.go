@@ -543,7 +543,25 @@ type MeasurementWindow struct {
 	Analysis     AnalysisResult    `json:"analysis"`
 }
 
+// MeasurementQuery scopes a QueryMeasurements read. Probe is matched
+// against each window's samples (measurement_windows stores whole windows,
+// not one row per probe, so this is a best-effort, non-indexed filter
+// layered on top of the indexed profile_id/device_id/source/time-range
+// filters) -- see SQLiteStore.QueryMeasurements for the exact semantics.
+// Limit is always clamped by the implementation; it can never be
+// unbounded.
+type MeasurementQuery struct {
+	ProfileID string
+	DeviceID  string
+	Source    string
+	Probe     string
+	SinceMS   *int64
+	UntilMS   *int64
+	Limit     int
+}
+
 type MeasurementRepository interface {
 	SaveMeasurement(window MeasurementWindow) (MeasurementWindow, error)
 	ListMeasurements(profileID string, limit int) ([]MeasurementWindow, error)
+	QueryMeasurements(query MeasurementQuery) ([]MeasurementWindow, error)
 }

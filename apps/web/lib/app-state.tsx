@@ -20,6 +20,7 @@ interface AppState {
   probePlan: ProbePlan | null;
   scenarios: SimulatorScenario[];
   selectedScenario: string;
+  scenarioError: string | null;
   mysteryPending: boolean;
   revealMystery: () => void;
   setSelectedScenario: (id: string) => void;
@@ -69,6 +70,7 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
   const [probePlan, setProbePlan] = useState<ProbePlan | null>(null);
   const [scenarios, setScenarios] = useState<SimulatorScenario[]>([]);
   const [selectedScenario, setSelectedScenario] = useState("intermittent-connection");
+  const [scenarioError, setScenarioError] = useState<string | null>(null);
   const [mysteryPending, setMysteryPending] = useState(false);
   const [recommendation, setRecommendation] = useState<TestRecommendation | null>(null);
   const [workflow, setWorkflow] = useState<DiagnosticWorkflow | null>(null);
@@ -200,6 +202,7 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
 
   const runScenario = useCallback(async (scenarioID?: string, mystery = false) => {
     setBusy(true);
+    setScenarioError(null);
     try {
       const chosen = scenarioID ?? selectedScenario;
       const next = await demoApi.selectScenario(chosen);
@@ -218,8 +221,10 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
       setRecommendation(nextRecommendation);
       router.push(projectPath(DEMO_PROJECT_ID, "simulator"));
       setToast(mystery ? "Mystery scenario analyzed from simulated raw telemetry" : `${scenarios.find((scenario) => scenario.id === chosen)?.name ?? "Scenario"} analyzed from simulated raw telemetry`);
-    } catch {
-      setToast("The API simulator is unavailable; start the Go backend to run fault scenarios");
+    } catch (cause) {
+      const message = cause instanceof Error ? cause.message : "The simulator could not analyze this fault.";
+      setScenarioError(`${message} The selected result has not changed.`);
+      setToast("Could not load the selected fault");
     } finally {
       setBusy(false);
     }
@@ -336,7 +341,7 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
   }, [project, profile, router]);
 
   const value: AppState = {
-    session, source, busy, toast, project, profile, probePlan, scenarios, selectedScenario, setSelectedScenario, mysteryPending, revealMystery: () => setMysteryPending(false),
+    session, source, busy, toast, project, profile, probePlan, scenarios, selectedScenario, scenarioError, setSelectedScenario, mysteryPending, revealMystery: () => setMysteryPending(false),
     recommendation, workflow: scopedWorkflow, testError, legacyVerify, showNewProject, setShowNewProject, currentProjectID, historyProjectID, sessionReady,
     runTestAction, runOriginalDemo, recordUserAction, runScenario, loadProject, completeProjectAnalysis,
     loadDemoProject, saveProfile, syncRepository, confirmProfile, confirmConnections,

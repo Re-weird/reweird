@@ -21,7 +21,7 @@ export function AppChrome({ children }: { children: React.ReactNode }) {
   // The public landing page and the legacy single-page workbench render
   // their own full-page shells; don't wrap them in this app's chrome too.
   const pathname = usePathname() ?? "/";
-  if (pathname === "/" || pathname.startsWith("/app")) return <>{children}</>;
+  if (pathname === "/" || pathname.startsWith("/app") || pathname.startsWith("/try") || pathname === "/demo") return <>{children}</>;
   return (
     <main>
       <div className="content">

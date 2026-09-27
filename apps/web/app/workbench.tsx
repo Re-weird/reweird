@@ -416,7 +416,7 @@ export function Workbench({ session, project, profile, source, onNavigate, histo
         <MakeItWeird scenarios={scenarios} busy={busy} onRun={onRunScenario} onBrowserDemo={onBrowserDemo} />
         <nav className="weird-journey" aria-label="Optional demo journey"><span className="bench-label">Demo journey</span>{([
           ["Understand", "overview"], ["Map", "overview"], ["Make it weird", "simulator"], ["Detect", "workbench"],
-          ["Diagnose", "diagnosis"], ["Test", "next-test"], ["VERIFY", "verify"], ["Passport", "passport"],
+          ["Diagnose", "diagnosis"], ["Test", "next-test"], ["VERIFY", "verify"], ["Health", "health"],
         ] as [string, ProjectTabID][]).map(([label, tab], index) => <button key={`${label}-${index}`} onClick={() => onNavigate(tab)} className={index === demoStep + 3 && matchesProject ? "current" : ""}>{label}</button>)}</nav>
         {canBreakPhysical && <section className="weird-physical"><span className="bench-label">Optional serial demo · passive monitoring only</span><h2>YOUR TURN. Make the project act weird.</h2><p>Only use a pre-designated, low-voltage safe demo interaction documented for this build while ReWeird watches. Never disconnect arbitrary power, ground, or unknown connections.</p><button className="secondary" onClick={() => onNavigate("diagnosis")}>I’ve broken it · inspect evidence <ArrowUpRight size={15} /></button><small>This opens the latest evidence; it neither records nor verifies that a physical change occurred.</small></section>}
       </div>

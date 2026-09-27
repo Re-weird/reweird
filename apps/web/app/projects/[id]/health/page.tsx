@@ -1,20 +1,17 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { DevicePassportView } from "../../../device-passport";
+import { DeviceHealthView } from "../../../device-health";
 import { useAppState } from "@/lib/app-state";
 import { legacyViewPath } from "@/lib/project-routes";
 
-export default function DevicePassportPage() {
+export default function DeviceHealthPage() {
   const router = useRouter();
-  const { profile, project, probePlan, session, currentProjectID } = useAppState();
+  const { profile, currentProjectID } = useAppState();
   return (
-    <DevicePassportView
+    <DeviceHealthView
       key={profile?.id ?? "none"}
       profile={profile}
-      project={project}
-      plan={probePlan ?? project?.probe_plan ?? null}
-      session={session}
       onNavigate={(view) => router.push(legacyViewPath(currentProjectID, view))}
     />
   );

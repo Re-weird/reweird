@@ -14,6 +14,7 @@
 package cameracapture
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"errors"
@@ -23,9 +24,9 @@ import (
 	_ "image/png"
 	"io"
 	"mime"
-	"mime/multipart"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -174,16 +175,7 @@ func Capture(ctx context.Context, rawURL string) (Frame, error) {
 		if boundary == "" {
 			return Frame{}, fmt.Errorf("%w: multipart response is missing a boundary", errInvalidStream)
 		}
-		reader := multipart.NewReader(response.Body, boundary)
-		part, partErr := reader.NextPart()
-		if partErr != nil {
-			if requestCtx.Err() != nil {
-				return Frame{}, fmt.Errorf("%w: %v", errTimeout, partErr)
-			}
-			return Frame{}, fmt.Errorf("%w: %v", errInvalidStream, partErr)
-		}
-		defer part.Close()
-		payload, err = readBounded(part, maxFrameBytes)
+		payload, err = readMultipartFrame(response.Body, boundary, maxFrameBytes)
 	case strings.HasPrefix(mediaType, "image/"):
 		payload, err = readBounded(response.Body, maxFrameBytes)
 	default:
@@ -201,6 +193,80 @@ func Capture(ctx context.Context, rawURL string) (Frame, error) {
 		return Frame{}, fmt.Errorf("%w: frame did not decode as an image: %v", errInvalidStream, decodeErr)
 	}
 	return Frame{Bytes: payload, ContentType: http.DetectContentType(payload), Width: config.Width, Height: config.Height}, nil
+}
+
+// readMultipartFrame extracts exactly one frame from a
+// "multipart/x-mixed-replace" MJPEG stream. It deliberately does not use
+// Go's stdlib mime/multipart.Reader: that reader requires every boundary
+// delimiter to be preceded by "\r\n" per RFC 2046, but real Android/IP
+// camera apps observed in the field emit the next boundary immediately
+// after the previous frame's last byte with no CRLF at all. Against such a
+// stream, mime/multipart never recognizes the boundary, so it keeps reading
+// past it into subsequent frames until the size limit trips -- exactly the
+// failure this function exists to avoid.
+//
+// Instead, this reads the first part's header block itself and, when a
+// Content-Length header is present (as these camera apps' frames do),
+// reads exactly that many bytes -- independent of how the boundary after it
+// is formatted. Only when Content-Length is absent does it fall back to
+// scanning for the bare boundary bytes (accepting either a preceding CRLF
+// or none) within the size limit.
+func readMultipartFrame(body io.Reader, boundary string, max int64) ([]byte, error) {
+	reader := bufio.NewReaderSize(body, 4096)
+	delimiter := "--" + boundary
+
+	first, err := reader.ReadString('\n')
+	if err != nil {
+		return nil, fmt.Errorf("%w: %v", errInvalidStream, err)
+	}
+	if !strings.HasPrefix(strings.TrimRight(first, "\r\n"), delimiter) {
+		return nil, fmt.Errorf("%w: multipart response did not start with its boundary", errInvalidStream)
+	}
+
+	contentLength := int64(-1)
+	for {
+		line, err := reader.ReadString('\n')
+		if err != nil {
+			return nil, fmt.Errorf("%w: %v", errInvalidStream, err)
+		}
+		trimmed := strings.TrimRight(line, "\r\n")
+		if trimmed == "" {
+			break
+		}
+		if key, value, ok := strings.Cut(trimmed, ":"); ok && strings.EqualFold(strings.TrimSpace(key), "content-length") {
+			if parsed, parseErr := strconv.ParseInt(strings.TrimSpace(value), 10, 64); parseErr == nil {
+				contentLength = parsed
+			}
+		}
+	}
+
+	if contentLength >= 0 {
+		if contentLength == 0 {
+			return nil, fmt.Errorf("%w: empty frame", errInvalidStream)
+		}
+		if contentLength > max {
+			return nil, fmt.Errorf("%w: frame exceeds the %d byte limit", errInvalidStream, max)
+		}
+		payload := make([]byte, contentLength)
+		if _, err := io.ReadFull(reader, payload); err != nil {
+			return nil, fmt.Errorf("%w: %v", errInvalidStream, err)
+		}
+		return payload, nil
+	}
+
+	buffered, err := io.ReadAll(io.LimitReader(reader, max+1))
+	if err != nil {
+		return nil, fmt.Errorf("%w: %v", errInvalidStream, err)
+	}
+	if index := bytes.Index(buffered, []byte(delimiter)); index >= 0 {
+		buffered = bytes.TrimRight(buffered[:index], "\r\n")
+	} else if int64(len(buffered)) > max {
+		return nil, fmt.Errorf("%w: frame exceeds the %d byte limit", errInvalidStream, max)
+	}
+	if len(buffered) == 0 {
+		return nil, fmt.Errorf("%w: empty frame", errInvalidStream)
+	}
+	return buffered, nil
 }
 
 func readBounded(reader io.Reader, max int64) ([]byte, error) {

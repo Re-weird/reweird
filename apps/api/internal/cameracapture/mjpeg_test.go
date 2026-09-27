@@ -9,6 +9,7 @@ import (
 	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"testing"
 	"time"
 )
@@ -213,6 +214,44 @@ func TestValidateURLAcceptsPrivateLANAddress(t *testing.T) {
 	// real Android phone on the same Wi-Fi must not be rejected.
 	if _, err := ValidateURL("http://10.110.194.207:4444"); err != nil {
 		t.Fatalf("expected a private LAN address to be accepted, got %v", err)
+	}
+}
+
+// TestCaptureHandlesBoundaryWithoutLeadingCRLF replicates an Android
+// "IP Webcam"-style app observed in the field: it sends a Content-Length
+// header per frame but writes the next frame's boundary immediately after
+// the previous frame's last byte, with no "\r\n" first. RFC 2046 requires
+// that CRLF, and Go's stdlib mime/multipart.Reader refuses to recognize the
+// boundary without it -- which used to make Capture read straight through
+// into later frames until it hit the size limit. This must extract exactly
+// the first frame instead, using Content-Length rather than boundary
+// scanning to know where it ends.
+func TestCaptureHandlesBoundaryWithoutLeadingCRLF(t *testing.T) {
+	frame := validJPEG(t)
+	boundary := "frame"
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "multipart/x-mixed-replace; boundary="+boundary)
+		w.WriteHeader(http.StatusOK)
+		for i := 0; i < 2; i++ {
+			// No leading "\r\n" before "--frame" -- the exact malformation
+			// observed against a real camera app.
+			w.Write([]byte("--" + boundary + "\r\n"))
+			w.Write([]byte("Content-Type: image/jpeg\r\n"))
+			w.Write([]byte("Content-Length: " + strconv.Itoa(len(frame)) + "\r\n\r\n"))
+			w.Write(frame)
+		}
+	}))
+	defer server.Close()
+
+	result, err := Capture(context.Background(), server.URL)
+	if err != nil {
+		t.Fatalf("Capture() error = %v", err)
+	}
+	if result.Width != 4 || result.Height != 4 || result.ContentType != "image/jpeg" {
+		t.Fatalf("result = %#v", result)
+	}
+	if len(result.Bytes) != len(frame) {
+		t.Fatalf("expected exactly one frame's bytes (%d), got %d", len(frame), len(result.Bytes))
 	}
 }
 

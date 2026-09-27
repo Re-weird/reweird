@@ -4,12 +4,11 @@ import { ArrowRight, Cable, FlaskConical } from "lucide-react";
 
 export const metadata: Metadata = {
   title: "ReWeird demo",
-  description: "Watch the live hardware project demo, or try ReWeird yourself with a simulated circuit.",
+  description: "Explore the actual ReWeird app with simulated values, or try the circuit challenge.",
 };
 
-// "Project demo" starts from the landing page, where the team presents the
-// live hardware walkthrough.
-const PROJECT_DEMO_HREF = "/";
+// Open the real software interface with browser-generated measurements.
+const PROJECT_DEMO_HREF = "/software";
 
 export default function DemoChooserPage() {
   return <div className="jd-page">
@@ -20,8 +19,8 @@ export default function DemoChooserPage() {
         <Link href={PROJECT_DEMO_HREF} className="bench-panel jd-chooser-card">
           <Cable size={22} />
           <strong>Project demo</strong>
-          <p>Our team walks you through ReWeird with the real ESP32 and HC-SR04 connected live. Every reading comes from the hardware on the table.</p>
-          <span className="jd-chooser-tag live">LIVE HARDWARE</span>
+          <p>Explore the actual ReWeird workbench, circuit map, signal monitor, diagnosis, guided tests, and repair verification with simulated values. No sign-in or hardware needed.</p>
+          <span className="jd-chooser-tag live">APP + SIMULATED VALUES</span>
           <span className="jd-chooser-go">Start the project demo <ArrowRight size={15} /></span>
         </Link>
         <Link href="/try" className="bench-panel jd-chooser-card">

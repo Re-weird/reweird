@@ -243,7 +243,138 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--cyan); outline-
 .bench-empty h3 { font-size: 15px; font-weight: 500; color: var(--text); }
 .bench-empty p { font-size: 12px; line-height: 1.7; }
 
+/* --- Instrument-panel motion & precision pass: Probe setup, Diagnosis, Test &
+   verify, History, Physical History. Same quiet materials, sharper feedback:
+   spring-timed transitions, a calibrated accent rail, and numerics that read
+   as measured rather than decorative. No glow, no glass, no new radii. */
+:root { --ease-out: cubic-bezier(0.16, 1, 0.3, 1); --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1); }
 
+.page-heading .kicker, .page-heading .eyebrow { position: relative; padding-left: 13px; }
+.page-heading .kicker::before, .page-heading .eyebrow::before { content: ""; position: absolute; left: 0; top: 50%; width: 7px; height: 1.5px; background: var(--cyan); transform: translateY(-50%); }
+
+.panel, .probe-instruction, .history-item, .guided-panel { transition: border-color 180ms var(--ease-out), background 180ms var(--ease-out), transform 180ms var(--ease-out); }
+
+.live-badge span { animation: instrument-pulse 2.4s var(--ease-in-out) infinite; }
+.status-dot.stable, .status-dot.active { animation: instrument-pulse 2.4s var(--ease-in-out) infinite; }
+@keyframes instrument-pulse { 0%, 100% { opacity: 1; } 50% { opacity: .45; } }
+
+.probe-instruction { will-change: transform; }
+.probe-instruction:hover { border-color: var(--cyan); transform: translateY(-1px); }
+.probe-badge { transition: border-color 160ms var(--ease-out), color 160ms var(--ease-out); border: 1px solid transparent; font-variant-numeric: tabular-nums; }
+.probe-instruction:hover .probe-badge { border-color: var(--cyan); }
+
+.history-item:hover { background: var(--hover-bg); }
+.history-item:active, .primary:active, .secondary:active, .guided-actions button:active { transform: scale(.97); }
+.history-item.selected { position: relative; }
+.history-item.selected::before { content: ""; position: absolute; left: -1px; top: 8px; bottom: 8px; width: 2px; border-radius: 2px; background: var(--cyan); }
+
+.primary, .secondary, .text-button, .icon-button { transition: transform 140ms var(--ease-out), filter 140ms var(--ease-out), background 140ms var(--ease-out), border-color 140ms var(--ease-out); }
+
+.compare-grid strong { font-family: "DM Mono", monospace; font-variant-numeric: tabular-nums; letter-spacing: -.2px; }
+
+.rule-row { transition: border-color 160ms var(--ease-out), background 160ms var(--ease-out); }
+.rule-row:hover { border-color: var(--line); background: var(--surface-2); }
+.rule-icon { transition: transform 160ms var(--ease-out); }
+.rule-row:hover .rule-icon { transform: scale(1.08); }
+
+.guided-window-list > div, .guided-observations > div, .report-facts > div { transition: border-color 160ms var(--ease-out); }
+.guided-observations > div:hover, .report-facts > div:hover { border-color: var(--cyan); }
+.guided-observations span, .guided-window-list span { font-variant-numeric: tabular-nums; }
+
+.confidence-ring, .analysis-confidence { font-variant-numeric: tabular-nums; }
+
+.git-files > div { transition: border-color 160ms var(--ease-out); }
+.git-files > div:hover { border-color: var(--cyan); }
+
+.spec-chips span { transition: border-color 160ms var(--ease-out), color 160ms var(--ease-out); }
+.spec-chips span:hover { border-color: var(--cyan); color: var(--text); }
+
+/* --- Visible redesign layer: HUD instrument look for the five core tabs --- */
+.content:has(.probe-plan-grid, .guided-grid, .diagnosis-layout, .history-layout, .live-pending-panel) {
+  background-image: radial-gradient(circle at 1px 1px, color-mix(in srgb, var(--muted) 22%, transparent) 1px, transparent 0);
+  background-size: 22px 22px;
+}
+
+.page-heading { position: relative; padding: 22px 24px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); overflow: hidden; }
+.page-heading::after { content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 2px; background: linear-gradient(90deg, var(--cyan) 0 64px, transparent 64px); }
+.page-heading h1 { font-weight: 700; letter-spacing: -1.4px; }
+.page-heading .kicker, .page-heading .eyebrow { color: var(--cyan); font-family: "DM Mono", monospace; letter-spacing: 1.6px; }
+.page-heading p:last-child { color: var(--muted); }
+
+.panel, .probe-instruction, .guided-panel, .history-detail, .report-preview { position: relative; }
+.panel::before, .probe-instruction::before,
+.panel::after, .probe-instruction::after {
+  content: ""; position: absolute; width: 10px; height: 10px; pointer-events: none;
+  border-color: var(--cyan); border-style: solid; opacity: .0;
+  transition: opacity 200ms var(--ease-out), transform 200ms var(--ease-out);
+}
+.panel::before, .probe-instruction::before { top: -1px; left: -1px; border-width: 2px 0 0 2px; border-top-left-radius: 9px; transform: translate(3px, 3px); }
+.panel::after, .probe-instruction::after { bottom: -1px; right: -1px; border-width: 0 2px 2px 0; border-bottom-right-radius: 9px; transform: translate(-3px, -3px); }
+.panel:hover::before, .panel:hover::after, .probe-instruction:hover::before, .probe-instruction:hover::after { opacity: 1; transform: none; }
+
+.probe-plan-grid { gap: 14px; }
+.probe-instruction { --rail: var(--cyan); grid-template-columns: 64px 1fr; gap: 18px; padding: 22px 20px 20px; background: linear-gradient(var(--rail), var(--rail)) top / 100% 3px no-repeat, var(--surface); }
+.probe-instruction.ground { --rail: var(--green); }
+.probe-instruction .eyebrow { font-family: "DM Mono", monospace; letter-spacing: 1.4px; }
+.probe-instruction h2 { font-size: 15px; font-weight: 650; letter-spacing: -.2px; margin: 6px 0 4px; }
+.probe-instruction p { font-family: "DM Mono", monospace; font-size: 12px; color: var(--text); }
+.probe-badge {
+  width: 56px; height: 56px; border-radius: 8px; font-size: 14px; letter-spacing: .5px;
+  background: var(--bg); color: var(--cyan); border: 1px solid var(--line);
+  box-shadow: inset 0 0 0 3px var(--surface), inset 0 0 0 4px color-mix(in srgb, var(--cyan) 35%, transparent);
+  position: relative;
+}
+.probe-badge::before, .probe-badge::after { content: ""; position: absolute; left: 50%; width: 14px; height: 4px; transform: translateX(-50%); background: var(--line); border-radius: 1px; }
+.probe-badge::before { top: -3px; }
+.probe-badge::after { bottom: -3px; }
+.ground .probe-badge { color: var(--green); background: var(--bg); box-shadow: inset 0 0 0 3px var(--surface), inset 0 0 0 4px color-mix(in srgb, var(--green) 40%, transparent); }
+.safety-warning { margin-top: 12px; padding: 8px 10px; border-radius: 6px; background: color-mix(in srgb, var(--amber) 9%, transparent); border: 1px dashed color-mix(in srgb, var(--amber) 45%, transparent); }
+
+.probe-plan-grid + .primary, .connection-confirm .primary, .guided-actions .primary, .test-callout .primary {
+  min-height: 44px; padding: 0 8px 0 18px; border-radius: 999px; gap: 12px; font-weight: 650; margin-top: 18px;
+}
+.probe-plan-grid + .primary svg, .connection-confirm .primary svg {
+  width: 28px; height: 28px; padding: 6px; border-radius: 50%; background: #ffffff22;
+  transition: transform 180ms var(--ease-out);
+}
+.probe-plan-grid + .primary:hover svg { transform: translateX(3px); }
+
+.guided-panel, .history-detail, .report-preview, .interpretation-card, .evidence-panel { --rail: var(--cyan); background: linear-gradient(var(--rail), var(--rail)) top / 100% 3px no-repeat, var(--surface); padding-top: 22px; }
+.interpretation-card { --rail: var(--violet); }
+.guided-panel .eyebrow, .history-detail .eyebrow, .report-preview .eyebrow { display: inline-flex; align-items: center; gap: 6px; padding: 3px 8px; border: 1px solid var(--line); border-radius: 999px; background: var(--bg); color: var(--cyan); font-family: "DM Mono", monospace; letter-spacing: 1.2px; }
+.guided-panel .eyebrow::before, .history-detail .eyebrow::before, .report-preview .eyebrow::before { content: ""; width: 5px; height: 5px; border-radius: 50%; background: var(--cyan); animation: instrument-pulse 2.4s var(--ease-in-out) infinite; }
+.guided-window-list > div { padding: 12px 10px; }
+.guided-window-list > div strong { font-family: "DM Mono", monospace; letter-spacing: 1px; text-transform: uppercase; font-size: 11px; }
+
+.compare-grid > div { padding: 18px 16px 16px; border-top: 1px solid var(--line-soft); background: linear-gradient(var(--rail, var(--line)), var(--rail, var(--line))) top / 100% 3px no-repeat, var(--bg); }
+.compare-grid > div:nth-child(1) { --rail: var(--cyan); }
+.compare-grid > div:nth-child(2) { --rail: var(--red); }
+.compare-grid > div:nth-child(3) { --rail: var(--green); }
+.compare-grid strong { font-size: 18px; }
+
+.history-list { padding: 10px; background: var(--surface); }
+.history-item { border-radius: 8px; padding: 14px 14px 14px 30px; position: relative; }
+.history-item + .history-item { border-top-color: transparent; margin-top: 4px; }
+.history-item > span:first-child::before, .history-item > button > span::before {
+  content: ""; position: absolute; left: 12px; top: 19px; width: 8px; height: 8px; border-radius: 50%;
+  border: 2px solid var(--muted); background: var(--surface);
+}
+.history-item.selected > span:first-child::before, .history-item.selected > button > span::before { border-color: var(--cyan); background: var(--cyan); box-shadow: 0 0 0 3px var(--cyan-soft); }
+.history-item strong { font-family: "DM Mono", monospace; font-size: 13px; letter-spacing: -.1px; }
+.history-status { border: 1px solid currentColor; border-radius: 999px; padding: 2px 8px; height: fit-content; font-family: "DM Mono", monospace; }
+
+.git-files > div { background: var(--bg); }
+
+.demo-placeholder-notice { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; margin-bottom: 18px; padding: 11px 14px; border: 1px dashed color-mix(in srgb, var(--amber) 55%, transparent); border-radius: 8px; background: color-mix(in srgb, var(--amber) 7%, var(--surface)); }
+.demo-placeholder-notice p { flex: 1; min-width: 240px; margin: 0; font-size: 12px; line-height: 1.6; color: var(--muted); }
+.demo-placeholder-tag { font: 500 10px "DM Mono", monospace; letter-spacing: 1.2px; text-transform: uppercase; color: var(--amber); padding: 3px 8px; border: 1px solid color-mix(in srgb, var(--amber) 50%, transparent); border-radius: 999px; }
+.demo-placeholder-notice .text-button { display: inline-flex; align-items: center; gap: 4px; }
+
+@media (prefers-reduced-motion: reduce) {
+  .guided-panel .eyebrow::before, .history-detail .eyebrow::before, .report-preview .eyebrow::before { animation: none; }
+  .live-badge span, .status-dot.stable, .status-dot.active { animation: none; }
+  .panel, .probe-instruction, .history-item, .guided-panel, .primary, .secondary, .text-button, .icon-button, .rule-row, .rule-icon { transition: none; }
+}
 
 @media (min-width: 1500px) { .workbench-content { padding: 30px 35px 50px; } .bench-welcome { min-height: 260px; } .welcome-copy { padding: 32px; } }
 @media (max-width: 1250px) {

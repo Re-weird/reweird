@@ -25,11 +25,20 @@
 .map-wire.observed .map-wire-trace, .map-wire.observed .map-wire-trace::after { background: var(--green); }
 .map-wire.warn .map-wire-trace, .map-wire.warn .map-wire-trace::after { background: var(--amber); }
 .map-wire.fail .map-wire-trace, .map-wire.fail .map-wire-trace::after { background: var(--red); }
+.map-wire.normal .map-wire-trace, .map-wire.normal .map-wire-trace::after, .map-wire.recovered .map-wire-trace, .map-wire.recovered .map-wire-trace::after { background: var(--green); }
+.map-wire.suspect .map-wire-trace, .map-wire.suspect .map-wire-trace::after { background: var(--red); }
+.map-wire.testing .map-wire-trace, .map-wire.testing .map-wire-trace::after { background: var(--cyan); }
+.map-wire.suspect { border-color: var(--red); }
+.map-wire.testing { border-style: dashed; border-color: var(--cyan); }
+.map-wire.recovered { border-color: var(--green); }
 .map-wire-role { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text); font-size: 10px; font-weight: 700; }
 .map-wire-state { color: var(--muted); font-size: 9px; white-space: nowrap; }
 .map-wire.observed .map-wire-state { color: var(--green); }
 .map-wire.warn .map-wire-state { color: var(--amber); }
 .map-wire.fail .map-wire-state { color: var(--red); }
+.map-wire.normal .map-wire-state, .map-wire.recovered .map-wire-state { color: var(--green); }
+.map-wire.suspect .map-wire-state { color: var(--red); }
+.map-wire.testing .map-wire-state { color: var(--cyan); }
 .map-detail { margin-top: 15px; border: 1px solid var(--line); border-radius: 11px; padding: 15px; background: var(--surface-2); }
 .map-detail-top { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
 .map-detail h3 { margin: 5px 0 0; font-size: 13px; overflow-wrap: anywhere; }
@@ -37,6 +46,9 @@
 .map-status.observed { color: var(--green); border-color: var(--green); }
 .map-status.warn { color: var(--amber); border-color: var(--amber); }
 .map-status.fail { color: var(--red); border-color: var(--red); }
+.map-status.normal, .map-status.recovered { color: var(--green); border-color: var(--green); }
+.map-status.suspect { color: var(--red); border-color: var(--red); }
+.map-status.testing { color: var(--cyan); border-color: var(--cyan); }
 .map-detail-facts { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin-top: 14px; }
 .map-detail-facts > div { display: flex; flex-direction: column; gap: 6px; min-width: 0; border: 1px solid var(--line-soft); border-radius: 8px; padding: 10px; background: var(--surface); }
 .map-detail-facts small, .map-rule-list > small { color: var(--muted); font-size: 8px; text-transform: uppercase; letter-spacing: .5px; }

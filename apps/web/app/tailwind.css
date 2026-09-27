@@ -15,7 +15,9 @@
 @import "./globals.css" layer(legacy);
 @import "./workbench.css" layer(legacy);
 @import "./circuit-map.css" layer(legacy);
-@import "./device-passport.css" layer(legacy);
+@import "./calibration-panel.css" layer(legacy);
+@import "./weird-demo.css" layer(legacy);
+@import "./judge-demo.css" layer(legacy);
 @import "tailwindcss/theme.css" layer(theme);
 @import "tailwindcss/utilities.css" layer(utilities);
 
@@ -91,4 +93,30 @@
 @keyframes heat-in {
   from { opacity: 0; transform: translateY(4px) scale(0.6); }
   to { opacity: 1; transform: none; }
+}
+
+/* A signal pulse travelling along a circuit-map trace (controller -> part).
+   Applied to a full-width layer whose dot sits at its left edge, so the dot
+   crosses the whole trace once regardless of its length. */
+@keyframes trace-flow {
+  from { transform: translateX(0); opacity: 0; }
+  12% { opacity: 1; }
+  88% { opacity: 1; }
+  to { transform: translateX(100%); opacity: 0; }
+}
+
+/* Schematic traces use pathLength="100", so these work for any trace length. */
+@keyframes trace-run {
+  from { stroke-dashoffset: 100; }
+  to { stroke-dashoffset: 0; }
+}
+@keyframes trace-flicker {
+  0%, 100% { opacity: 1; }
+  8% { opacity: 0.25; }
+  12% { opacity: 1; }
+  47% { opacity: 1; }
+  50% { opacity: 0.2; }
+  53% { opacity: 0.9; }
+  56% { opacity: 0.3; }
+  60% { opacity: 1; }
 }

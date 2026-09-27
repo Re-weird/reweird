@@ -38,6 +38,25 @@ func (service *Service) Analyze(ctx context.Context, project domain.Project, ima
 	return analysis, service.merge(project, analysis)
 }
 
+// AnalyzeCommitImage runs only the Gemini Vision step against an
+// already-resolved image -- no code analysis, no ProjectProfile merge. It
+// is safe to call independently of project analysis and never mutates
+// anything. It matches a detected component's CatalogID against the
+// Component Catalog by name when Gemini did not already supply one; an
+// unmatched name is left blank (uncertain), never forced.
+func (service *Service) AnalyzeCommitImage(ctx context.Context, imagePath, contentType string) domain.VisionAnalysis {
+	result := service.vision.Analyze(ctx, imagePath, contentType)
+	for index, component := range result.Components {
+		if component.CatalogID != "" {
+			continue
+		}
+		if entry, ok := componentcatalog.Find(service.catalog, component.Name); ok {
+			result.Components[index].CatalogID = entry.ID
+		}
+	}
+	return result
+}
+
 func (service *Service) merge(project domain.Project, analysis domain.ProjectAnalysis) domain.ProjectProfile {
 	now := time.Now().UTC().UnixMilli()
 	profile := domain.ProjectProfile{
@@ -164,6 +183,8 @@ func componentForPin(pin domain.CodePinFinding) string {
 		return "hc-sr04"
 	case strings.Contains(name, "servo"):
 		return "sg90-servo"
+	case strings.Contains(name, "zmpt"):
+		return "zmpt101b"
 	case strings.Contains(name, "led"):
 		return "led"
 	case strings.Contains(name, "button") || strings.Contains(name, "switch"):

@@ -37,6 +37,26 @@ duplicate probes, unsafe ADC values, non-finite numbers, inconsistent edge
 counts, oversized arrays, unconfirmed profiles, cross-profile frames, and probe
 modes that differ from the confirmed profile.
 
+## Window semantics (clarified, fields unchanged)
+
+Every timing value describes one capture window only:
+
+- `max_gap_us` is the longest interval inside the window with no edge, counting
+  from the window start to the first edge and from the last edge to the window
+  end. With no edges it equals the window length. It can never exceed
+  `window_ms × 1000`.
+- `periods_us` and `high_pulse_widths_us` are reported only when both edges are
+  inside the window. A pulse straddling a window boundary contributes its edges
+  to the counts but no width or period.
+- `sequence` increases per device across resets: devices without a wall clock
+  (`captured_at_ms` = 0) keep a boot counter in the upper 32 bits.
+
+The backend does not clamp values that violate these rules. It marks the probe
+`capture_unreliable`, lists the reason in `capture_issues`, keeps the raw value,
+and refuses to use that probe as evidence for a circuit diagnosis or a Known
+Good baseline. Frames from older firmware whose gaps span several windows are
+reported this way.
+
 Raw values are device-side observations. The backend applies the confirmed
 `input_scale`, derives engineering units and signal facts, compares them with
 specifications and trusted baselines, then stores the original envelope and the

@@ -26,6 +26,32 @@ type KnownGoodBaseline struct {
 	ConfirmedBy    string          `json:"confirmed_by"`
 	Note           string          `json:"note,omitempty"`
 	Probes         []BaselineProbe `json:"probes"`
+	// Provenance names the measurement path, e.g. REAL_SERIAL. It is derived
+	// from the stored capture's source on the server, never from the client.
+	Provenance MeasurementProvenance `json:"provenance,omitempty"`
+	// ProbeMapping is the confirmed probe configuration the baseline was
+	// learned under; ProbeMappingHash lets later captures detect a remap.
+	ProbeMapping     []ProbeMappingEntry `json:"probe_mapping,omitempty"`
+	ProbeMappingHash string              `json:"probe_mapping_hash,omitempty"`
+	// Learned baselines cover a run of consecutive windows.
+	WindowCount        int   `json:"window_count,omitempty"`
+	FirstMeasurementID int64 `json:"first_measurement_id,omitempty"`
+	LastMeasurementID  int64 `json:"last_measurement_id,omitempty"`
+}
+
+type MeasurementProvenance string
+
+const (
+	ProvenanceRealSerial     MeasurementProvenance = "REAL_SERIAL"
+	ProvenanceSimulatedInput MeasurementProvenance = "SIMULATED"
+)
+
+type ProbeMappingEntry struct {
+	Probe      string    `json:"probe"`
+	Role       string    `json:"role"`
+	Mode       ProbeMode `json:"mode"`
+	InputScale float64   `json:"input_scale"`
+	Required   bool      `json:"required"`
 }
 
 type BaselineProbe struct {
@@ -57,13 +83,14 @@ type PassportRepair struct {
 type PassportStatus string
 
 const (
-	PassportNoPhysicalBaseline PassportStatus = "NO_PHYSICAL_BASELINE"
-	PassportNeedsVerification  PassportStatus = "NEEDS_VERIFICATION"
-	PassportHealthy            PassportStatus = "HEALTHY"
-	PassportDeviation          PassportStatus = "DEVIATION_DETECTED"
-	PassportSimulatedBaseline  PassportStatus = "SIMULATED_BASELINE"
-	PassportSimulatedMatch     PassportStatus = "SIMULATED_MATCH"
-	PassportSimulatedDeviation PassportStatus = "SIMULATED_DEVIATION"
+	PassportNoPhysicalBaseline   PassportStatus = "NO_PHYSICAL_BASELINE"
+	PassportNeedsVerification    PassportStatus = "NEEDS_VERIFICATION"
+	PassportHealthy              PassportStatus = "HEALTHY"
+	PassportDeviation            PassportStatus = "DEVIATION_DETECTED"
+	PassportSimulatedBaseline    PassportStatus = "SIMULATED_BASELINE"
+	PassportSimulatedMatch       PassportStatus = "SIMULATED_MATCH"
+	PassportSimulatedDeviation   PassportStatus = "SIMULATED_DEVIATION"
+	PassportBaselineIncompatible PassportStatus = "BASELINE_INCOMPATIBLE"
 )
 
 type DevicePassport struct {

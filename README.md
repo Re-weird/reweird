@@ -23,9 +23,45 @@ remain stable. ReWeird isolates the anomaly, recommends a wiggle test, observes
 that failures correlate with movement, simulates a repair, and verifies that the
 signal returns to its healthy baseline.
 
+## Judges: start here (no hardware needed)
+
+Open [http://localhost:3000/demo](http://localhost:3000/demo) and pick one:
+
+- **Project demo**: starts from the landing page, with our real ESP32 + HC-SR04 connected live.
+- **Try it yourself**: a simulated circuit at `/try`. It needs no hardware, no
+  Go API, no Python services and no sign-in:
+
+```bash
+npm install
+npm run dev
+```
+
+In the simulation you:
+
+1. **Make it weird.** Pick a fault, or let ReWeird secretly pick a **Mystery fault**.
+2. **Investigate.** Read three simulated probes and choose a test. The right test
+   changes the evidence. A wrong one says *That wasn’t it.* Hints are available.
+3. **Fix.** Pick a simulated repair. A wrong one is allowed.
+4. **VERIFY.** It shows **NOT WEIRD ANYMORE.** only when all four checks pass
+   again. Otherwise it shows **STILL WEIRD.**
+5. **Device Passport.** The whole run: time, tests, fixes and hints. You can
+   download it as JSON.
+
+A **SIMULATED DEMO** banner stays pinned throughout. Every simulated reading comes
+from fixed tables in `apps/web/lib/judge-demo.ts`, and nothing is sent to a server.
+The judge simulation lives only at `/try`; the project Workbench is kept for the
+live hardware demo.
+
 ## What is included
 
-- A polished Next.js + TypeScript diagnostic dashboard
+- A Next.js + TypeScript web app: public landing page, dashboard, project list,
+  settings, and per-project tabs (Workbench, Overview, Probe setup, Device
+  passport, Simulator, Diagnosis, Next test, Verify result, History, Reports,
+  Computer checks)
+- A `/demo` page that lets judges choose the live project demo or the
+  software-only `/try` simulation
+- Optional Google sign-in; when configured, projects are scoped to the signed-in
+  account, and anonymous demo mode keeps working without an account
 - A Go + Fiber API with SQLite diagnostic snapshots
 - A replaceable telemetry source interface with simulator and USB-serial ESP32 implementations
 - Compilable ESP32 firmware for passive P1-P6 ADC, digital, edge, pulse-period,
@@ -51,7 +87,6 @@ signal returns to its healthy baseline.
   button, generic digital I/O, PWM, I2C, and UART
 - Generic probe placement generated only after user confirmation, followed by a
   persisted "probes connected" gate
-- Project Profile, Live Diagnostics, Diagnosis, Verify, and Reports views
 - An interactive circuit map derived from each profile's components and
   connections; matching probe captures may overlay activity and per-probe checks
 - User-confirmed Known Good captures linked to persisted measurement windows,
@@ -74,6 +109,10 @@ signal returns to its healthy baseline.
 - A Settings & status view that reports configuration without showing secrets
 - A browser-side simulator fallback, so the demo still works if the Go API is
   not running
+- A software-only judge simulation at `/try`: pick a fault or a mystery, run
+  tests, try fixes, VERIFY, and get a downloadable Device Passport record
+- An optional **Break our circuit** Workbench challenge that appears only for a
+  matching live serial capture with confirmed probes
 
 ## Capability status
 
@@ -81,7 +120,7 @@ signal returns to its healthy baseline.
 | --- | --- |
 | Working now | Project input and server-controlled confirmation, static code analysis, SQLite storage, generic signal analysis, user-confirmed source-labeled baselines, Device Passport, guided tests, VERIFY, history, deterministic reports |
 | Simulated | Raw P1–P6 electrical scenarios, repair/verification demonstration, eight computer fault scenarios |
-| Optional | Gemini **Vision** for project photos and Gemini PROBE interpretation when configured; read-only Windows computer snapshot after opt-in; explicitly approved report Git commit/push after opt-in |
+| Optional | Google sign-in with per-account project ownership; Gemini **Vision** for project photos and Gemini PROBE interpretation when configured; read-only Windows computer snapshot after opt-in; explicitly approved report Git commit/push after opt-in |
 | Not yet hardware-validated | ESP32 firmware and USB serial ingestion compile but need electrical calibration and bench testing |
 | Locked for safety | PATCH active electrical output, autonomous computer repair, unattended Git push |
 
@@ -100,8 +139,8 @@ reweird/
 ├── services/
 │   ├── probe/               # AI reasoning interface boundary
 │   ├── understand/          # Optional code + vision proposal service
-│   ├── signal-analysis/     # Raw telemetry → structured facts boundary
-│   └── vision/              # Image analysis interface boundary
+│   ├── signal-analysis/     # Interface notes (analysis runs in apps/api)
+│   └── vision/              # Interface notes (adapter runs in apps/api)
 ├── firmware/esp32/          # Passive probe firmware and PlatformIO project
 ├── packages/
 │   ├── shared-types/        # Frontend contracts
@@ -159,7 +198,8 @@ npm run dev
 ```
 
 Open [http://localhost:3000](http://localhost:3000). If the API is unavailable,
-the header shows **Browser simulator** and every demo action still works. The
+evidence panels are labelled **BROWSER SIMULATOR** and the built-in demo still
+works. For judges, open [http://localhost:3000/demo](http://localhost:3000/demo). The
 `npm run dev` script binds the web server to `127.0.0.1` by default so the
 unfinished remote-access boundary is not exposed on a LAN.
 
@@ -187,14 +227,16 @@ npm run dev
 ```
 
 The Next.js server proxies `/api/*` to `http://127.0.0.1:8080` by default, so the
-browser uses one origin and the header shows **API simulator**. Configure a
+browser uses one origin and evidence panels are labelled **API SIMULATOR** (or
+**REAL SERIAL** with the ESP32 attached). Configure a
 different server-side target with `API_INTERNAL_URL`; `NEXT_PUBLIC_API_URL`
 remains available for deployments that intentionally expose a separate API
 origin.
 
 Security boundary: the standalone API binds to `127.0.0.1` by default.
 Compose publishes ports 3000/8080/8091 on host loopback only. Do not publish
-this stack to an untrusted network: the UI does not yet have user accounts.
+this stack to an untrusted network: Google sign-in is optional and the stack has
+not been hardened for public hosting.
 For direct API clients, setting a 32+ character `REWEIRD_API_TOKEN` requires
 `Authorization: Bearer <token>` on `/api/v1` routes; this credential must stay
 server-side. See [security model](docs/security.md) before changing bind or
@@ -215,6 +257,22 @@ configured per process; their defaults differ. Without a key, Python PROBE
 uses its offline deterministic provider and image analysis reports
 `VISION_SKIPPED`; code analysis, catalog enrichment, profile review,
 confirmation, and probe planning continue normally.
+
+### Optional Google sign-in
+
+Sign-in is off unless these are set. In `apps/web` (for example `.env.local`):
+
+```bash
+NEXT_PUBLIC_GOOGLE_CLIENT_ID=...   # turns the sign-in UI on
+GOOGLE_CLIENT_ID=...
+GOOGLE_CLIENT_SECRET=...
+AUTH_SECRET=...                    # NextAuth session secret
+AUTH_TOKEN_SECRET=...              # shared with the Go API
+```
+
+Set the same `AUTH_TOKEN_SECRET` in the Go API process. The web app then sends a
+short-lived signed token and the API scopes projects to the signed-in Google
+account. Without it, every caller is treated as an anonymous demo user.
 
 ## Real Project Understanding flow
 
@@ -354,10 +412,18 @@ replace simulation without a UI rewrite.
 | `POST` | `/api/v1/projects/:id/profile/confirm` | User-confirm the profile and generate a probe plan |
 | `GET` | `/api/v1/projects/:id/probe-plan` | Read generic probe placement instructions |
 | `POST` | `/api/v1/projects/:id/probe-plan/confirm` | Persist physical probe connection confirmation |
+| `PUT` | `/api/v1/projects/:id/visibility` | Store private/public visibility (not enforced yet) |
 | `GET` | `/api/v1/demo/session` | Current structured demo state |
+| `GET` | `/api/v1/demo/probe-plan` | Probe plan for the built-in demo |
 | `POST` | `/api/v1/demo/wiggle` | Run the simulated wiggle test |
 | `POST` | `/api/v1/demo/repair` | Simulate repair and re-measurement |
 | `POST` | `/api/v1/demo/reset` | Reset the scenario |
+| `GET` `POST` | `/api/v1/tests`, `/tests/current`, `/tests/recommendation`, `/tests/:id` and `/tests/:id/{start,actions,capture,remeasure,cancel}` | Guided tests and VERIFY ([contract](docs/guided-tests.md)) |
+| `GET` | `/api/v1/history`, `/history/:id` | Diagnostic history |
+| `GET` | `/api/v1/report`, `/reports/:id` | Deterministic JSON/Markdown reports |
+| `GET` `POST` | `/api/v1/computer/{status,scenarios,simulate,collect}` | Computer diagnostics ([notes](docs/computer-diagnostics.md)) |
+| `GET` `POST` | `/api/v1/git/{status,preview/:id,commit/:id}` | Approval-gated report Git sync ([notes](docs/git-sync.md)) |
+| `GET` | `/api/v1/status` | Settings and configuration status (no secrets) |
 | `POST` | `/api/v1/patch` | Always returns `423 PATCH_LOCKED` |
 
 Go API demo transitions are written to SQLite as immutable diagnostic
@@ -368,11 +434,17 @@ path from raw samples through validation, normalization, profile matching,
 measurement storage, structured evidence, diagnosis, guided change, and VERIFY.
 The simulator does not inject a diagnosis label into the engine; each result is
 derived from the raw electrical values and the confirmed profile.
+The judge simulation at `/try` is separate: it runs entirely in the browser and
+does not call the API. On the Workbench, the optional **Break our circuit**
+challenge only appears for a matching serial capture and confirmed probe setup;
+it never controls electrical output.
 
 ## Safety model
 
 - The LLM never receives or controls raw GPIO directly.
-- Firmware and backend perform input-only sensing; PATCH output is locked.
+- P1–P6 remain input-only sensing. The PATCH lifecycle is implemented, but the
+  current board's physical output stays locked without qualified dedicated
+  hardware. See [PATCH provisioning and safety](docs/patch-safety.md).
 - ESP32 frames are schema-versioned and bounded. Telemetry v2 requires a
   `profile_id`, and the backend rejects frames that do not match the active
   confirmed profile. It also rejects unknown
@@ -394,8 +466,11 @@ derived from the raw electrical values and the confirmed profile.
 - Gemini can only suggest `VISION_AI` facts. Conflicts are preserved, and only a
   user can confirm a Project Profile.
 - An inference cannot overwrite measured evidence.
-- A future PATCH controller must validate pin, voltage, waveform, frequency, and
-  duration before requesting explicit user approval.
+- PATCH validates the dedicated target/pin, voltage, mode, duration, device boot,
+  profile/mapping and action digest before explicit user approval. Master enable
+  defaults OFF. Firmware enforces bounded output and lease shutdown independently;
+  fresh REAL_SERIAL capture and VERIFY follow acknowledged disable. Practice
+  PATCH is an explicitly simulated lifecycle rehearsal, never physical evidence.
 - Git synchronization is disabled by default. The report adapter scans for
   secrets and requires local configuration and explicit per-commit approval;
   remote push needs an additional opt-in and approval.
@@ -430,9 +505,11 @@ See [docs/security.md](docs/security.md) for the full trust-boundary checklist.
 - A real Gemini request requires the operator's API key and network access. The
   adapter and structured-response parser are tested with a local fake endpoint,
   not a live paid key in this repository.
-- Browser user authentication, device identity, multi-user access, and
-  production upload scanning are not implemented. A shared API token is not a
-  browser login; do not expose the stack publicly.
+- Google sign-in is optional, and API ownership scoping only applies when
+  `AUTH_TOKEN_SECRET` is configured. Project visibility is stored but not
+  enforced. Device identity, team roles, and production upload scanning are not
+  implemented, and a shared API token is not a browser login; do not expose the
+  stack publicly.
 - The chart uses summarized samples rather than a high-frequency time-series
   store.
 
@@ -457,6 +534,7 @@ See [docs/security.md](docs/security.md) for the full trust-boundary checklist.
 ```bash
 npm run typecheck
 npm run build
+npm run test:experience --workspace @reweird/web
 npm audit
 
 cd apps/api

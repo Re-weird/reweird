@@ -19,6 +19,22 @@ is stable — items get checked off during implementation, not before.
   not enforced until auth exists. The `frontend` branch has Clerk/Google
   sign-in work that is not on `main` yet.
 
+- [x] **Database: PostgreSQL** for users and all app data (projects,
+  profiles, diagnostic sessions, measurement windows, test runs, reports,
+  git events). SQLite stays for local dev and tests. The switch is a new
+  `domain.Repository` implementation in `apps/api/internal/store`; domain
+  and HTTP code do not change. Replaces the "MongoDB Atlas later" note in
+  `README.md` / `docs/architecture.md`.
+- [x] **Project inputs:** code comes from the user's GitHub repo (pushes
+  to the default branch are analyzed); hardware photos come from the bench
+  camera as the circuit is built. No manual photo or code upload.
+- [x] **GitHub connects in Settings** via a GitHub App (read-only
+  Contents). New project = pick one of the user's repos; first-time users
+  get "Connect GitHub" instead. Setup: `docs/github-app.md`.
+- [x] **Git log is per project.** A project can link a repo; its Git log
+  tab shows ReWeird's own report commits plus the repo's commits, each
+  lined up with the diagnostic sessions before and after it.
+
 ## Open — needs a decision before building
 
 - [ ] Session strategy: cookie+server-side session vs JWT
@@ -55,6 +71,45 @@ is stable — items get checked off during implementation, not before.
   history, reports, git — anything keyed by project id)
 - [ ] Decide + implement handling of existing unowned dev-data projects
 
+### PostgreSQL (new)
+- [ ] Postgres service in `docker-compose.yml`; `DATABASE_URL` env var
+  (SQLite used when unset)
+- [ ] Migrations tool (e.g. goose or golang-migrate) and initial schema:
+  `users`, `projects`, `project_profiles`, `probe_plans`,
+  `diagnostic_sessions`, `measurement_windows`, `known_good_baselines`,
+  `test_workflows`, `reports`, `git_events`
+- [ ] `users`: id, email (unique), name, avatar_url, auth_provider,
+  provider_subject, created_at, last_seen_at
+- [ ] `owner_id` FK on `projects`; `project_id` FK on every
+  session/window/baseline/workflow/report row (today these are one shared
+  instance for everybody, not per project)
+- [ ] Postgres `Repository` implementation passing the existing store tests
+- [ ] One-time import of the dev SQLite file (or wipe; see open question)
+
+### GitHub repos (new)
+- [x] GitHub App client: installation tokens, repo list, source at a
+  commit, webhook signature (`internal/githubapp`)
+- [x] `github_connections` table (owner -> installation); no user token kept
+- [x] `/github/status|connect|disconnect|repos`, `POST /projects` with
+  `repository`, `POST /projects/:id/sync`, `POST /webhooks/github`
+- [x] Poller for servers GitHub can't reach (`GITHUB_POLL_SECONDS`)
+- [x] Commits after profile confirmation recorded as BLOCKED, not analyzed
+- [ ] Profile revisions, so a confirmed project can take a new commit
+- [ ] Bench camera upload path (reuse `POST /projects/:id/media`)
+
+### Git log (new)
+- [x] `project.repository` with `default_branch` (link a repo to a project)
+- [ ] `git_events` table: project_id, sha, short_sha, branch, message,
+  author_name, author_email, committed_at, source (`reweird_report` |
+  `repo`), files_changed, additions, deletions, report_id (nullable),
+  session_before_id / session_after_id (nullable), pushed (bool),
+  push_error (nullable), created_at
+- [ ] Record a `git_events` row every time git sync commits/pushes a report
+- [ ] Import the linked repo's commits (local `git log` for a local repo;
+  GitHub API later) and dedupe by sha
+- [ ] `GET /api/v1/projects/:id/git-log?cursor=&source=&branch=`
+- [ ] Owner check on all of the above
+
 ### Existing (already built, just needs project-scoping wired through)
 - [x] `GET/POST /api/v1/projects`, `GET /api/v1/projects/:id`
 - [x] Project media/code upload + analyze
@@ -85,6 +140,12 @@ is stable — items get checked off during implementation, not before.
   sidebar Workspace group, Workbench's own upload panel) - Project
   Dashboard is now the one place to create a project
 - [ ] Basic account settings (at minimum: logout, maybe email display)
+- [ ] Profile rail and account dashboard read real numbers from `users` +
+  per-user aggregates (projects, sessions, joined date, heatmap)
+- [ ] Project "Git log" tab: commit list (short sha, message, author,
+  relative time, branch, +/- stats, pushed/local badge), each row linked
+  to its report and to the verdict before/after (e.g. FAIL -> PASS);
+  filter by source and branch; empty state with "Link a repo"
 
 ### Restructure existing (moved under real /projects/[id]/* routes)
 - [x] Live/probes view — folded directly into Workbench instead of
@@ -96,7 +157,13 @@ is stable — items get checked off during implementation, not before.
   loads whichever project the URL names (or clears to demo mode for
   the placeholder id `demo`) - no more single shared in-memory
   "current project"; opening a different URL loads a different project
-- [ ] Project workflow (upload/profile/confirm) — still a modal
+- [x] Settings: Connect GitHub / repository access / disconnect, plus
+  `/settings/github/callback`
+- [x] New-project dialog picks a GitHub repo (Connect GitHub first-time);
+  photo/code upload removed
+- [x] Overview shows the linked repo, analyzed commit, sync status, and
+  Check for new commits
+- [ ] Project workflow (repo/profile/confirm) — still a modal
   (`NewProjectModal`, global, triggered from the nav or Project
   Dashboard); not yet a project's own onboarding page
 

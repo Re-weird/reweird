@@ -1,0 +1,32 @@
+name: Deploy API to Railway
+
+# Runs after CI succeeds on main, so a broken build/vet/test never reaches
+# production. Railway's own GitHub integration is connected too (it deploys
+# on every push), but that races ahead of CI; this workflow gives us an
+# explicit, CI-gated redeploy using the same image Railway already built the
+# GitHub integration to build, via `railway redeploy --from-source`.
+on:
+  workflow_run:
+    workflows: ["CI"]
+    branches: [main]
+    types: [completed]
+
+concurrency:
+  group: deploy-api-production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Redeploy from latest commit (production)
+    if: github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    environment:
+      name: production
+    steps:
+      - name: Install Railway CLI
+        run: npm install --global @railway/cli@latest
+
+      - name: Redeploy reweird-api from the latest commit
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+        run: railway redeploy --yes --from-source --service reweird-api --environment production

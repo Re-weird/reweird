@@ -32,6 +32,49 @@ func TestDraftProfileAndConflict(t *testing.T) {
 	}
 }
 
+func TestAnalyzeCommitImageMatchesCatalogByNameWhenCatalogIDMissing(t *testing.T) {
+	catalog, err := componentcatalog.Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	visionResult := domain.VisionAnalysis{Status: "VISION_COMPLETE", Components: []domain.VisionComponent{
+		{Name: "HC-SR04", Confidence: .94, Source: domain.SourceVisionAI}, // no CatalogID -- must be matched by name
+	}}
+	service := New(codeanalysis.New(), fakeVision{visionResult}, catalog)
+	result := service.AnalyzeCommitImage(context.Background(), "ignored.jpg", "image/jpeg")
+	if len(result.Components) != 1 || result.Components[0].CatalogID != "hc-sr04" {
+		t.Fatalf("result = %#v", result)
+	}
+}
+
+func TestAnalyzeCommitImageLeavesUnmatchedComponentUncertain(t *testing.T) {
+	catalog, err := componentcatalog.Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	visionResult := domain.VisionAnalysis{Status: "VISION_COMPLETE", Components: []domain.VisionComponent{
+		{Name: "Mystery gadget", Confidence: .5, Source: domain.SourceVisionAI},
+	}}
+	service := New(codeanalysis.New(), fakeVision{visionResult}, catalog)
+	result := service.AnalyzeCommitImage(context.Background(), "ignored.jpg", "image/jpeg")
+	if len(result.Components) != 1 || result.Components[0].CatalogID != "" {
+		t.Fatalf("expected no forced catalog match, got %#v", result.Components[0])
+	}
+}
+
+func TestAnalyzeCommitImagePassesThroughSkippedStatusUnchanged(t *testing.T) {
+	catalog, err := componentcatalog.Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	skipped := domain.VisionAnalysis{Status: "VISION_SKIPPED", Warnings: []string{"Gemini Vision was skipped because GEMINI_API_KEY is not configured."}}
+	service := New(codeanalysis.New(), fakeVision{skipped}, catalog)
+	result := service.AnalyzeCommitImage(context.Background(), "ignored.jpg", "image/jpeg")
+	if result.Status != "VISION_SKIPPED" || len(result.Components) != 0 {
+		t.Fatalf("result = %#v", result)
+	}
+}
+
 func TestGenericProbePlanUsesProfileOrder(t *testing.T) {
 	profile := domain.ProjectProfile{ID: "motor-project", ProjectID: "motor-project", Connections: []domain.ProfileConnection{{ID: "motor", ComponentName: "Motor driver", Role: "MOTOR_PWM", Target: "ESP32 GPIO4 / driver PWM", Behavior: "pwm_output", Expected: domain.ExpectedSignal{SignalType: "PWM", Required: true}}}}
 	plan, probes, err := GenerateProbePlan(profile)

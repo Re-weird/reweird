@@ -16,8 +16,9 @@ import (
 )
 
 type SQLiteStore struct {
-	db            *sql.DB
-	measurementMu sync.Mutex
+	db               *sql.DB
+	measurementMu    sync.Mutex
+	physicalCommitMu sync.Mutex
 }
 
 func (store *SQLiteStore) Ping() error { return store.db.Ping() }
@@ -37,12 +38,22 @@ func (store *SQLiteStore) MeasurementWindowCount() (int, error) {
 }
 
 func Open(path string) (*SQLiteStore, error) {
-	database, err := sql.Open("sqlite", path)
+	// Without a busy timeout, a write that overlaps a read on another pooled
+	// connection fails at once with SQLITE_BUSY; wait up to 5s instead.
+	separator := "?"
+	if strings.Contains(path, "?") {
+		separator = "&"
+	}
+	database, err := sql.Open("sqlite", path+separator+"_pragma=busy_timeout(5000)")
 	if err != nil {
 		return nil, err
 	}
 	store := &SQLiteStore{db: database}
 	if err := store.migrate(); err != nil {
+		_ = database.Close()
+		return nil, err
+	}
+	if err := store.migrateGitHub(); err != nil {
 		_ = database.Close()
 		return nil, err
 	}
@@ -122,6 +133,24 @@ func (store *SQLiteStore) migrate() error {
 		);
 		CREATE INDEX IF NOT EXISTS idx_test_workflows_profile_updated
 			ON test_workflows(profile_id, updated_at_ms DESC);
+		CREATE TABLE IF NOT EXISTS physical_commits (
+			id TEXT PRIMARY KEY,
+			project_id TEXT NOT NULL,
+			sequence INTEGER NOT NULL,
+			created_at_ms INTEGER NOT NULL,
+			payload TEXT NOT NULL,
+			UNIQUE(project_id, sequence)
+		);
+		CREATE INDEX IF NOT EXISTS idx_physical_commits_project
+			ON physical_commits(project_id, sequence DESC);
+		CREATE TABLE IF NOT EXISTS physical_commit_vision_analyses (
+			physical_commit_id TEXT PRIMARY KEY,
+			project_id TEXT NOT NULL,
+			created_at_ms INTEGER NOT NULL,
+			payload TEXT NOT NULL
+		);
+		CREATE INDEX IF NOT EXISTS idx_physical_commit_vision_project
+			ON physical_commit_vision_analyses(project_id);
 	`)
 	return err
 }
@@ -506,6 +535,36 @@ func (store *SQLiteStore) SaveProject(project domain.Project) error {
 // SaveProject land in between and be overwritten by the stale copy.
 func (store *SQLiteStore) SetProjectVisibility(id string, visibility domain.ProjectVisibility) error {
 	result, err := store.db.Exec("UPDATE projects SET payload = json_set(payload, '$.visibility', ?) WHERE id = ?", string(visibility), id)
+	if err != nil {
+		return err
+	}
+	affected, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if affected == 0 {
+		return sql.ErrNoRows
+	}
+	return nil
+}
+
+// SetProjectCameraConfig updates only the camera_config field, the same
+// single-statement convention as SetProjectVisibility -- a read-modify-write
+// of the whole payload could otherwise be overwritten by, or overwrite, a
+// concurrent SaveProject. A nil config removes the field entirely rather
+// than storing a JSON null, so GetProject's omitempty round-trips cleanly.
+func (store *SQLiteStore) SetProjectCameraConfig(id string, config *domain.CameraConfig) error {
+	var result sql.Result
+	var err error
+	if config == nil {
+		result, err = store.db.Exec("UPDATE projects SET payload = json_remove(payload, '$.camera_config') WHERE id = ?", id)
+	} else {
+		payload, marshalErr := json.Marshal(config)
+		if marshalErr != nil {
+			return marshalErr
+		}
+		result, err = store.db.Exec("UPDATE projects SET payload = json_set(payload, '$.camera_config', json(?)) WHERE id = ?", string(payload), id)
+	}
 	if err != nil {
 		return err
 	}

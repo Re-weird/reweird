@@ -41,7 +41,7 @@ func testOwnedApp(t *testing.T) *fiber.App {
 		}
 		return ctx.Next()
 	}
-	return newApp(diagnostics.NewEngine(signalanalysis.New()), repository, simulator.NewUltrasonicSource(), demo.ID, ProjectServices{}, fakeOwnerMiddleware)
+	return newApp(diagnostics.NewEngine(signalanalysis.New()), repository, simulator.NewUltrasonicSource(), demo.ID, ProjectServices{UploadRoot: filepath.Join(root, "uploads")}, fakeOwnerMiddleware)
 }
 
 func doJSONAs(t *testing.T, app *fiber.App, method, path, owner string, payload any) *http.Response {

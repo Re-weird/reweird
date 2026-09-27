@@ -1,22 +1,36 @@
 import type {
   AnalyzeProjectResponse,
+  CameraConfig,
+  CameraTestFrame,
+  CameraTestResult,
   ConfirmProfileResponse,
   DemoSession,
   DiagnosticWorkflow,
   DetailedReport,
+  GitHubRepoList,
+  GitHubStatus,
   DevicePassport,
   HistoryDetail,
   HistoryStatus,
   HistorySummary,
+  CalibrationState,
   KnownGoodBaseline,
   MeasurementWindow,
+  PhysicalCommit,
+  PhysicalCommitDetail,
+  PhysicalCommitDiff,
+  PhysicalCommitVisionAnalysis,
+  PhysicalRestorePlan,
+  PhysicalVerifyResult,
   ProbePlan,
   Project,
   ProjectProfile,
+  RepositorySyncResponse,
   SimulatorScenarioList,
   TestRecommendation,
 } from "@reweird/shared-types";
 import { getAuthToken } from "./auth-token";
+import type { TelemetryStatus } from "./weird-demo";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "";
 
@@ -31,7 +45,7 @@ export class ApiError extends Error {
   }
 }
 
-async function requestJSON<T>(path: string, init?: RequestInit, timeoutMS = 8_000): Promise<T> {
+async function requestJSON<T>(path: string, init?: RequestInit, timeoutMS = 8_000, acceptUnavailableStatus = false): Promise<T> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMS);
   try {
@@ -49,6 +63,13 @@ async function requestJSON<T>(path: string, init?: RequestInit, timeoutMS = 8_00
     });
     const payload = (await response.json().catch(() => ({}))) as { error?: string; detail?: string } & T;
     if (!response.ok) {
+      // Telemetry status is itself a status report: 503 still includes the
+      // source mode and a useful disconnected reason. Do not treat 401 or an
+      // unrelated API failure as a status response.
+      const statusPayload = payload as unknown as Partial<TelemetryStatus>;
+      if (acceptUnavailableStatus && response.status === 503 &&
+          typeof statusPayload.mode === "string" &&
+          typeof statusPayload.connected === "boolean") return payload as T;
       throw new ApiError(payload.detail ?? "The ReWeird API rejected the request.", payload.error ?? "API_ERROR", response.status);
     }
     return payload as T;
@@ -71,8 +92,27 @@ async function demoRequest(path: string, init?: RequestInit): Promise<DemoSessio
   }
 }
 
+export interface PatchAction {
+  id: string; digest: string; state: string; result?: string;
+  parameters: { target_node: string; patch_pin: number; mode: string; logic_level: string; max_voltage: number; duration_ms: number; source: string; expires_at_ms: number; profile_id: string; profile_revision: number; device_id: string; boot_id: string; probe_map_hash: string };
+  events: { state: string; at_ms: number; detail: string }[];
+  before?: { measurement_id: number; source: string }; after?: { measurement_id: number; source: string };
+}
+export interface PatchStatusResponse { state: string; physical_enabled: boolean; master_enabled: boolean; software_ready?: boolean; detail: string; capability?: { profile_id: string; target_node: string; pin: number } }
+const patchPath = (id: string) => `/api/v1/projects/${encodeURIComponent(id)}/patch`;
+export const patchApi = {
+  status: () => requestJSON<PatchStatusResponse>("/api/v1/patch/status"),
+  history: (id: string) => requestJSON<PatchAction[]>(`${patchPath(id)}/actions`),
+  master: (id: string, enabled: boolean) => requestJSON(`${patchPath(id)}/master`, { method: "POST", body: JSON.stringify({ enabled, confirm: enabled }) }),
+  prepare: (id: string, level: string, duration_ms: number) => requestJSON<PatchAction>(`${patchPath(id)}/prepare`, { method: "POST", body: JSON.stringify({ level, duration_ms }) }),
+  approve: (id: string, action: PatchAction) => requestJSON<PatchAction>(`${patchPath(id)}/actions/${encodeURIComponent(action.id)}/approve`, { method: "POST", body: JSON.stringify({ digest: action.digest, confirm: true }) }, 10_000),
+  cancel: (id: string, action: PatchAction) => requestJSON<PatchAction>(`${patchPath(id)}/actions/${encodeURIComponent(action.id)}/cancel`, { method: "POST", body: "{}" }),
+};
+
 export const demoApi = {
   load: () => demoRequest("/api/v1/session"),
+  currentSession: () => requestJSON<DemoSession>("/api/v1/session"),
+  telemetryStatus: () => requestJSON<TelemetryStatus>("/api/v1/telemetry/status", undefined, 8_000, true),
   wiggle: () => demoRequest("/api/v1/demo/wiggle", { method: "POST" }),
   repair: () => demoRequest("/api/v1/demo/repair", { method: "POST" }),
   reset: () => demoRequest("/api/v1/demo/reset", { method: "POST" }),
@@ -100,6 +140,7 @@ export const passportApi = {
     `/api/v1/profiles/${encodeURIComponent(profileID)}/known-good`,
     { method: "POST", body: JSON.stringify({ measurement_id: measurementID, confirm_healthy: true, note }) },
   ),
+  calibration: (profileID: string) => requestJSON<CalibrationState>(`/api/v1/profiles/${encodeURIComponent(profileID)}/calibration`),
 };
 
 export interface CreateProjectInput {
@@ -107,6 +148,8 @@ export interface CreateProjectInput {
   description?: string;
   controller: string;
   logic_voltage: number;
+  /** "owner/name" from the user's connected GitHub account. */
+  repository?: string;
 }
 
 function uploadFile(path: string, file: File): Promise<Project> {
@@ -129,6 +172,9 @@ export const projectApi = {
   analyzeProject: (projectID: string) =>
     requestJSON<AnalyzeProjectResponse>(`/api/v1/projects/${projectID}/analyze`, { method: "POST" }, 35_000),
   getProject: (projectID: string) => requestJSON<Project>(`/api/v1/projects/${projectID}`),
+  /** Reads the linked repo's default branch now and analyzes it if it changed. */
+  syncRepository: (projectID: string) =>
+    requestJSON<RepositorySyncResponse>(`/api/v1/projects/${projectID}/sync`, { method: "POST" }, 95_000),
   setVisibility: (projectID: string, visibility: Project["visibility"]) =>
     requestJSON<Project>(`/api/v1/projects/${projectID}/visibility`, { method: "PUT", body: JSON.stringify({ visibility }) }),
   getDraftProfile: (projectID: string) => requestJSON<ProjectProfile>(`/api/v1/projects/${projectID}/profile`),
@@ -139,6 +185,79 @@ export const projectApi = {
   getProbePlan: (projectID: string) => requestJSON<ProbePlan>(`/api/v1/projects/${projectID}/probe-plan`),
   confirmProbeConnections: (projectID: string) =>
     requestJSON<ProbePlan>(`/api/v1/projects/${projectID}/probe-plan/confirm`, { method: "POST" }),
+  /** Opens profile revision N+1 as a draft; Known Good from revision N becomes incompatible. */
+  reviseProfile: (projectID: string) =>
+    requestJSON<ProjectProfile>(`/api/v1/projects/${projectID}/profile/revise`, { method: "POST" }),
+};
+
+// A camera source can be tested/captured either from the project's already
+// saved config (no override) or from a not-yet-saved URL the user just
+// typed, so every call here takes an optional override.
+export const cameraApi = {
+  saveConfig: (projectID: string, config: CameraConfig) =>
+    requestJSON<Project>(`/api/v1/projects/${projectID}/camera-config`, { method: "PUT", body: JSON.stringify(config) }),
+  clearConfig: (projectID: string) =>
+    requestJSON<Project>(`/api/v1/projects/${projectID}/camera-config`, { method: "DELETE" }),
+  test: (projectID: string, override?: Partial<CameraConfig>) =>
+    requestJSON<CameraTestResult>(`/api/v1/projects/${projectID}/camera/test`, { method: "POST", body: JSON.stringify(override ?? {}) }, 12_000),
+  captureTestFrame: (projectID: string, override?: Partial<CameraConfig>) =>
+    requestJSON<CameraTestFrame>(`/api/v1/projects/${projectID}/camera/capture-test-frame`, { method: "POST", body: JSON.stringify(override ?? {}) }, 12_000),
+};
+
+export const githubApi = {
+  status: () => requestJSON<GitHubStatus>("/api/v1/github/status"),
+  connect: (input: { installation_id: number; code: string; state: string }) =>
+    requestJSON<GitHubStatus>("/api/v1/github/connect", { method: "POST", body: JSON.stringify(input) }, 20_000),
+  disconnect: () => requestJSON<GitHubStatus>("/api/v1/github/disconnect", { method: "POST" }),
+  repos: () => requestJSON<GitHubRepoList>("/api/v1/github/repos", undefined, 20_000),
+};
+
+export const physicalGitApi = {
+  create: (projectID: string, input: { note?: string; file?: File }) => {
+    if (input.file) {
+      const form = new FormData();
+      if (input.note) form.append("note", input.note);
+      form.append("file", input.file, input.file.name);
+      return requestJSON<PhysicalCommit>(`/api/v1/projects/${projectID}/physical-commits`, { method: "POST", body: form });
+    }
+    return requestJSON<PhysicalCommit>(`/api/v1/projects/${projectID}/physical-commits`, {
+      method: "POST",
+      body: JSON.stringify({ note: input.note ?? "" }),
+    });
+  },
+  list: (projectID: string) =>
+    requestJSON<{ items: PhysicalCommit[]; count: number }>(`/api/v1/projects/${projectID}/physical-commits`),
+  get: (projectID: string, commitID: string) =>
+    requestJSON<PhysicalCommit>(`/api/v1/projects/${projectID}/physical-commits/${encodeURIComponent(commitID)}`),
+  getDetail: (projectID: string, commitID: string) =>
+    requestJSON<PhysicalCommitDetail>(`/api/v1/projects/${projectID}/physical-commits/${encodeURIComponent(commitID)}/detail`),
+  diff: (projectID: string, fromID: string, toID: string) =>
+    requestJSON<PhysicalCommitDiff>(`/api/v1/projects/${projectID}/physical-commits/diff?from=${encodeURIComponent(fromID)}&to=${encodeURIComponent(toID)}`),
+  analyzeHardware: (projectID: string, commitID: string) =>
+    requestJSON<PhysicalCommitVisionAnalysis>(`/api/v1/projects/${projectID}/physical-commits/${encodeURIComponent(commitID)}/analyze-hardware`, { method: "POST" }, 35_000),
+  getVisionAnalysis: async (projectID: string, commitID: string): Promise<PhysicalCommitVisionAnalysis | null> => {
+    try {
+      return await requestJSON<PhysicalCommitVisionAnalysis>(`/api/v1/projects/${projectID}/physical-commits/${encodeURIComponent(commitID)}/vision-analysis`);
+    } catch (error) {
+      if (error instanceof ApiError && error.code === "VISION_ANALYSIS_NOT_FOUND") return null;
+      throw error;
+    }
+  },
+  restore: (projectID: string, commitID: string, sourceID?: string) =>
+    requestJSON<PhysicalRestorePlan>(`/api/v1/projects/${projectID}/physical-commits/${encodeURIComponent(commitID)}/restore${sourceID ? `?source=${encodeURIComponent(sourceID)}` : ""}`),
+  verify: (projectID: string, commitID: string, observedID?: string) =>
+    requestJSON<PhysicalVerifyResult>(`/api/v1/projects/${projectID}/physical-commits/${encodeURIComponent(commitID)}/verify${observedID ? `?observed=${encodeURIComponent(observedID)}` : ""}`),
+};
+
+// PHYSICAL_GIT_DEMO_PROJECT_ID is the stable, well-known id of the seeded
+// Physical Git demo project (see apps/api/internal/demodata). These two
+// actions only ever affect that one anonymous demo project's simulated
+// current state -- the backend hard-gates on this exact id, so they can
+// never touch a real project.
+export const PHYSICAL_GIT_DEMO_PROJECT_ID = "physical-git-demo";
+export const physicalGitDemoApi = {
+  applyRestoration: () => requestJSON<{ status: string; state: string }>(`/api/v1/projects/${PHYSICAL_GIT_DEMO_PROJECT_ID}/demo/apply-restoration`, { method: "POST" }),
+  applyBreak: () => requestJSON<{ status: string; state: string }>(`/api/v1/projects/${PHYSICAL_GIT_DEMO_PROJECT_ID}/demo/apply-break`, { method: "POST" }),
 };
 
 export const testApi = {

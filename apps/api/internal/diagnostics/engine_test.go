@@ -200,8 +200,10 @@ func pulseEnvelope(rising uint32, activity []float64) domain.TelemetryEnvelope {
 
 func pulseSample(probe string, rising uint32, activity []float64) domain.TelemetrySample {
 	periods := []float64{}
+	widths := []float64{}
 	if rising > 0 {
 		periods = []float64{100_000, 100_000, 100_000}
+		widths = []float64{50_000, 50_000, 50_000}
 	}
 	return domain.TelemetrySample{
 		Probe:             probe,
@@ -210,7 +212,7 @@ func pulseSample(probe string, rising uint32, activity []float64) domain.Telemet
 		RisingEdges:       rising,
 		FallingEdges:      rising,
 		PeriodsUS:         periods,
-		HighPulseWidthsUS: []float64{50_000, 50_000, 50_000},
+		HighPulseWidthsUS: widths,
 		ActivityCounts:    activity,
 	}
 }

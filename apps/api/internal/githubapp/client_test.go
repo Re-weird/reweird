@@ -70,6 +70,13 @@ func newFakeGitHub(t *testing.T, key *rsa.PrivateKey) *fakeGitHub {
 		}
 		json.NewEncoder(writer).Encode(map[string]string{"access_token": "user-token"})
 	})
+	mux.HandleFunc("GET /user", func(writer http.ResponseWriter, request *http.Request) {
+		if request.Header.Get("Authorization") != "Bearer user-token" {
+			http.Error(writer, "no", http.StatusUnauthorized)
+			return
+		}
+		json.NewEncoder(writer).Encode(map[string]string{"login": "octo"})
+	})
 	mux.HandleFunc("GET /user/installations", func(writer http.ResponseWriter, request *http.Request) {
 		if request.Header.Get("Authorization") != "Bearer user-token" {
 			http.Error(writer, "no", http.StatusUnauthorized)
@@ -146,14 +153,14 @@ func TestCollectSourceWithoutSourceFiles(t *testing.T) {
 func TestVerifyUserInstallation(t *testing.T) {
 	client, fake := newTestClient(t)
 	fake.userInstall = 7
-	installation, err := client.VerifyUserInstallation(context.Background(), "good-code", 7)
-	if err != nil || installation.Account.Login != "octo" {
-		t.Fatalf("VerifyUserInstallation() = %#v, %v", installation, err)
+	installation, login, err := client.VerifyUserInstallation(context.Background(), "good-code", 7)
+	if err != nil || installation.Account.Login != "octo" || login != "octo" {
+		t.Fatalf("VerifyUserInstallation() = %#v, %q, %v", installation, login, err)
 	}
-	if _, err := client.VerifyUserInstallation(context.Background(), "good-code", 8); err != ErrNotFound {
+	if _, _, err := client.VerifyUserInstallation(context.Background(), "good-code", 8); err != ErrNotFound {
 		t.Fatalf("someone else's installation: error = %v, want ErrNotFound", err)
 	}
-	if _, err := client.VerifyUserInstallation(context.Background(), "bad-code", 7); err == nil {
+	if _, _, err := client.VerifyUserInstallation(context.Background(), "bad-code", 7); err == nil {
 		t.Fatal("a rejected code must fail")
 	}
 }

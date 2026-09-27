@@ -56,7 +56,8 @@ function AccountMenu({ onLoadDemo }: { onLoadDemo: () => void }) {
   const activity = useAccountActivity();
   const github = activity.status === "ready" ? activity.data.github : null;
   // Same picture as the profile rail: GitHub's, never the Google photo.
-  const avatar = github?.connected && github.account_login ? `https://github.com/${encodeURIComponent(github.account_login)}.png?size=64` : null;
+  const githubLogin = github?.connected ? github.github_user || github.account_login : undefined;
+  const avatar = githubLogin ? `https://github.com/${encodeURIComponent(githubLogin)}.png?size=64` : null;
 
   const itemClass = "flex items-center gap-2.5 rounded-md px-2.5 py-2 text-[13px] text-foreground transition-colors hover:bg-accent [&_svg]:size-4 [&_svg]:text-muted-foreground";
 

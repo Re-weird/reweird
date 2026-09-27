@@ -11,7 +11,10 @@ type GitHubConnection struct {
 	InstallationID int64  `json:"installation_id"`
 	AccountLogin   string `json:"account_login"`
 	AccountType    string `json:"account_type"`
-	ConnectedAtMS  int64  `json:"connected_at_ms"`
+	// GitHubUser is the GitHub login that approved the connection, which
+	// can differ from AccountLogin for an organization installation.
+	GitHubUser    string `json:"github_user"`
+	ConnectedAtMS int64  `json:"connected_at_ms"`
 }
 
 type GitHubConnectionRepository interface {

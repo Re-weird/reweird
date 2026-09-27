@@ -59,6 +59,9 @@ func (fake *fakeGitHub) handler() http.Handler {
 		}
 		write(writer, map[string]string{"error": "bad_verification_code"})
 	})
+	mux.HandleFunc("GET /user", func(writer http.ResponseWriter, _ *http.Request) {
+		write(writer, map[string]string{"login": "octo-person"})
+	})
 	mux.HandleFunc("GET /user/installations", func(writer http.ResponseWriter, _ *http.Request) {
 		write(writer, map[string]any{"installations": []map[string]any{{"id": 7, "account": map[string]string{"login": "octo", "type": "User"}}}})
 	})
@@ -322,7 +325,7 @@ func TestGitHubConnectWithoutInstallationIDUsesExistingInstall(t *testing.T) {
 	}
 	response := doJSONAs(t, app, http.MethodPost, "/api/v1/github/connect", "owner-a", map[string]any{"code": "good-code", "state": client.SignState("owner-a")})
 	connected := decodeGitHubBody[map[string]any](t, response)
-	if response.StatusCode != http.StatusOK || connected["connected"] != true || connected["account_login"] != "octo" {
+	if response.StatusCode != http.StatusOK || connected["connected"] != true || connected["account_login"] != "octo" || connected["github_user"] != "octo-person" {
 		t.Fatalf("authorize-only connect = %d %#v", response.StatusCode, connected)
 	}
 	if response := doJSONAs(t, app, http.MethodPost, "/api/v1/github/connect", "owner-a", map[string]any{"code": "good-code", "state": client.SignState("owner-b")}); response.StatusCode != http.StatusForbidden {

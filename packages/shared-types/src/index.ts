@@ -467,7 +467,10 @@ export interface GitHubStatus {
   install_url?: string;
   /** GitHub's authorize step; finds an existing installation without the install page. */
   authorize_url?: string;
+  /** The installation's account (a user or an organization). */
   account_login?: string;
+  /** The GitHub user who approved the connection. */
+  github_user?: string;
   account_type?: string;
   connected_at_ms?: number;
 }

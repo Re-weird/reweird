@@ -39,10 +39,11 @@ export function ProfileRail() {
   const data = activity.status === "ready" ? activity.data : null;
   const github = data?.github;
   const signedIn = AUTH_ENABLED && user.isSignedIn;
-  const name = signedIn ? user.name ?? user.email ?? "Signed in" : github?.connected ? github.account_login ?? "Local session" : "Local session";
+  const githubLogin = github?.connected ? github.github_user || github.account_login : undefined;
+  const name = signedIn ? user.name ?? user.email ?? "Signed in" : githubLogin ?? "Local session";
   const subtitle = signedIn ? user.email ?? "" : github?.connected ? "GitHub account" : "No sign-in on this server";
   // The GitHub avatar is the profile picture; the Google photo is never used.
-  const image = github?.connected && github.account_login ? `https://github.com/${encodeURIComponent(github.account_login)}.png?size=192` : null;
+  const image = githubLogin ? `https://github.com/${encodeURIComponent(githubLogin)}.png?size=192` : null;
 
   const sessions = data?.sessions ?? [];
   const median = medianResolveMS(sessions);

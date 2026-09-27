@@ -22,6 +22,17 @@ func (store *SQLiteStore) migrateGitHub() error {
 		CREATE INDEX IF NOT EXISTS idx_github_connections_installation
 			ON github_connections(installation_id);
 	`)
+	if err != nil {
+		return err
+	}
+	// Added after the table first shipped; add it to existing databases.
+	var present int
+	if err := store.db.QueryRow("SELECT COUNT(*) FROM pragma_table_info('github_connections') WHERE name = 'github_user'").Scan(&present); err != nil {
+		return err
+	}
+	if present == 0 {
+		_, err = store.db.Exec("ALTER TABLE github_connections ADD COLUMN github_user TEXT NOT NULL DEFAULT ''")
+	}
 	return err
 }
 
@@ -30,22 +41,23 @@ func (store *SQLiteStore) SaveGitHubConnection(connection domain.GitHubConnectio
 		connection.ConnectedAtMS = time.Now().UnixMilli()
 	}
 	_, err := store.db.Exec(`
-		INSERT INTO github_connections (owner_id, installation_id, account_login, account_type, connected_at_ms)
-		VALUES (?, ?, ?, ?, ?)
+		INSERT INTO github_connections (owner_id, installation_id, account_login, account_type, github_user, connected_at_ms)
+		VALUES (?, ?, ?, ?, ?, ?)
 		ON CONFLICT(owner_id) DO UPDATE SET
 			installation_id = excluded.installation_id,
 			account_login = excluded.account_login,
 			account_type = excluded.account_type,
+			github_user = excluded.github_user,
 			connected_at_ms = excluded.connected_at_ms`,
-		connection.OwnerID, connection.InstallationID, connection.AccountLogin, connection.AccountType, connection.ConnectedAtMS)
+		connection.OwnerID, connection.InstallationID, connection.AccountLogin, connection.AccountType, connection.GitHubUser, connection.ConnectedAtMS)
 	return err
 }
 
 func (store *SQLiteStore) GetGitHubConnection(ownerID string) (*domain.GitHubConnection, error) {
 	connection := domain.GitHubConnection{OwnerID: ownerID}
 	err := store.db.QueryRow(
-		"SELECT installation_id, account_login, account_type, connected_at_ms FROM github_connections WHERE owner_id = ?", ownerID,
-	).Scan(&connection.InstallationID, &connection.AccountLogin, &connection.AccountType, &connection.ConnectedAtMS)
+		"SELECT installation_id, account_login, account_type, github_user, connected_at_ms FROM github_connections WHERE owner_id = ?", ownerID,
+	).Scan(&connection.InstallationID, &connection.AccountLogin, &connection.AccountType, &connection.GitHubUser, &connection.ConnectedAtMS)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
 	}

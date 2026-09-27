@@ -86,11 +86,11 @@ export function GitHubSettingsSection() {
       ) : status.connected ? (
         <div className="flex max-w-xl flex-wrap items-center gap-4 rounded-lg bg-surface px-4 py-3 ring-1 ring-border">
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={`https://github.com/${encodeURIComponent(status.account_login ?? "")}.png?size=64`} alt="" className="size-9 rounded-full ring-1 ring-border" />
+          <img src={`https://github.com/${encodeURIComponent(status.github_user || status.account_login || "")}.png?size=64`} alt="" className="size-9 rounded-full ring-1 ring-border" />
           <div className="min-w-0 flex-1">
-            <p className="truncate text-sm font-semibold text-foreground">{status.account_login}</p>
+            <p className="truncate text-sm font-semibold text-foreground">Signed in to GitHub as @{status.github_user || status.account_login}</p>
             <p className="text-xs text-muted-foreground">
-              {status.account_type === "Organization" ? "Organization" : "Personal account"}
+              {status.github_user && status.github_user !== status.account_login ? `Repositories from ${status.account_type === "Organization" ? "organization" : "account"} @${status.account_login}` : status.account_type === "Organization" ? "Organization" : "Personal account"}
               {status.connected_at_ms ? ` · connected ${new Date(status.connected_at_ms).toLocaleDateString()}` : ""}
             </p>
           </div>
@@ -104,6 +104,13 @@ export function GitHubSettingsSection() {
           <Button onClick={() => startGitHubConnect(status, false)} disabled={!status.authorize_url && !status.install_url}><Github /> Connect GitHub</Button>
           <p className="text-xs leading-relaxed text-muted-foreground">You choose which repositories ReWeird can read on GitHub.</p>
         </div>
+      )}
+      {status?.connected && (
+        <p className="mt-3 max-w-xl text-xs leading-relaxed text-muted-foreground">
+          Not your GitHub account? GitHub uses whoever is signed in to github.com in this browser. Click Disconnect,{" "}
+          <a href="https://github.com/logout" target="_blank" rel="noreferrer" className="underline underline-offset-2 hover:text-foreground">sign out of GitHub</a>
+          , sign in as the right account, then Connect GitHub again.
+        </p>
       )}
       {actionError && <p role="alert" className="mt-3 text-sm text-fail">{actionError}</p>}
     </section>

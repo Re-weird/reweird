@@ -37,6 +37,7 @@ func (controller *Controller) githubStatus(ctx *fiber.Ctx) error {
 	response := fiber.Map{"configured": true, "connected": connection != nil, "install_url": controller.github.InstallURL(state), "authorize_url": controller.github.AuthorizeURL(state)}
 	if connection != nil {
 		response["account_login"] = connection.AccountLogin
+		response["github_user"] = connection.GitHubUser
 		response["account_type"] = connection.AccountType
 		response["connected_at_ms"] = connection.ConnectedAtMS
 	}
@@ -68,22 +69,30 @@ func (controller *Controller) githubConnect(ctx *fiber.Ctx) error {
 		return apiError(ctx, fiber.StatusBadRequest, "GITHUB_CODE_REQUIRED", "GitHub didn't return an authorization code. Enable \"Request user authorization (OAuth) during installation\" on the GitHub App.")
 	}
 	var installation *githubapp.Installation
+	var githubUser string
 	var err error
 	if input.InstallationID == 0 {
 		// Authorization only (the App may already be installed): use the
 		// user's existing installation, preferring their personal account.
+		var grant *githubapp.UserGrant
+		grant, err = controller.github.UserInstallations(ctx.Context(), input.Code)
 		var installations []githubapp.Installation
-		installations, err = controller.github.UserInstallations(ctx.Context(), input.Code)
+		if grant != nil {
+			installations, githubUser = grant.Installations, grant.Login
+		}
 		if err == nil && len(installations) == 0 {
 			return ctx.Status(fiber.StatusConflict).JSON(fiber.Map{"error": "INSTALL_REQUIRED", "detail": "Install the ReWeird GitHub App on your account to choose repositories.", "install_url": controller.github.InstallURL(controller.github.SignState(owner))})
 		}
+		// Prefer the approving user's own account, then any personal
+		// account, then an organization.
 		for index := range installations {
-			if installation == nil || installations[index].Account.Type == "User" && installation.Account.Type != "User" {
-				installation = &installations[index]
+			candidate := &installations[index]
+			if installation == nil || rankInstallation(candidate, githubUser) < rankInstallation(installation, githubUser) {
+				installation = candidate
 			}
 		}
 	} else {
-		installation, err = controller.github.VerifyUserInstallation(ctx.Context(), input.Code, input.InstallationID)
+		installation, githubUser, err = controller.github.VerifyUserInstallation(ctx.Context(), input.Code, input.InstallationID)
 	}
 	if errors.Is(err, githubapp.ErrNotFound) {
 		return apiError(ctx, fiber.StatusForbidden, "INSTALLATION_NOT_YOURS", "That GitHub installation isn't accessible to the GitHub account that authorized it.")
@@ -92,11 +101,23 @@ func (controller *Controller) githubConnect(ctx *fiber.Ctx) error {
 		log.Printf("github connect: %v", err)
 		return apiError(ctx, fiber.StatusBadGateway, "GITHUB_UNAVAILABLE", "GitHub couldn't confirm the installation. Try connecting again.")
 	}
-	connection := domain.GitHubConnection{OwnerID: owner, InstallationID: installation.ID, AccountLogin: installation.Account.Login, AccountType: installation.Account.Type, ConnectedAtMS: time.Now().UnixMilli()}
+	connection := domain.GitHubConnection{OwnerID: owner, InstallationID: installation.ID, AccountLogin: installation.Account.Login, AccountType: installation.Account.Type, GitHubUser: githubUser, ConnectedAtMS: time.Now().UnixMilli()}
+	log.Printf("github connect: ReWeird user linked to installation %d (%s) approved by GitHub user %q", installation.ID, installation.Account.Login, githubUser)
 	if err := connections.SaveGitHubConnection(connection); err != nil {
 		return internalError(ctx, err)
 	}
 	return controller.githubStatus(ctx)
+}
+
+func rankInstallation(installation *githubapp.Installation, githubUser string) int {
+	switch {
+	case githubUser != "" && strings.EqualFold(installation.Account.Login, githubUser):
+		return 0
+	case installation.Account.Type == "User":
+		return 1
+	default:
+		return 2
+	}
 }
 
 // githubDisconnect forgets the installation for this user. The App stays

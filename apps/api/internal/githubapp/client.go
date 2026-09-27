@@ -235,11 +235,18 @@ type Installation struct {
 	} `json:"account"`
 }
 
+// UserGrant is who approved ReWeird on GitHub and which installations of
+// this App that GitHub user can access.
+type UserGrant struct {
+	Login         string
+	Installations []Installation
+}
+
 // UserInstallations exchanges the OAuth code GitHub sends back after
 // authorization (or after an install that requests authorization) for a
-// short-lived user token, and returns the installations of this App that
-// user can access. The user token is discarded afterwards.
-func (client *Client) UserInstallations(ctx context.Context, code string) ([]Installation, error) {
+// short-lived user token, reads who the user is, and lists the
+// installations of this App they can access. The token is then discarded.
+func (client *Client) UserInstallations(ctx context.Context, code string) (*UserGrant, error) {
 	form := url.Values{"client_id": {client.config.ClientID}, "client_secret": {client.config.ClientSecret}, "code": {code}}
 	var exchanged struct {
 		AccessToken string `json:"access_token"`
@@ -251,7 +258,13 @@ func (client *Client) UserInstallations(ctx context.Context, code string) ([]Ins
 	if exchanged.AccessToken == "" {
 		return nil, fmt.Errorf("github: authorization code rejected (%s)", exchanged.Error)
 	}
-	installations := []Installation{}
+	var user struct {
+		Login string `json:"login"`
+	}
+	if err := client.do(ctx, http.MethodGet, client.config.APIURL+"/user", "Bearer "+exchanged.AccessToken, "", nil, &user); err != nil {
+		return nil, err
+	}
+	grant := &UserGrant{Login: user.Login, Installations: []Installation{}}
 	for page := 1; page <= 10; page++ {
 		var listing struct {
 			Installations []Installation `json:"installations"`
@@ -260,27 +273,27 @@ func (client *Client) UserInstallations(ctx context.Context, code string) ([]Ins
 		if err := client.do(ctx, http.MethodGet, endpoint, "Bearer "+exchanged.AccessToken, "", nil, &listing); err != nil {
 			return nil, err
 		}
-		installations = append(installations, listing.Installations...)
+		grant.Installations = append(grant.Installations, listing.Installations...)
 		if len(listing.Installations) < 100 {
 			break
 		}
 	}
-	return installations, nil
+	return grant, nil
 }
 
 // VerifyUserInstallation confirms, via the OAuth code, that the user can
-// access installationID.
-func (client *Client) VerifyUserInstallation(ctx context.Context, code string, installationID int64) (*Installation, error) {
-	installations, err := client.UserInstallations(ctx, code)
+// access installationID, and returns who they are.
+func (client *Client) VerifyUserInstallation(ctx context.Context, code string, installationID int64) (*Installation, string, error) {
+	grant, err := client.UserInstallations(ctx, code)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
-	for _, installation := range installations {
+	for _, installation := range grant.Installations {
 		if installation.ID == installationID {
-			return &installation, nil
+			return &installation, grant.Login, nil
 		}
 	}
-	return nil, ErrNotFound
+	return nil, grant.Login, ErrNotFound
 }
 
 type Repository struct {

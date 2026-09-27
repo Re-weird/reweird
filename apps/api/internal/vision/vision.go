@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"os"
 	"strings"
@@ -78,6 +79,11 @@ type geminiVisionPayload struct {
 
 func (analyzer *GeminiAnalyzer) Analyze(ctx context.Context, imagePath, contentType string) domain.VisionAnalysis {
 	result := domain.VisionAnalysis{Status: "VISION_FAILED", Model: analyzer.model, Components: []domain.VisionComponent{}, Relationships: []domain.VisionRelationship{}, Warnings: []string{}}
+	defer func() {
+		if result.Status == "VISION_FAILED" {
+			log.Printf("vision analysis failed, falling back to VISION_FAILED: %s", strings.Join(result.Warnings, "; "))
+		}
+	}()
 	image, err := readBounded(imagePath, maxGeminiImageBytes)
 	if err != nil {
 		result.Warnings = append(result.Warnings, err.Error())

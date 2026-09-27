@@ -11,6 +11,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"strings"
 	"time"
@@ -78,13 +79,17 @@ type geminiProbePayload struct {
 // new facts. Any request, transport, or validation failure falls back to
 // the deterministic diagnosis unchanged -- PROBE never breaks the loop.
 func (provider *GeminiProvider) Diagnose(ctx context.Context, evidence domain.Evidence, deterministic domain.Diagnosis) domain.Diagnosis {
+	fallback := func(reason string) domain.Diagnosis {
+		log.Printf("PROBE Gemini reword failed, falling back to deterministic diagnosis: %s", reason)
+		return deterministic
+	}
 	evidenceJSON, err := json.Marshal(evidence)
 	if err != nil {
-		return deterministic
+		return fallback("encode evidence: " + err.Error())
 	}
 	deterministicJSON, err := json.Marshal(deterministic)
 	if err != nil {
-		return deterministic
+		return fallback("encode deterministic diagnosis: " + err.Error())
 	}
 	prompt := fmt.Sprintf(
 		"You are explaining an electronics diagnostic finding to a hobbyist. "+
@@ -116,22 +121,25 @@ func (provider *GeminiProvider) Diagnose(ctx context.Context, evidence domain.Ev
 	}
 	payload, err := json.Marshal(requestBody)
 	if err != nil {
-		return deterministic
+		return fallback("encode request: " + err.Error())
 	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, provider.endpoint, bytes.NewReader(payload))
 	if err != nil {
-		return deterministic
+		return fallback("create request: " + err.Error())
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("x-goog-api-key", provider.apiKey)
 	response, err := provider.client.Do(req)
 	if err != nil {
-		return deterministic
+		return fallback("request failed: " + err.Error())
 	}
 	defer response.Body.Close()
 	body, err := io.ReadAll(io.LimitReader(response.Body, maxGeminiResponseBytes))
-	if err != nil || response.StatusCode < 200 || response.StatusCode >= 300 {
-		return deterministic
+	if err != nil {
+		return fallback("read response: " + err.Error())
+	}
+	if response.StatusCode < 200 || response.StatusCode >= 300 {
+		return fallback(fmt.Sprintf("Gemini returned HTTP %d", response.StatusCode))
 	}
 	var envelope struct {
 		Candidates []struct {
@@ -143,14 +151,14 @@ func (provider *GeminiProvider) Diagnose(ctx context.Context, evidence domain.Ev
 		} `json:"candidates"`
 	}
 	if err := json.Unmarshal(body, &envelope); err != nil || len(envelope.Candidates) == 0 || len(envelope.Candidates[0].Content.Parts) == 0 {
-		return deterministic
+		return fallback("Gemini returned no structured result")
 	}
 	var parsed geminiProbePayload
 	if err := json.Unmarshal([]byte(envelope.Candidates[0].Content.Parts[0].Text), &parsed); err != nil {
-		return deterministic
+		return fallback("Gemini response JSON failed validation")
 	}
 	if strings.TrimSpace(parsed.Headline) == "" || strings.TrimSpace(parsed.Summary) == "" {
-		return deterministic
+		return fallback("Gemini response missing headline or summary")
 	}
 	if parsed.Confidence < 0 || parsed.Confidence > 1 || parsed.Confidence > deterministic.Confidence {
 		parsed.Confidence = deterministic.Confidence

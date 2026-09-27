@@ -24,4 +24,6 @@ test("physical approval UI binds digest and confirmation, never supplied executi
   assert.match(component, /!confirm \|\| busy \|\| !qualified \|\| !status\?\.master_enabled/);
   for (const field of ["target_node", "patch_pin", "logic_level", "max_voltage", "duration_ms", "device_id", "profile_revision"]) assert.ok(component.includes(`pending.parameters.${field}`));
   assert.match(component, /Cancel \/ disable output/);
+  assert.match(component, /status\?\.software_ready \? "PATCH SOFTWARE READY"/);
+  assert.match(component, /status\?\.capability\?\.profile_id === currentProjectID/);
 });

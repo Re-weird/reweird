@@ -20,6 +20,9 @@
 #if defined(REWEIRD_HAS_OLED)
 #include <Adafruit_GFX.h>
 #include <Adafruit_SSD1306.h>
+#include <Fonts/FreeSansBold12pt7b.h>
+#include <Fonts/FreeSansBold18pt7b.h>
+#include "oled_boot_logo.h"
 #include <Wire.h>
 #endif
 
@@ -30,42 +33,10 @@
 // Interval values are stored as integers in the capture's native unit
 // (rawPerUS counts per microsecond) because Xtensa interrupt handlers must
 // not use the FPU; they are converted to microseconds when a frame is built.
-struct ProbeAccumulator {
-  uint32_t rawPerUS = 1;
-  volatile uint32_t edgeCount = 0;
-  volatile uint32_t risingEdges = 0;
-  volatile uint32_t fallingEdges = 0;
-  volatile uint32_t windowStartUS = 0;
-  volatile uint32_t lastEdgeUS = 0;
-  volatile bool edgeInWindow = false;
-  volatile uint32_t maxGapUS = 0;
-  volatile bool riseInWindow = false;
-  volatile uint32_t lastRiseUS = 0;     // interrupt capture timebase
-  volatile uint32_t lastRiseTicks = 0;  // hardware capture timebase (APB ticks)
-  volatile uint8_t lastState = 0;
-  volatile uint8_t periodCount = 0;
-  volatile uint8_t highCount = 0;
-  volatile uint32_t periodsRaw[REWEIRD_PULSE_SAMPLES] = {};
-  volatile uint32_t highWidthsRaw[REWEIRD_PULSE_SAMPLES] = {};
-  uint32_t activityCounts[REWEIRD_ACTIVITY_BUCKETS] = {};
-  uint32_t bucketRisingStart = 0;
-};
-
-struct ProbeSnapshot {
-  uint32_t edgeCount = 0;
-  uint32_t risingEdges = 0;
-  uint32_t fallingEdges = 0;
-  uint32_t maxGapUS = 0;
-  uint8_t state = 0;
-  uint8_t periodCount = 0;
-  uint8_t highCount = 0;
-  uint32_t rawPerUS = 1;
-  uint32_t periodsRaw[REWEIRD_PULSE_SAMPLES] = {};
-  uint32_t highWidthsRaw[REWEIRD_PULSE_SAMPLES] = {};
-  uint32_t activityCounts[REWEIRD_ACTIVITY_BUCKETS] = {};
-};
+#include "capture_window.h"
 
 static ProbeAccumulator accumulators[REWEIRD_PROBE_COUNT];
+static ProbeSnapshot completedWindows[REWEIRD_PROBE_COUNT];
 static uint16_t analogMV[REWEIRD_PROBE_COUNT][REWEIRD_ANALOG_SAMPLES] = {};
 static uint8_t analogCounts[REWEIRD_PROBE_COUNT] = {};
 static portMUX_TYPE probeMux = portMUX_INITIALIZER_UNLOCKED;
@@ -89,34 +60,6 @@ static const char *modeName(ReWeirdProbeMode mode) {
   return "digital";
 }
 
-// Records one edge. Must be called with probeMux held. nowUS drives the
-// in-window gap; interval is the time since the previous rising edge (period)
-// or since the matching rising edge (HIGH width) in rawPerUS units, valid
-// only when hasInterval, i.e. when that rising edge is inside this window.
-static inline void IRAM_ATTR recordEdge(ProbeAccumulator &accumulator, bool rising, uint32_t nowUS, bool hasInterval, uint32_t interval) {
-  const uint32_t reference = accumulator.edgeInWindow ? accumulator.lastEdgeUS : accumulator.windowStartUS;
-  const uint32_t gap = nowUS - reference;
-  if (gap > accumulator.maxGapUS) {
-    accumulator.maxGapUS = gap;
-  }
-  accumulator.edgeInWindow = true;
-  accumulator.lastEdgeUS = nowUS;
-  accumulator.edgeCount++;
-  accumulator.lastState = rising ? HIGH : LOW;
-  if (rising) {
-    accumulator.risingEdges++;
-    if (hasInterval && accumulator.periodCount < REWEIRD_PULSE_SAMPLES) {
-      accumulator.periodsRaw[accumulator.periodCount++] = interval;
-    }
-    accumulator.riseInWindow = true;
-  } else {
-    accumulator.fallingEdges++;
-    if (hasInterval && accumulator.highCount < REWEIRD_PULSE_SAMPLES) {
-      accumulator.highWidthsRaw[accumulator.highCount++] = interval;
-    }
-  }
-}
-
 // GPIO interrupt capture (P1-P6 without a hardware capture channel). The
 // level is read after the interrupt fires, so pulses shorter than the
 // interrupt latency can be misclassified; the backend detects that from the
@@ -127,14 +70,10 @@ void IRAM_ATTR onProbeEdge(void *argument) {
     return;
   }
   auto &accumulator = accumulators[index];
+  portENTER_CRITICAL_ISR(&probeMux);
   const uint32_t nowUS = micros();
   const bool rising = digitalRead(REWEIRD_PROBES[index].pin) == HIGH;
-
-  portENTER_CRITICAL_ISR(&probeMux);
-  recordEdge(accumulator, rising, nowUS, accumulator.riseInWindow, nowUS - accumulator.lastRiseUS);
-  if (rising) {
-    accumulator.lastRiseUS = nowUS;
-  }
+  recordEdge(accumulator, rising, nowUS, nowUS);
   portEXIT_CRITICAL_ISR(&probeMux);
 }
 
@@ -152,14 +91,10 @@ static bool IRAM_ATTR onCaptureEdge(mcpwm_unit_t, mcpwm_capture_channel_id_t, co
     return false;
   }
   auto &accumulator = accumulators[index];
+  portENTER_CRITICAL_ISR(&probeMux);
   const uint32_t nowUS = static_cast<uint32_t>(esp_timer_get_time());
   const bool rising = event->cap_edge == MCPWM_POS_EDGE;
-
-  portENTER_CRITICAL_ISR(&probeMux);
-  recordEdge(accumulator, rising, nowUS, accumulator.riseInWindow, event->cap_value - accumulator.lastRiseTicks);
-  if (rising) {
-    accumulator.lastRiseTicks = event->cap_value;
-  }
+  recordEdge(accumulator, rising, nowUS, event->cap_value);
   portEXIT_CRITICAL_ISR(&probeMux);
   return false;
 }
@@ -207,44 +142,6 @@ static void closeActivityBucket() {
   }
   portEXIT_CRITICAL(&probeMux);
   activityBucketIndex++;
-}
-
-// Closes the window for one probe at windowEndUS and opens the next one at
-// the same instant, so consecutive windows tile time without overlap.
-static ProbeSnapshot snapshotAndReset(size_t index, uint32_t windowEndUS) {
-  ProbeSnapshot snapshot;
-  auto &accumulator = accumulators[index];
-  portENTER_CRITICAL(&probeMux);
-  const uint32_t reference = accumulator.edgeInWindow ? accumulator.lastEdgeUS : accumulator.windowStartUS;
-  const uint32_t trailingGap = windowEndUS - reference;
-  snapshot.maxGapUS = trailingGap > accumulator.maxGapUS ? trailingGap : accumulator.maxGapUS;
-  snapshot.edgeCount = accumulator.edgeCount;
-  snapshot.risingEdges = accumulator.risingEdges;
-  snapshot.fallingEdges = accumulator.fallingEdges;
-  snapshot.state = accumulator.lastState;
-  snapshot.periodCount = accumulator.periodCount;
-  snapshot.highCount = accumulator.highCount;
-  snapshot.rawPerUS = accumulator.rawPerUS;
-  for (size_t sample = 0; sample < REWEIRD_PULSE_SAMPLES; ++sample) {
-    snapshot.periodsRaw[sample] = accumulator.periodsRaw[sample];
-    snapshot.highWidthsRaw[sample] = accumulator.highWidthsRaw[sample];
-  }
-  for (size_t bucket = 0; bucket < REWEIRD_ACTIVITY_BUCKETS; ++bucket) {
-    snapshot.activityCounts[bucket] = accumulator.activityCounts[bucket];
-    accumulator.activityCounts[bucket] = 0;
-  }
-  accumulator.edgeCount = 0;
-  accumulator.risingEdges = 0;
-  accumulator.fallingEdges = 0;
-  accumulator.periodCount = 0;
-  accumulator.highCount = 0;
-  accumulator.bucketRisingStart = 0;
-  accumulator.windowStartUS = windowEndUS;
-  accumulator.edgeInWindow = false;
-  accumulator.maxGapUS = 0;
-  accumulator.riseInWindow = false;
-  portEXIT_CRITICAL(&probeMux);
-  return snapshot;
 }
 
 #if defined(REWEIRD_HAS_OLED)
@@ -319,26 +216,24 @@ static bool beginOLED(Adafruit_SSD1306 &screen, TwoWire &bus) {
 }
 
 static void formatProbeLine(char *line, size_t size, size_t index, const DisplayProbe &probe) {
-  static const char *labels[] = {"P1 POWER", "P2 TRIG", "P3 ECHO", "P4 SERVO", "P5 ZMPT", "P6 SPARE"};
-  const char *id = labels[index];
-  if (index == 5) { snprintf(line, size, "P6 SPARE (unused)"); return; }
+  if (index == 5) { snprintf(line, size, "unused"); return; }
   if (probe.mode == ReWeirdProbeMode::Analog) {
     if (probe.hasMillivolts) {
       // Voltage at the ESP32 pin; any divider scale is applied by the backend.
-      snprintf(line, size, "%s %.3fV pin", id, probe.millivolts / 1000.0);
+      snprintf(line, size, "%.3fV", probe.millivolts / 1000.0);
     } else {
-      snprintf(line, size, "%s no samples", id);
+      snprintf(line, size, "--");
     }
     return;
   }
   if (probe.risingEdges == 0) {
-    snprintf(line, size, "%s 0p %s", id, probe.state ? "HIGH" : "LOW");
+    snprintf(line, size, "0p %s", probe.state ? "HIGH" : "LOW");
   } else if (!probe.hasWidth) {
-    snprintf(line, size, "%s %lup", id, static_cast<unsigned long>(probe.risingEdges));
+    snprintf(line, size, "%lup", static_cast<unsigned long>(probe.risingEdges));
   } else if (probe.widthUS >= 1000) {
-    snprintf(line, size, "%s %lup %.1fms", id, static_cast<unsigned long>(probe.risingEdges), probe.widthUS / 1000.0);
+    snprintf(line, size, "%lup %.1fms", static_cast<unsigned long>(probe.risingEdges), probe.widthUS / 1000.0);
   } else {
-    snprintf(line, size, "%s %lup %.0fus", id, static_cast<unsigned long>(probe.risingEdges), probe.widthUS);
+    snprintf(line, size, "%lup %.0fus", static_cast<unsigned long>(probe.risingEdges), probe.widthUS);
   }
 }
 
@@ -347,28 +242,37 @@ static void drawLiveScreen(Adafruit_SSD1306 &screen, TwoWire &bus,
                            const DisplaySnapshot &snapshot, size_t first, size_t end) {
   if (!oledACK(bus)) return;
   char line[22];
+  static const char *labels[] = {"P1 POWER", "P2 TRIG", "P3 ECHO", "P4 SERVO", "P5 ZMPT", "P6 SPARE"};
   screen.clearDisplay();
+  screen.setTextWrap(false);
+  screen.setFont(nullptr);
   screen.setTextSize(1);
+  // A single inverted title bar, three evenly spaced rows, and one footer.
+  // All values still come from the completed telemetry window; no resampling.
+  screen.fillRect(0, 0, 128, 11, SSD1306_WHITE);
+  screen.setTextColor(SSD1306_BLACK);
+  screen.setCursor(3, 2);
+  screen.print(first == 0 ? "REWEIRD" : "PROBES");
+  screen.setCursor(98, 2);
+  screen.print("LIVE");
   screen.setTextColor(SSD1306_WHITE);
-  screen.setCursor(0, 0);
-  screen.println(first == 0 ? "REWEIRD - LIVE" : "PROBES / STATUS");
   for (size_t index = first; index < end; ++index) {
+    const int16_t y = 16 + (index - first) * 13;
+    screen.setCursor(2, y);
+    screen.print(labels[index]);
     formatProbeLine(line, sizeof(line), index, snapshot.probes[index]);
-    screen.println(line);
+    // Reserve 12 characters for values. Large raw counts remain available in
+    // telemetry; use a compact count-only view instead of overlapping labels.
+    if (strlen(line) > 12) snprintf(line, sizeof(line), "%lup", static_cast<unsigned long>(snapshot.probes[index].risingEdges));
+    screen.setCursor(126 - 6 * strlen(line), y);
+    screen.print(line);
   }
-  if (first == 3) {
-    screen.println("REAL SERIAL / V2 TX");
-    snprintf(line, sizeof(line), "ID ...%s", strlen(deviceID) > 8 ? deviceID + strlen(deviceID) - 8 : deviceID);
-    screen.println(line);
-    screen.println("PATCH LOCKED");
-  } else {
-    screen.println("V=pin; p=per window");
-    snprintf(line, sizeof(line), "FRAME %lu", static_cast<unsigned long>(snapshot.sequence & 0xFFFFFFFFULL));
-    screen.println(line);
-  }
-  snprintf(line, sizeof(line), "OLED A:%s B:%s",
-           liveOneReady ? "OK" : "OFF", liveTwoReady ? "OK" : "OFF");
-  screen.println(line);
+  screen.drawFastHLine(0, 53, 128, SSD1306_WHITE);
+  screen.setCursor(2, 56);
+  if (!liveOneReady || !liveTwoReady)
+    screen.print(!liveOneReady ? "OLED A OFFLINE" : "OLED B OFFLINE");
+  else
+    screen.print(first == 0 ? "V:pin  p:per window" : "SERIAL | PATCH LOCKED");
   screen.display();
 }
 
@@ -380,17 +284,42 @@ static void drawDisplay(const DisplaySnapshot &snapshot) {
   if (liveTwoReady) drawLiveScreen(liveTwoOLED, I2C_B, snapshot, 3, 6);
 }
 
-static void startupScreen(Adafruit_SSD1306 &screen, TwoWire &bus) {
+static void startupScreen(Adafruit_SSD1306 &screen, TwoWire &bus, bool logo) {
   if (!oledACK(bus)) return;
   screen.clearDisplay();
   screen.setTextColor(SSD1306_WHITE);
-  screen.setTextSize(2);
-  screen.setCursor(10, 8);
-  screen.println("ReWeird");
+  screen.setTextWrap(false);
   screen.setTextSize(1);
-  screen.setCursor(0, 32);
-  screen.println("Starting passive V2");
-  screen.println("PATCH LOCKED");
+  if (logo) {
+    screen.drawBitmap(2, 2, reweirdBootLogo, 124, 60, SSD1306_WHITE);
+  } else {
+    int16_t x, y;
+    uint16_t width, height;
+    screen.setFont(&FreeSansBold18pt7b);
+    screen.getTextBounds("ReWeird", 0, 0, &x, &y, &width, &height);
+    // Fit the larger glyphs to the full usable width instead of dropping
+    // down a whole font size when the native wordmark is slightly too wide.
+    GFXcanvas1 wordmark(width, height);
+    if (wordmark.getBuffer()) {
+      wordmark.setFont(&FreeSansBold18pt7b);
+      wordmark.setTextColor(1);
+      wordmark.setTextWrap(false);
+      wordmark.setCursor(-x, -y);
+      wordmark.print("ReWeird");
+      const uint16_t fittedWidth = 124;
+      const uint16_t fittedHeight = height * fittedWidth / width;
+      for (uint16_t row = 0; row < fittedHeight; ++row)
+        for (uint16_t column = 0; column < fittedWidth; ++column)
+          if (wordmark.getPixel(column * width / fittedWidth, row * height / fittedHeight))
+            screen.drawPixel(2 + column, (64 - fittedHeight) / 2 + row, SSD1306_WHITE);
+    } else {
+      screen.setFont(&FreeSansBold12pt7b);
+      screen.getTextBounds("ReWeird", 0, 0, &x, &y, &width, &height);
+      screen.setCursor((128 - width) / 2 - x, (64 - height) / 2 - y);
+      screen.print("ReWeird");
+    }
+    screen.setFont(nullptr);
+  }
   screen.display();
 }
 
@@ -419,9 +348,9 @@ static void oledTask(void *) {
   I2C_A.setTimeOut(20);
   I2C_B.setTimeOut(20);
   diagnoseDisplays(busAReady, busBReady, true);
-  if (liveOneReady) startupScreen(liveOneOLED, I2C_A);
-  if (liveTwoReady) startupScreen(liveTwoOLED, I2C_B);
-  delay(1000); // Display task only; capture and telemetry never wait for OLEDs.
+  if (liveOneReady) startupScreen(liveOneOLED, I2C_A, true);
+  if (liveTwoReady) startupScreen(liveTwoOLED, I2C_B, false);
+  delay(3000); // Display task only; capture and telemetry never wait for OLEDs.
   uint32_t nextDiagnosticMS = 3000;
   bool delayedReport = true;
   for (;;) {
@@ -513,7 +442,7 @@ static void emitTelemetry(uint32_t windowMS, uint32_t windowEndUS) {
       continue;
     }
 
-    const ProbeSnapshot snapshot = snapshotAndReset(index, windowEndUS);
+    const ProbeSnapshot &snapshot = completedWindows[index];
     sample["state"] = snapshot.state;
     sample["edge_count"] = snapshot.edgeCount;
     sample["rising_edges"] = snapshot.risingEdges;
@@ -611,10 +540,7 @@ void setup() {
   portENTER_CRITICAL(&probeMux);
   windowStartedUS = micros();
   for (size_t index = 0; index < REWEIRD_PROBE_COUNT; ++index) {
-    accumulators[index].windowStartUS = windowStartedUS;
-    accumulators[index].edgeInWindow = false;
-    accumulators[index].maxGapUS = 0;
-    accumulators[index].riseInWindow = false;
+    snapshotAndReset(accumulators[index], windowStartedUS);
   }
   portEXIT_CRITICAL(&probeMux);
   windowStartedMS = millis();
@@ -641,8 +567,14 @@ void loop() {
     }
     // window_ms is measured on the same microsecond clock that bounds every
     // gap and pulse, so no reported interval can exceed the window.
+    // Close ALL digital probes before JSON/analog serialization. No ISR can
+    // append an edge after this boundary to an already-closing window.
+    portENTER_CRITICAL(&probeMux);
     const uint32_t windowEndUS = micros();
-    emitTelemetry((windowEndUS - windowStartedUS + 500) / 1000, windowEndUS);
+    for (size_t index = 0; index < REWEIRD_PROBE_COUNT; ++index)
+      completedWindows[index] = snapshotAndReset(accumulators[index], windowEndUS);
+    portEXIT_CRITICAL(&probeMux);
+    emitTelemetry((windowEndUS - windowStartedUS + 999) / 1000, windowEndUS);
     windowStartedUS = windowEndUS;
     windowStartedMS = nowMS;
     nextAnalogSampleMS = nowMS;

@@ -894,7 +894,7 @@ static void oledTask(void *) {
   diagnoseDisplays(busAReady, busBReady, true);
   if (liveOneReady) startupScreen(liveOneOLED, I2C_A, true);
   if (liveTwoReady) startupScreen(liveTwoOLED, I2C_B, false);
-  delay(5000); // Display task only; capture and telemetry never wait for OLEDs.
+  delay(3000); // Display task only; capture and telemetry never wait for OLEDs.
   uint32_t nextDiagnosticMS = 3000;
   bool delayedReport = true;
   for (;;) {

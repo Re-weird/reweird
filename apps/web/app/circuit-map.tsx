@@ -175,7 +175,7 @@ function SchematicBoard({ controller, voltage, groups, selectedID, onSelect, sta
               {running && (
                 <path d={trace.d} pathLength={100} fill="none" stroke={color} strokeWidth={2.5} strokeLinecap="round"
                   strokeDasharray={trace.state === "suspect" ? "2 98" : "4 96"}
-                  style={{ animationName: "trace-run", animationDuration: trace.state === "suspect" ? "3.4s" : "2.2s", animationTimingFunction: "linear", animationIterationCount: "infinite", animationDelay: `${index * 0.35}s`, animationDirection: forward ? "reverse" : "normal" }} />
+                  style={{ animationName: "trace-run", animationDuration: trace.state === "suspect" ? "3.4s" : "2.2s", animationTimingFunction: "linear", animationIterationCount: "infinite", animationDelay: `${index * 0.35}s` }} />
               )}
               {inviting && (
                 <circle r={3.4} fill={color}>

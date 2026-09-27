@@ -4,13 +4,14 @@ import { Activity, Cable, ChevronRight, Microscope, RefreshCw, ShieldCheck, Test
 import type { DemoSession, ProbePlan, Project, ProjectProfile, SimulatorScenario } from "@reweird/shared-types";
 import { ConfidenceRing, RuleRow } from "./signal-components";
 import { telemetryLabel } from "@/lib/weird-demo";
+import { baselineStatusLabel } from "@/lib/calibration";
 
 export function DiagnosisView({ session, source, onPlan, busy }: { session: DemoSession; source: "api" | "browser"; onPlan: () => void; busy: boolean }) {
   const tested = session.stage === "test" || session.stage === "repair";
   const focus = session.probes.find((probe) => probe.probe === session.evidence.probe);
   const expected = Object.entries(session.evidence.expected).slice(0, 3);
   const observed = Object.entries(session.evidence.observed).slice(0, 3);
-  const baseline = Object.entries(session.evidence.baseline).slice(0, 3);
+  const baseline = Object.entries(session.evidence.baseline).filter(([key]) => key !== "status" && key !== "trusted").slice(0, 4);
   const renderFacts = (facts: [string, unknown][]) => facts.map(([key, value]) => <small key={key}>{key.replaceAll("_", " ")}: {String(value)}</small>);
   const failed = session.evidence.rule_results.filter((rule) => rule.status === "fail");
   const uncertain = !failed.length && (Boolean(session.evidence.unresolved_questions?.length) || session.evidence.rule_results.some((rule) => rule.status === "warn"));
@@ -24,7 +25,7 @@ export function DiagnosisView({ session, source, onPlan, busy }: { session: Demo
           <div className="compare-grid">
             <div><span>Expected</span><strong>{String(session.evidence.expected.signal ?? "Configured behavior")}</strong>{renderFacts(expected)}</div>
             <div className="observed"><span>Observed</span><strong>{focus?.dropouts ?? 0} detected dropouts</strong>{renderFacts(observed)}</div>
-            <div><span>Baseline</span><strong>{String(session.evidence.baseline.status ?? "Unknown")}</strong>{renderFacts(baseline)}</div>
+            <div><span>Known Good</span><strong>{baselineStatusLabel(session.evidence.baseline.status, session.evidence.baseline.learned_windows)}</strong>{renderFacts(baseline)}</div>
           </div>
           <div className="rules-list">{session.evidence.rule_results.map((rule, index) => <RuleRow rule={rule} key={`${rule.probe ?? ""}-${rule.id}-${index}`} />)}</div>
         </div>
@@ -54,8 +55,6 @@ export function SimulatorView({
   mysteryPending,
   onRevealMystery,
   onRun,
-  onDiagnose,
-  onPlan,
   onDemoTest,
   onDemoRepair,
   busy,
@@ -69,8 +68,6 @@ export function SimulatorView({
   mysteryPending: boolean;
   onRevealMystery: () => void;
   onRun: () => void;
-  onDiagnose: () => void;
-  onPlan: () => void;
   onDemoTest: () => void;
   onDemoRepair: () => void;
   busy: boolean;
@@ -101,7 +98,7 @@ export function SimulatorView({
           <div className="panel-heading"><div><span className="eyebrow">Step 2 · What ReWeird found</span><h2>{session.diagnosis.headline}</h2></div><span className="session-id">{source === "api" && session.measurement_id ? `Sample #${session.measurement_id}` : "Browser example"}</span></div>
           <p>{session.stage === "verify" ? "The demo captured a healthy window after the simulated repair." : mysteryPending ? "This hidden scenario was analyzed from simulated raw samples. Inspect the evidence before revealing the scenario." : source === "browser" ? "Illustrative loose connection example. No device or Go API measurement was taken." : activeScenario?.description ?? "Choose a scenario to run a new capture."}</p>
           <div className="simulator-summary" aria-live="polite"><strong>{session.evidence.probe} · {session.evidence.role}</strong><p>{session.diagnosis.summary}</p><small>{session.evidence.rule_results.filter((rule) => rule.status === "fail").map((rule) => rule.message).join(" ") || "No failed checks in this sample."}</small></div>
-          <button className="primary" onClick={onDiagnose}>See why ReWeird thinks that <ChevronRight size={15} /></button>
+          <details className="simulator-details"><summary>See why ReWeird thinks that</summary><p>{session.diagnosis.summary}</p><ul>{session.evidence.rule_results.map((rule, index) => <li key={`${rule.id}-${index}`}>{rule.probe ? `${rule.probe}: ` : ""}{rule.message}</li>)}</ul><p>Possible causes are hypotheses, not confirmed faults:</p><ul>{session.diagnosis.possible_causes.map((cause) => <li key={cause}>{cause}</li>)}</ul></details>
           <details className="simulator-details"><summary>Show probe readings and raw sample details</summary><div className="result-meta"><span>Contract v{session.raw_telemetry?.schema_version ?? 2}</span><span>{session.raw_telemetry?.device_id ?? "browser fixture"}</span><span>Profile {session.profile_id ?? "ultrasonic-demo"}</span></div>
           <div className="analysis-table">
             <div className="analysis-head"><span>Probe</span><span>Raw input</span><span>Derived facts</span><span>Status</span></div>
@@ -118,7 +115,7 @@ export function SimulatorView({
             })}
           </div>
           {!!session.analysis?.simultaneous_dropout_groups?.length && <div className="shared-failure"><TriangleAlert size={17} /> Shared failure group: {session.analysis.simultaneous_dropout_groups.map((group) => group.join(" + ")).join(", ")}</div>}</details>
-          <div className="simulator-actions">{source === "api" && <button className="secondary" onClick={onPlan} disabled={busy}><Activity size={16} /> Plan guided test &amp; VERIFY</button>}<button className="secondary" onClick={onDemoTest} disabled={busy}><TestTube2 size={16} /> Try browser connection test</button><button className="secondary" onClick={onDemoRepair} disabled={busy}><CheckCircle2 size={16} /> Simulate repair</button></div>
+          <div className="simulator-actions"><button className="secondary" onClick={onDemoTest} disabled={busy}><TestTube2 size={16} /> Try browser connection test</button><button className="secondary" onClick={onDemoRepair} disabled={busy}><CheckCircle2 size={16} /> Simulate repair</button></div>
         </div>
       </section>
       <section className="security-note"><ShieldCheck size={20} /><div><strong>Input-only by design</strong><span>The simulator and future ESP32 serial adapter can only supply measurements. The PATCH endpoint remains physically and logically disabled.</span></div></section>
@@ -143,6 +140,13 @@ export function ProjectLivePending({ project, profile, plan }: { project: Projec
       <section className="security-note"><ShieldCheck size={20} /><div><strong>No fabricated measurements</strong><span>Only validated telemetry that matches the confirmed P1–P6 modes can enter the diagnostic engine.</span></div></section>
     </>
   );
+}
+
+export function LiveTelemetryUnavailable({ error, onRetry, onPractice }: { error: string | null; onRetry: () => void; onPractice: () => void }) {
+  return <>
+    <section className="page-heading"><div><p className="kicker">Live diagnostics · no accepted capture</p><h1>Waiting for validated REAL SERIAL telemetry</h1><p>A connected serial port alone is not a diagnostic measurement. ReWeird will show signals and conclusions only after the active profile accepts a matching frame.</p></div></section>
+    <section className="panel live-pending-panel" role="alert"><Cable size={34} /><div><h2>No live analysis available</h2><p>{error ?? "The diagnostic engine has not accepted a serial frame yet."}</p><p>No browser or API simulator result is substituted here.</p><div className="heading-actions"><button className="secondary" onClick={onRetry}><RefreshCw size={15} /> Retry live capture</button><button className="secondary" onClick={onPractice}>Open Practice simulator</button></div></div></section>
+  </>;
 }
 
 export function DemoProbePlanView({ plan, onContinue }: { plan: ProbePlan | null; onContinue: () => void }) {

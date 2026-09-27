@@ -120,6 +120,9 @@ func (engine *Engine) DiagnoseAnalysis(
 		evidence.PhysicalContext = physicalContext
 	}
 	diagnosis = engine.probe.Diagnose(ctx, evidence, diagnosis)
+	if focus.CaptureUnreliable {
+		diagnosis.Confidence = math.Min(diagnosis.Confidence, 0.5)
+	}
 
 	beforeFacts := focus
 	if reference != nil {
@@ -140,6 +143,7 @@ func (engine *Engine) DiagnoseAnalysis(
 		HardwareConnected: true,
 		TelemetryMode:     telemetryMode,
 		ProfileID:         profile.ID,
+		RawTelemetry:      envelope, // audit unchanged raw edges separately from validated derived facts
 		Probes:            probeReadings(profile, analysis, focus.Probe, stage),
 		Analysis:          analysis,
 		Evidence:          evidence,
@@ -158,9 +162,29 @@ func evaluateRules(profile domain.ProjectProfile, analysis domain.AnalysisResult
 			continue
 		}
 
+		if signalanalysis.KnownGoodActivityLost(facts, configuration) {
+			results = append(results, rule("known-good-activity-lost", facts.Probe, "fail", 6,
+				fmt.Sprintf("%s activity missing or unreliable compared with Known Good; verify the passive monitoring connection before concluding the target signal failed", facts.Role)))
+		}
+		if facts.CaptureUnreliable {
+			results = append(results, rule("capture-unreliable", facts.Probe, "fail", 5,
+				fmt.Sprintf("%s measurement is unreliable: %s", facts.Role, strings.Join(facts.CaptureIssues, "; "))))
+			continue // invalid edges cannot support electrical/timing fault rules
+		}
+
 		if facts.MissingExpectedActivity {
 			results = append(results, rule("missing-signal", facts.Probe, "fail", 3,
 				fmt.Sprintf("%s has no expected activity", facts.Role)))
+		}
+
+		if facts.PulseWidthOutOfRange {
+			results = append(results, rule("pulse-width-outside-specification", facts.Probe, "fail", 3,
+				fmt.Sprintf("%s pulse width %s is outside the configured %s", facts.Role, widthRange(facts.MinimumPulseWidthUS, facts.MaximumPulseWidthUS), widthRange(configuration.Expected.MinPulseWidthUS, configuration.Expected.MaxPulseWidthUS))))
+		}
+
+		for _, deviation := range facts.KnownGoodDeviations {
+			results = append(results, rule("known-good-deviation", facts.Probe, "fail", 3,
+				fmt.Sprintf("%s %s", facts.Role, deviation)))
 		}
 
 		if facts.AverageVoltage != nil && (configuration.Expected.MinVoltage != nil || configuration.Expected.MaxVoltage != nil) {
@@ -200,7 +224,7 @@ func evaluateRules(profile domain.ProjectProfile, analysis domain.AnalysisResult
 				fmt.Sprintf("%s has no unexpected dropouts after repair", facts.Role)))
 		}
 
-		if facts.BaselineDeviationPercent != nil && configuration.Baseline != nil && configuration.Baseline.Status.Trusted() {
+		if facts.BaselineDeviationPercent != nil && configuration.Baseline != nil && configuration.Baseline.Status.Trusted() && configuration.Baseline.WindowCount == 0 {
 			tolerance := baselineTolerance(configuration)
 			if *facts.BaselineDeviationPercent > tolerance {
 				results = append(results, rule("baseline-deviation", facts.Probe, "warn", 2,
@@ -220,7 +244,7 @@ func evaluateRules(profile domain.ProjectProfile, analysis domain.AnalysisResult
 	if stage == domain.StageTest && reference != nil {
 		for _, current := range analysis.Probes {
 			previous, ok := reference.Probe(current.Probe)
-			if !ok || current.DropoutEvents < previous.DropoutEvents+2 {
+			if !ok || current.CaptureUnreliable || previous.CaptureUnreliable || current.DropoutEvents < previous.DropoutEvents+2 {
 				continue
 			}
 			ratio := float64(current.DropoutEvents) / math.Max(1, float64(previous.DropoutEvents))
@@ -282,6 +306,15 @@ func selectFocus(profile domain.ProjectProfile, analysis domain.AnalysisResult, 
 }
 
 func buildDiagnosis(profile domain.ProjectProfile, analysis domain.AnalysisResult, rules []domain.RuleResult, focus domain.DerivedFacts, stage domain.Stage) domain.Diagnosis {
+	if hasRuleForProbe(rules, "known-good-activity-lost", focus.Probe) {
+		return domain.Diagnosis{
+			Headline:       fmt.Sprintf("%s activity missing or unreliable compared with Known Good", focus.Role),
+			Summary:        fmt.Sprintf("No valid %s pulse train can be established on %s. Known Good recorded periodic activity. Unmatched/glitch edges are retained as raw evidence, not treated as a measured rate. This does not distinguish a detached passive probe from an inactive target signal.", focus.Role, focus.Probe),
+			PossibleCauses: []string{"Disconnected or floating passive monitoring probe", "Unreliable capture or input level", "Target signal inactive"},
+			Confidence:     0.5,
+			NextTest:       fmt.Sprintf("Inspect the passive %s/%s monitoring connection against the confirmed probe plan, then re-measure; do not drive the node.", focus.Probe, focus.Role),
+		}
+	}
 	if stage == domain.StageVerify && focus.Stable && !hasFailure(rules) {
 		return domain.Diagnosis{
 			Headline:       "Issue resolved",
@@ -289,6 +322,15 @@ func buildDiagnosis(profile domain.ProjectProfile, analysis domain.AnalysisResul
 			PossibleCauses: []string{"Previously intermittent physical connection"},
 			Confidence:     0.98,
 			NextTest:       "Continue monitoring during normal operation.",
+		}
+	}
+	if hasRuleForProbe(rules, "capture-unreliable", focus.Probe) {
+		return domain.Diagnosis{
+			Headline:       fmt.Sprintf("%s measurement is not trustworthy", focus.Role),
+			Summary:        fmt.Sprintf("The raw %s capture on %s is internally inconsistent, so it cannot support a circuit diagnosis. The raw values are kept unchanged; fix the measurement path before interpreting this signal.", focus.Role, focus.Probe),
+			PossibleCauses: []string{"Pulses shorter than the input capture can resolve", "Probe level below the input logic threshold", "Probe not attached to the expected node", "Firmware capture path mismatch"},
+			Confidence:     0.4,
+			NextTest:       fmt.Sprintf("Verify the %s probe connection and level, then capture a new window.", focus.Probe),
 		}
 	}
 	if hasRule(rules, "movement-correlation", "fail") {
@@ -327,6 +369,15 @@ func buildDiagnosis(profile domain.ProjectProfile, analysis domain.AnalysisResul
 			NextTest:       "Compare the configured timer or PWM settings with the measured frequency and jitter.",
 		}
 	}
+	if hasRuleForProbe(rules, "pulse-width-outside-specification", focus.Probe) {
+		return domain.Diagnosis{
+			Headline:       fmt.Sprintf("%s pulse width outside specification", focus.Role),
+			Summary:        "The signal is active, but its measured HIGH time is outside the configured pulse-width limits.",
+			PossibleCauses: []string{"Software timing change", "Load or level distortion on the signal path", "Component responding differently"},
+			Confidence:     0.85,
+			NextTest:       "Compare the commanded pulse timing in software with the measured pulse width.",
+		}
+	}
 	if hasRule(rules, "simultaneous-dropout", "fail") || hasRule(rules, "power-rail-instability", "fail") {
 		return domain.Diagnosis{
 			Headline:       "Shared electrical instability",
@@ -334,6 +385,15 @@ func buildDiagnosis(profile domain.ProjectProfile, analysis domain.AnalysisResul
 			PossibleCauses: []string{"Unstable power supply", "Shared ground problem", "Connector or harness affecting multiple paths"},
 			Confidence:     0.82,
 			NextTest:       "Measure the configured power rail and ground reference during the failure window.",
+		}
+	}
+	if hasRuleForProbe(rules, "known-good-deviation", focus.Probe) {
+		return domain.Diagnosis{
+			Headline:       fmt.Sprintf("%s deviates from Known Good", focus.Role),
+			Summary:        fmt.Sprintf("%s is within its configured limits but outside the physical behavior you confirmed as healthy for this device and profile revision.", focus.Role),
+			PossibleCauses: []string{"Degrading connection or component", "Changed load or operating condition", "Software behavior changed since calibration"},
+			Confidence:     0.75,
+			NextTest:       fmt.Sprintf("Compare %s against its Known Good capture while reproducing the reported condition.", focus.Probe),
 		}
 	}
 	if hasRuleForProbe(rules, "unexpected-dropout", focus.Probe) {
@@ -371,12 +431,25 @@ func buildEvidence(profile domain.ProjectProfile, analysis domain.AnalysisResult
 	if configuration.Expected.NominalFrequencyHz != nil {
 		expected["nominal_frequency_hz"] = *configuration.Expected.NominalFrequencyHz
 	}
+	if configuration.Expected.MinFrequencyHz != nil {
+		expected["min_frequency_hz"] = *configuration.Expected.MinFrequencyHz
+	}
+	if configuration.Expected.MaxFrequencyHz != nil {
+		expected["max_frequency_hz"] = *configuration.Expected.MaxFrequencyHz
+	}
+	if configuration.Expected.MinPulseWidthUS != nil {
+		expected["min_pulse_width_us"] = *configuration.Expected.MinPulseWidthUS
+	}
+	if configuration.Expected.MaxPulseWidthUS != nil {
+		expected["max_pulse_width_us"] = *configuration.Expected.MaxPulseWidthUS
+	}
 
 	observed := map[string]any{
-		"pulse_detected":            focus.PulseCount > 0,
+		"pulse_detected":            !focus.CaptureUnreliable && focus.PulseCount > 0,
 		"dropouts_per_window":       focus.DropoutEvents,
 		"missing_expected_activity": focus.MissingExpectedActivity,
 		"stable":                    focus.Stable,
+		"capture_reliable":          !focus.CaptureUnreliable,
 		"rail_voltage_stable":       powerRailStable(profile, analysis),
 		"other_signals_active":      otherSignalsActive(profile, analysis, focus.Probe),
 		"movement_correlation":      hasRuleForProbe(rules, "movement-correlation", focus.Probe) && stage == domain.StageTest,
@@ -423,12 +496,27 @@ func buildEvidence(profile domain.ProjectProfile, analysis domain.AnalysisResult
 		if configuration.Baseline.AverageVoltage != nil {
 			baseline["average_voltage"] = *configuration.Baseline.AverageVoltage
 		}
+		if configuration.Baseline.WindowCount > 0 {
+			baseline["learned_windows"] = configuration.Baseline.WindowCount
+		}
+		if configuration.Baseline.MinFrequencyHz != nil && configuration.Baseline.MaxFrequencyHz != nil {
+			baseline["frequency_range_hz"] = fmt.Sprintf("%.3f–%.3f", *configuration.Baseline.MinFrequencyHz, *configuration.Baseline.MaxFrequencyHz)
+		}
+		if configuration.Baseline.MinPulseWidthUS != nil && configuration.Baseline.MaxPulseWidthUS != nil {
+			baseline["pulse_width_range_us"] = fmt.Sprintf("%.1f–%.1f", *configuration.Baseline.MinPulseWidthUS, *configuration.Baseline.MaxPulseWidthUS)
+		}
+		for _, deviation := range focus.KnownGoodDeviations {
+			baselineFacts = append(baselineFacts, domain.EvidenceFact{Probe: focus.Probe, Name: "known_good_deviation", Value: true, Provenance: domain.ProvenanceBaseline, Detail: deviation})
+		}
 		if focus.BaselineDeviationPercent != nil {
 			baselineFacts = append(baselineFacts, domain.EvidenceFact{Probe: focus.Probe, Name: "baseline_deviation", Value: *focus.BaselineDeviationPercent, Unit: "%", Provenance: domain.ProvenanceBaseline})
 		}
 	}
 	if configuration.Baseline == nil || !configuration.Baseline.Status.Trusted() {
 		unresolved = append(unresolved, fmt.Sprintf("No trusted healthy baseline exists for %s", focus.Role))
+	}
+	if focus.CaptureUnreliable {
+		unresolved = append(unresolved, fmt.Sprintf("Can %s be captured reliably? The current raw capture is inconsistent.", focus.Probe))
 	}
 	if stage == domain.StageDiagnose && focus.DropoutEvents > 0 {
 		unresolved = append(unresolved, "Does the dropout rate increase during controlled movement?")
@@ -491,6 +579,9 @@ func probeReadings(profile domain.ProjectProfile, analysis domain.AnalysisResult
 }
 
 func displayValue(facts domain.DerivedFacts) (*float64, string) {
+	if facts.CaptureUnreliable {
+		return nil, "unreliable"
+	}
 	if facts.AverageVoltage != nil {
 		return facts.AverageVoltage, "V"
 	}
@@ -608,6 +699,19 @@ func stabilityLabel(facts domain.DerivedFacts) string {
 		return "stable"
 	}
 	return "intermittent"
+}
+
+func widthRange(minimum, maximum *float64) string {
+	switch {
+	case minimum != nil && maximum != nil:
+		return fmt.Sprintf("%.1f–%.1f µs", *minimum, *maximum)
+	case minimum != nil:
+		return fmt.Sprintf("≥ %.1f µs", *minimum)
+	case maximum != nil:
+		return fmt.Sprintf("≤ %.1f µs", *maximum)
+	default:
+		return "unspecified"
+	}
 }
 
 func choose(condition bool, yes, no string) string {

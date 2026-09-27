@@ -7,6 +7,24 @@ const source = readFileSync(new URL("./circuit-map.ts", import.meta.url), "utf8"
 const compiled = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2020 } }).outputText;
 const { buildCircuitMap, circuitDisplayState } = await import(`data:text/javascript;base64,${Buffer.from(compiled).toString("base64")}`);
 
+test("trace animation uses longhands without resetting its stagger delay", () => {
+  const component = readFileSync(new URL("../app/circuit-map.tsx", import.meta.url), "utf8");
+  const file = ts.createSourceFile("circuit-map.tsx", component, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+  let style;
+  function visit(node) {
+    if (ts.isObjectLiteralExpression(node) && node.properties.some((p) => p.name?.getText(file) === "animationDelay")) style = node;
+    ts.forEachChild(node, visit);
+  }
+  visit(file);
+  assert.ok(style);
+  assert.ok(!style.properties.some((p) => p.name?.getText(file) === "animation"));
+  const js = ts.transpileModule(`const style = ${style.getText(file)};`, { compilerOptions: { target: ts.ScriptTarget.ES2020 } }).outputText;
+  for (const state of ["suspect", "healthy"]) {
+    const value = new Function("trace", "index", `${js}; return style;`)({ state }, 2);
+    assert.deepEqual(value, { animationName: "trace-run", animationDuration: state === "suspect" ? "3.4s" : "2.2s", animationTimingFunction: "linear", animationIterationCount: "infinite", animationDelay: "0.7s" });
+  }
+});
+
 function profile() {
   return {
     id: "profile-a", project_id: "project-a", confirmed: true,

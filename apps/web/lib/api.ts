@@ -13,6 +13,7 @@ import type {
   HistoryDetail,
   HistoryStatus,
   HistorySummary,
+  CalibrationState,
   KnownGoodBaseline,
   MeasurementWindow,
   PhysicalCommit,
@@ -29,6 +30,7 @@ import type {
   TestRecommendation,
 } from "@reweird/shared-types";
 import { getAuthToken } from "./auth-token";
+import type { TelemetryStatus } from "./weird-demo";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "";
 
@@ -43,7 +45,7 @@ export class ApiError extends Error {
   }
 }
 
-async function requestJSON<T>(path: string, init?: RequestInit, timeoutMS = 8_000): Promise<T> {
+async function requestJSON<T>(path: string, init?: RequestInit, timeoutMS = 8_000, acceptUnavailableStatus = false): Promise<T> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMS);
   try {
@@ -61,6 +63,13 @@ async function requestJSON<T>(path: string, init?: RequestInit, timeoutMS = 8_00
     });
     const payload = (await response.json().catch(() => ({}))) as { error?: string; detail?: string } & T;
     if (!response.ok) {
+      // Telemetry status is itself a status report: 503 still includes the
+      // source mode and a useful disconnected reason. Do not treat 401 or an
+      // unrelated API failure as a status response.
+      const statusPayload = payload as unknown as Partial<TelemetryStatus>;
+      if (acceptUnavailableStatus && response.status === 503 &&
+          typeof statusPayload.mode === "string" &&
+          typeof statusPayload.connected === "boolean") return payload as T;
       throw new ApiError(payload.detail ?? "The ReWeird API rejected the request.", payload.error ?? "API_ERROR", response.status);
     }
     return payload as T;
@@ -83,8 +92,27 @@ async function demoRequest(path: string, init?: RequestInit): Promise<DemoSessio
   }
 }
 
+export interface PatchAction {
+  id: string; digest: string; state: string; result?: string;
+  parameters: { target_node: string; patch_pin: number; mode: string; logic_level: string; max_voltage: number; duration_ms: number; source: string; expires_at_ms: number; profile_id: string; profile_revision: number; device_id: string; boot_id: string; probe_map_hash: string };
+  events: { state: string; at_ms: number; detail: string }[];
+  before?: { measurement_id: number; source: string }; after?: { measurement_id: number; source: string };
+}
+export interface PatchStatusResponse { state: string; physical_enabled: boolean; master_enabled: boolean; detail: string; capability?: { profile_id: string; target_node: string; pin: number } }
+const patchPath = (id: string) => `/api/v1/projects/${encodeURIComponent(id)}/patch`;
+export const patchApi = {
+  status: () => requestJSON<PatchStatusResponse>("/api/v1/patch/status"),
+  history: (id: string) => requestJSON<PatchAction[]>(`${patchPath(id)}/actions`),
+  master: (id: string, enabled: boolean) => requestJSON(`${patchPath(id)}/master`, { method: "POST", body: JSON.stringify({ enabled, confirm: enabled }) }),
+  prepare: (id: string, level: string, duration_ms: number) => requestJSON<PatchAction>(`${patchPath(id)}/prepare`, { method: "POST", body: JSON.stringify({ level, duration_ms }) }),
+  approve: (id: string, action: PatchAction) => requestJSON<PatchAction>(`${patchPath(id)}/actions/${encodeURIComponent(action.id)}/approve`, { method: "POST", body: JSON.stringify({ digest: action.digest, confirm: true }) }, 10_000),
+  cancel: (id: string, action: PatchAction) => requestJSON<PatchAction>(`${patchPath(id)}/actions/${encodeURIComponent(action.id)}/cancel`, { method: "POST", body: "{}" }),
+};
+
 export const demoApi = {
   load: () => demoRequest("/api/v1/session"),
+  currentSession: () => requestJSON<DemoSession>("/api/v1/session"),
+  telemetryStatus: () => requestJSON<TelemetryStatus>("/api/v1/telemetry/status", undefined, 8_000, true),
   wiggle: () => demoRequest("/api/v1/demo/wiggle", { method: "POST" }),
   repair: () => demoRequest("/api/v1/demo/repair", { method: "POST" }),
   reset: () => demoRequest("/api/v1/demo/reset", { method: "POST" }),
@@ -112,6 +140,7 @@ export const passportApi = {
     `/api/v1/profiles/${encodeURIComponent(profileID)}/known-good`,
     { method: "POST", body: JSON.stringify({ measurement_id: measurementID, confirm_healthy: true, note }) },
   ),
+  calibration: (profileID: string) => requestJSON<CalibrationState>(`/api/v1/profiles/${encodeURIComponent(profileID)}/calibration`),
 };
 
 export interface CreateProjectInput {
@@ -156,6 +185,9 @@ export const projectApi = {
   getProbePlan: (projectID: string) => requestJSON<ProbePlan>(`/api/v1/projects/${projectID}/probe-plan`),
   confirmProbeConnections: (projectID: string) =>
     requestJSON<ProbePlan>(`/api/v1/projects/${projectID}/probe-plan/confirm`, { method: "POST" }),
+  /** Opens profile revision N+1 as a draft; Known Good from revision N becomes incompatible. */
+  reviseProfile: (projectID: string) =>
+    requestJSON<ProjectProfile>(`/api/v1/projects/${projectID}/profile/revise`, { method: "POST" }),
 };
 
 // A camera source can be tested/captured either from the project's already

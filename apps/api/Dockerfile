@@ -11,8 +11,10 @@ WORKDIR /src/apps/api
 RUN CGO_ENABLED=0 go build -o /reweird-api ./cmd/server
 
 FROM alpine:3.21
-RUN adduser -D -u 10001 reweird
-USER reweird
+RUN apk add --no-cache su-exec && adduser -D -u 10001 reweird
 COPY --from=builder /reweird-api /usr/local/bin/reweird-api
+COPY apps/api/docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
+RUN chmod +x /usr/local/bin/docker-entrypoint.sh
 EXPOSE 8080
+ENTRYPOINT ["docker-entrypoint.sh"]
 CMD ["reweird-api"]

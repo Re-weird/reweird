@@ -13,6 +13,7 @@ import (
 
 	"github.com/joho/godotenv"
 	"github.com/re-weird/reweird/apps/api/internal/codeanalysis"
+	"github.com/re-weird/reweird/apps/api/internal/demodata"
 	"github.com/re-weird/reweird/apps/api/internal/diagnostics"
 	"github.com/re-weird/reweird/apps/api/internal/domain"
 	"github.com/re-weird/reweird/apps/api/internal/githubapp"
@@ -57,6 +58,9 @@ func main() {
 
 	if err := seedDemoProfile(repository); err != nil {
 		log.Fatalf("seed demo Project Profile: %v", err)
+	}
+	if err := demodata.Seed(repository, uploadRoot); err != nil {
+		log.Fatalf("seed Physical Git demo: %v", err)
 	}
 	activeProfile, err := repository.GetProfile(profileID)
 	if err != nil {

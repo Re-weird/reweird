@@ -167,6 +167,10 @@ func newApp(engine *diagnostics.Engine, repository domain.Repository, source dom
 	api.Get("/projects/:id/physical-commits/:commitId/vision-analysis", controller.getPhysicalCommitVisionAnalysis)
 	api.Get("/projects/:id/physical-commits/:commitId/restore", controller.restorePhysicalCommit)
 	api.Get("/projects/:id/physical-commits/:commitId/verify", controller.verifyPhysicalCommitRestoration)
+	// Demo-only, hard-gated to the canonical Physical Git demo project id --
+	// see demo_physicalgit_handlers.go. No equivalent exists for real projects.
+	api.Post("/projects/:id/demo/apply-restoration", controller.applyPhysicalGitDemoRestoration)
+	api.Post("/projects/:id/demo/apply-break", controller.applyPhysicalGitDemoBreak)
 	api.Get("/profiles/:id/passport", controller.devicePassport)
 	api.Post("/profiles/:id/known-good", controller.saveKnownGood)
 

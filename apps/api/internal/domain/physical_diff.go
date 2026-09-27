@@ -77,6 +77,33 @@ type SoftwareDiff struct {
 	Fields []FieldChange `json:"fields,omitempty"`
 }
 
+// SemanticVisionComponentChange is a single delta between two stored Gemini
+// Vision interpretations, grouped by component identity (CatalogID when
+// available, else normalized name) and compared by COUNT only. BeforeCount/
+// AfterCount are the raw counts observed in each stored VisionAnalysis --
+// never an inferred physical instance identity ("SG90 count 1 -> 2" is
+// supported; "a second, specific servo was added" is not).
+type SemanticVisionComponentChange struct {
+	Key         string        `json:"key"`
+	Name        string        `json:"name"`
+	Status      EvidenceState `json:"status"`
+	BeforeCount int           `json:"before_count"`
+	AfterCount  int           `json:"after_count"`
+}
+
+// SemanticVisualDiff is a deterministic comparison of two commits' already-
+// persisted Gemini Vision interpretations (domain.VisionAnalysis). It is
+// entirely separate from VisualDiff, which compares the raw image evidence
+// itself: raw evidence can be CHANGED while the detected components stay
+// UNCHANGED, and vice versa. No Gemini/LLM call happens to produce this --
+// it is a pure comparison of two already-stored results. Confidence,
+// VisibleLabels, Warnings, Model, and Relationships are never compared here;
+// only component identity/count.
+type SemanticVisualDiff struct {
+	Status  EvidenceState                   `json:"status"`
+	Changes []SemanticVisionComponentChange `json:"changes,omitempty"`
+}
+
 // PhysicalCommitDiff is a deterministic, structured comparison of two
 // Physical Commits in the same project. It is computed on demand and never
 // persisted. No field here is inferred from pixels, wiring photos, or any
@@ -87,9 +114,10 @@ type PhysicalCommitDiff struct {
 	FromCommit string `json:"from_commit"`
 	ToCommit   string `json:"to_commit"`
 
-	Visual     VisualDiff     `json:"visual"`
-	Components ComponentsDiff `json:"components"`
-	Circuit    CircuitDiff    `json:"circuit"`
-	Electrical ElectricalDiff `json:"electrical"`
-	Software   SoftwareDiff   `json:"software"`
+	Visual         VisualDiff         `json:"visual"`
+	Components     ComponentsDiff     `json:"components"`
+	Circuit        CircuitDiff        `json:"circuit"`
+	Electrical     ElectricalDiff     `json:"electrical"`
+	Software       SoftwareDiff       `json:"software"`
+	SemanticVisual SemanticVisualDiff `json:"semantic_visual"`
 }

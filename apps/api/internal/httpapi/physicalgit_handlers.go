@@ -255,5 +255,16 @@ func (controller *Controller) diffPhysicalCommits(ctx *fiber.Ctx) error {
 		}
 	}
 
-	return ctx.JSON(physicalgit.Diff(*from, *to, fromMeasurement, toMeasurement))
+	// Semantic visual diff compares already-persisted Gemini Vision results
+	// only -- this is a plain repository read, never a capability-required
+	// helper, and never invokes controller.understanding/Gemini. A backend
+	// without vision storage wired simply leaves both sides nil, which
+	// DiffVisionAnalyses reports as NOT_CAPTURED.
+	var fromVision, toVision *domain.PhysicalCommitVisionAnalysis
+	if visionRepository, ok := controller.repository.(domain.PhysicalCommitVisionAnalysisRepository); ok {
+		fromVision, _ = visionRepository.GetPhysicalCommitVisionAnalysis(project.ID, from.ID)
+		toVision, _ = visionRepository.GetPhysicalCommitVisionAnalysis(project.ID, to.ID)
+	}
+
+	return ctx.JSON(physicalgit.Diff(*from, *to, fromMeasurement, toMeasurement, fromVision, toVision))
 }

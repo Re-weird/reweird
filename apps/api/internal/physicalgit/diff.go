@@ -5,6 +5,7 @@ package physicalgit
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/re-weird/reweird/apps/api/internal/domain"
 )
@@ -12,16 +13,20 @@ import (
 // Diff compares two Physical Commits in the same project. fromMeasurement
 // and toMeasurement, when non-nil, are the already-resolved MeasurementWindow
 // rows referenced by from.MeasurementID / to.MeasurementID respectively.
-func Diff(from, to domain.PhysicalCommit, fromMeasurement, toMeasurement *domain.MeasurementWindow) domain.PhysicalCommitDiff {
+// fromVision and toVision, when non-nil, are the already-persisted Gemini
+// Vision interpretation records for each commit -- this function never
+// fetches them and never calls Gemini; it only compares stored values.
+func Diff(from, to domain.PhysicalCommit, fromMeasurement, toMeasurement *domain.MeasurementWindow, fromVision, toVision *domain.PhysicalCommitVisionAnalysis) domain.PhysicalCommitDiff {
 	return domain.PhysicalCommitDiff{
-		ProjectID:  from.ProjectID,
-		FromCommit: from.ID,
-		ToCommit:   to.ID,
-		Visual:     visualDiff(from.Image, to.Image),
-		Components: componentsDiff(from.ProfileSnapshot, to.ProfileSnapshot),
-		Circuit:    circuitDiff(from.ProfileSnapshot, to.ProfileSnapshot),
-		Electrical: electricalDiff(from.MeasurementID, to.MeasurementID, fromMeasurement, toMeasurement),
-		Software:   softwareDiff(from, to),
+		ProjectID:      from.ProjectID,
+		FromCommit:     from.ID,
+		ToCommit:       to.ID,
+		Visual:         visualDiff(from.Image, to.Image),
+		Components:     componentsDiff(from.ProfileSnapshot, to.ProfileSnapshot),
+		Circuit:        circuitDiff(from.ProfileSnapshot, to.ProfileSnapshot),
+		Electrical:     electricalDiff(from.MeasurementID, to.MeasurementID, fromMeasurement, toMeasurement),
+		Software:       softwareDiff(from, to),
+		SemanticVisual: DiffVisionAnalyses(fromVision, toVision),
 	}
 }
 
@@ -316,4 +321,112 @@ func stringPointerEqual(before, after *string) bool {
 		return before == after
 	}
 	return *before == *after
+}
+
+// DiffVisionAnalyses deterministically compares two commits' already-
+// persisted Gemini Vision interpretations -- COMPONENT IDENTITY/COUNT ONLY.
+// It never looks at Confidence, VisibleLabels, Source, Warnings, Model, or
+// Relationships: those describe interpretation quality or wiring claims,
+// neither of which proves a physical hardware change on their own. Gemini
+// is never invoked here; from/to are already-resolved, already-stored
+// records, and this function makes no network calls and touches no
+// persistence.
+func DiffVisionAnalyses(from, to *domain.PhysicalCommitVisionAnalysis) domain.SemanticVisualDiff {
+	switch {
+	case from == nil && to == nil:
+		return domain.SemanticVisualDiff{Status: domain.EvidenceNotCaptured}
+	case from == nil || to == nil:
+		return domain.SemanticVisualDiff{Status: domain.EvidenceUnavailable}
+	}
+
+	beforeGroups, beforeOrder := groupVisionComponents(from.Analysis.Components)
+	afterGroups, afterOrder := groupVisionComponents(to.Analysis.Components)
+
+	changes := make([]domain.SemanticVisionComponentChange, 0)
+	seen := make(map[string]bool, len(beforeOrder))
+	for _, key := range beforeOrder {
+		seen[key] = true
+		before := beforeGroups[key]
+		after, existsAfter := afterGroups[key]
+		switch {
+		case !existsAfter:
+			changes = append(changes, domain.SemanticVisionComponentChange{
+				Key: key, Name: before.name, Status: domain.EvidenceRemoved,
+				BeforeCount: before.count, AfterCount: 0,
+			})
+		case before.count != after.count:
+			changes = append(changes, domain.SemanticVisionComponentChange{
+				Key: key, Name: after.name, Status: domain.EvidenceChanged,
+				BeforeCount: before.count, AfterCount: after.count,
+			})
+		}
+	}
+	for _, key := range afterOrder {
+		if seen[key] {
+			continue
+		}
+		after := afterGroups[key]
+		changes = append(changes, domain.SemanticVisionComponentChange{
+			Key: key, Name: after.name, Status: domain.EvidenceAdded,
+			BeforeCount: 0, AfterCount: after.count,
+		})
+	}
+
+	status := domain.EvidenceUnchanged
+	if len(changes) > 0 {
+		status = domain.EvidenceChanged
+	}
+	return domain.SemanticVisualDiff{Status: status, Changes: changes}
+}
+
+type visionComponentGroup struct {
+	name  string
+	count int
+}
+
+// groupVisionComponents groups a single analysis's detected components by
+// stable semantic identity and counts occurrences -- it never fabricates
+// per-instance physical identity (no "servo #2"), only counts per identity
+// group. order preserves first-seen sequence so output stays deterministic
+// regardless of Go's map iteration order.
+func groupVisionComponents(components []domain.VisionComponent) (map[string]visionComponentGroup, []string) {
+	groups := make(map[string]visionComponentGroup)
+	order := make([]string, 0, len(components))
+	for _, component := range components {
+		key := visionComponentIdentityKey(component)
+		group, exists := groups[key]
+		if !exists {
+			order = append(order, key)
+			group = visionComponentGroup{name: component.Name}
+		}
+		group.count++
+		groups[key] = group
+	}
+	return groups, order
+}
+
+// visionComponentIdentityKey prefers CatalogID (already resolved by
+// projectunderstanding.Service.AnalyzeCommitImage's own catalog matching at
+// analysis time) and falls back to a normalized component Name. The
+// normalization mirrors component-catalog's own (case-fold,
+// alphanumeric-only) so "SG90 Servo" and "sg90 servo" resolve to the same
+// identity, but "Servo" and "SG90 Servo" never do -- no fuzzy, substring, or
+// semantic matching.
+func visionComponentIdentityKey(component domain.VisionComponent) string {
+	if component.CatalogID != "" {
+		return "catalog:" + normalizeVisionComponentIdentity(component.CatalogID)
+	}
+	return "name:" + normalizeVisionComponentIdentity(component.Name)
+}
+
+func normalizeVisionComponentIdentity(value string) string {
+	return strings.Map(func(character rune) rune {
+		if character >= 'a' && character <= 'z' || character >= '0' && character <= '9' {
+			return character
+		}
+		if character >= 'A' && character <= 'Z' {
+			return character + ('a' - 'A')
+		}
+		return -1
+	}, value)
 }

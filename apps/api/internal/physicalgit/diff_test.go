@@ -13,7 +13,7 @@ func stringPtr(value string) *string    { return &value }
 
 func TestDiffIdenticalSnapshotsAreUnchangedOrNotCaptured(t *testing.T) {
 	commit := domain.PhysicalCommit{ID: "pcommit-a", ProjectID: "project-a"}
-	diff := Diff(commit, commit, nil, nil)
+	diff := Diff(commit, commit, nil, nil, nil, nil)
 	if diff.Visual.Status != domain.EvidenceNotCaptured {
 		t.Fatalf("visual = %s", diff.Visual.Status)
 	}
@@ -198,6 +198,211 @@ func TestDiffSoftwareChangedWhenPopulated(t *testing.T) {
 	to := domain.PhysicalCommit{SoftwareRevision: stringPtr("def456")}
 	diff := softwareDiff(from, to)
 	if diff.Status != domain.EvidenceChanged || len(diff.Fields) != 1 || diff.Fields[0].Field != "software_revision" {
+		t.Fatalf("diff = %#v", diff)
+	}
+}
+
+func visionOf(components ...domain.VisionComponent) *domain.PhysicalCommitVisionAnalysis {
+	return &domain.PhysicalCommitVisionAnalysis{Analysis: domain.VisionAnalysis{Status: "VISION_COMPLETE", Components: components}}
+}
+
+// TestDiffVisionAnalysesNeitherExists: no Gemini call, no stored analysis on
+// either side -- NOT_CAPTURED, not UNCHANGED (there is no interpretation to
+// compare, not an observed absence of change).
+func TestDiffVisionAnalysesNeitherExists(t *testing.T) {
+	if got := DiffVisionAnalyses(nil, nil).Status; got != domain.EvidenceNotCaptured {
+		t.Fatalf("status = %s", got)
+	}
+}
+
+func TestDiffVisionAnalysesOnlyFromExists(t *testing.T) {
+	from := visionOf(domain.VisionComponent{Name: "HC-SR04"})
+	if got := DiffVisionAnalyses(from, nil).Status; got != domain.EvidenceUnavailable {
+		t.Fatalf("status = %s", got)
+	}
+}
+
+func TestDiffVisionAnalysesOnlyToExists(t *testing.T) {
+	to := visionOf(domain.VisionComponent{Name: "HC-SR04"})
+	if got := DiffVisionAnalyses(nil, to).Status; got != domain.EvidenceUnavailable {
+		t.Fatalf("status = %s", got)
+	}
+}
+
+func TestDiffVisionAnalysesIdenticalComponentSetsAreUnchanged(t *testing.T) {
+	from := visionOf(domain.VisionComponent{CatalogID: "hc-sr04", Name: "HC-SR04"}, domain.VisionComponent{Name: "ESP32"})
+	to := visionOf(domain.VisionComponent{CatalogID: "hc-sr04", Name: "HC-SR04"}, domain.VisionComponent{Name: "ESP32"})
+	diff := DiffVisionAnalyses(from, to)
+	if diff.Status != domain.EvidenceUnchanged || len(diff.Changes) != 0 {
+		t.Fatalf("diff = %#v", diff)
+	}
+}
+
+func TestDiffVisionAnalysesComponentAdded(t *testing.T) {
+	from := visionOf(domain.VisionComponent{Name: "ESP32"})
+	to := visionOf(domain.VisionComponent{Name: "ESP32"}, domain.VisionComponent{Name: "SG90 Servo"})
+	diff := DiffVisionAnalyses(from, to)
+	if diff.Status != domain.EvidenceChanged || len(diff.Changes) != 1 {
+		t.Fatalf("diff = %#v", diff)
+	}
+	change := diff.Changes[0]
+	if change.Status != domain.EvidenceAdded || change.Name != "SG90 Servo" || change.BeforeCount != 0 || change.AfterCount != 1 {
+		t.Fatalf("change = %#v", change)
+	}
+}
+
+func TestDiffVisionAnalysesComponentRemoved(t *testing.T) {
+	from := visionOf(domain.VisionComponent{Name: "ESP32"}, domain.VisionComponent{Name: "SG90 Servo"})
+	to := visionOf(domain.VisionComponent{Name: "ESP32"})
+	diff := DiffVisionAnalyses(from, to)
+	if diff.Status != domain.EvidenceChanged || len(diff.Changes) != 1 {
+		t.Fatalf("diff = %#v", diff)
+	}
+	change := diff.Changes[0]
+	if change.Status != domain.EvidenceRemoved || change.Name != "SG90 Servo" || change.BeforeCount != 1 || change.AfterCount != 0 {
+		t.Fatalf("change = %#v", change)
+	}
+}
+
+func TestDiffVisionAnalysesCountIncreased(t *testing.T) {
+	from := visionOf(domain.VisionComponent{Name: "SG90 Servo"})
+	to := visionOf(domain.VisionComponent{Name: "SG90 Servo"}, domain.VisionComponent{Name: "SG90 Servo"})
+	diff := DiffVisionAnalyses(from, to)
+	if diff.Status != domain.EvidenceChanged || len(diff.Changes) != 1 {
+		t.Fatalf("diff = %#v", diff)
+	}
+	change := diff.Changes[0]
+	if change.Status != domain.EvidenceChanged || change.BeforeCount != 1 || change.AfterCount != 2 {
+		t.Fatalf("change = %#v", change)
+	}
+}
+
+func TestDiffVisionAnalysesCountDecreased(t *testing.T) {
+	from := visionOf(domain.VisionComponent{Name: "SG90 Servo"}, domain.VisionComponent{Name: "SG90 Servo"})
+	to := visionOf(domain.VisionComponent{Name: "SG90 Servo"})
+	diff := DiffVisionAnalyses(from, to)
+	if diff.Status != domain.EvidenceChanged || len(diff.Changes) != 1 {
+		t.Fatalf("diff = %#v", diff)
+	}
+	change := diff.Changes[0]
+	if change.Status != domain.EvidenceChanged || change.BeforeCount != 2 || change.AfterCount != 1 {
+		t.Fatalf("change = %#v", change)
+	}
+}
+
+// TestDiffVisionAnalysesMatchesByCatalogIDDespiteDifferentDisplayName: the
+// same CatalogID on both sides is identity, even when Gemini's free-text
+// Name differs.
+func TestDiffVisionAnalysesMatchesByCatalogIDDespiteDifferentDisplayName(t *testing.T) {
+	from := visionOf(domain.VisionComponent{CatalogID: "hc-sr04", Name: "HC-SR04"})
+	to := visionOf(domain.VisionComponent{CatalogID: "hc-sr04", Name: "HC-SR04 Ultrasonic Sensor"})
+	diff := DiffVisionAnalyses(from, to)
+	if diff.Status != domain.EvidenceUnchanged || len(diff.Changes) != 0 {
+		t.Fatalf("diff = %#v", diff)
+	}
+}
+
+// TestDiffVisionAnalysesMatchesByNormalizedNameWhenCatalogIDAbsent: names
+// that differ only by case/whitespace normalize to the same identity when
+// neither side has a CatalogID.
+func TestDiffVisionAnalysesMatchesByNormalizedNameWhenCatalogIDAbsent(t *testing.T) {
+	from := visionOf(domain.VisionComponent{Name: "SG90 Servo"})
+	to := visionOf(domain.VisionComponent{Name: "sg90 servo"})
+	diff := DiffVisionAnalyses(from, to)
+	if diff.Status != domain.EvidenceUnchanged || len(diff.Changes) != 0 {
+		t.Fatalf("diff = %#v", diff)
+	}
+}
+
+// TestDiffVisionAnalysesUnrelatedNamesAreNotGuessedSame: "Servo" must never
+// be assumed identical to "SG90 Servo" just because they sound related --
+// this must report a REMOVE + ADD, never a silent match.
+func TestDiffVisionAnalysesUnrelatedNamesAreNotGuessedSame(t *testing.T) {
+	from := visionOf(domain.VisionComponent{Name: "Servo"})
+	to := visionOf(domain.VisionComponent{Name: "SG90 Servo"})
+	diff := DiffVisionAnalyses(from, to)
+	if diff.Status != domain.EvidenceChanged || len(diff.Changes) != 2 {
+		t.Fatalf("diff = %#v", diff)
+	}
+	var sawRemoved, sawAdded bool
+	for _, change := range diff.Changes {
+		switch change.Status {
+		case domain.EvidenceRemoved:
+			sawRemoved = true
+		case domain.EvidenceAdded:
+			sawAdded = true
+		}
+	}
+	if !sawRemoved || !sawAdded {
+		t.Fatalf("expected one REMOVED and one ADDED, got %#v", diff.Changes)
+	}
+}
+
+// TestDiffVisionAnalysesConfidenceOnlyChangeIsUnchanged: confidence
+// improving/degrading must never, by itself, report a physical change.
+func TestDiffVisionAnalysesConfidenceOnlyChangeIsUnchanged(t *testing.T) {
+	from := visionOf(domain.VisionComponent{CatalogID: "hc-sr04", Name: "HC-SR04", Confidence: 0.91})
+	to := visionOf(domain.VisionComponent{CatalogID: "hc-sr04", Name: "HC-SR04", Confidence: 0.97})
+	diff := DiffVisionAnalyses(from, to)
+	if diff.Status != domain.EvidenceUnchanged || len(diff.Changes) != 0 {
+		t.Fatalf("diff = %#v", diff)
+	}
+}
+
+func TestDiffVisionAnalysesOrderingDoesNotMatter(t *testing.T) {
+	from := visionOf(domain.VisionComponent{Name: "ESP32"}, domain.VisionComponent{Name: "HC-SR04"})
+	to := visionOf(domain.VisionComponent{Name: "HC-SR04"}, domain.VisionComponent{Name: "ESP32"})
+	diff := DiffVisionAnalyses(from, to)
+	if diff.Status != domain.EvidenceUnchanged || len(diff.Changes) != 0 {
+		t.Fatalf("diff = %#v", diff)
+	}
+}
+
+func TestDiffVisionAnalysesDuplicateIdenticalComponentsCountCorrectly(t *testing.T) {
+	from := visionOf(domain.VisionComponent{Name: "LED"}, domain.VisionComponent{Name: "LED"}, domain.VisionComponent{Name: "LED"})
+	to := visionOf(domain.VisionComponent{Name: "LED"}, domain.VisionComponent{Name: "LED"})
+	diff := DiffVisionAnalyses(from, to)
+	if diff.Status != domain.EvidenceChanged || len(diff.Changes) != 1 {
+		t.Fatalf("diff = %#v", diff)
+	}
+	if diff.Changes[0].BeforeCount != 3 || diff.Changes[0].AfterCount != 2 {
+		t.Fatalf("change = %#v", diff.Changes[0])
+	}
+}
+
+// TestDiffVisionAnalysesRelationshipsNeverCompared: relationships/wiring are
+// explicitly out of scope for this milestone -- differing Relationships
+// must never affect the component-only semantic visual diff.
+func TestDiffVisionAnalysesRelationshipsNeverCompared(t *testing.T) {
+	from := &domain.PhysicalCommitVisionAnalysis{Analysis: domain.VisionAnalysis{
+		Status:        "VISION_COMPLETE",
+		Components:    []domain.VisionComponent{{Name: "SG90 Servo"}},
+		Relationships: []domain.VisionRelationship{{From: "SG90 Servo", To: "GPIO13", Role: "signal"}},
+	}}
+	to := &domain.PhysicalCommitVisionAnalysis{Analysis: domain.VisionAnalysis{
+		Status:     "VISION_COMPLETE",
+		Components: []domain.VisionComponent{{Name: "SG90 Servo"}},
+	}}
+	diff := DiffVisionAnalyses(from, to)
+	if diff.Status != domain.EvidenceUnchanged || len(diff.Changes) != 0 {
+		t.Fatalf("diff = %#v", diff)
+	}
+}
+
+// TestDiffVisionAnalysesWarningsNeverCompared: differing Warnings must
+// never affect the component-only semantic visual diff.
+func TestDiffVisionAnalysesWarningsNeverCompared(t *testing.T) {
+	from := &domain.PhysicalCommitVisionAnalysis{Analysis: domain.VisionAnalysis{
+		Status:     "VISION_COMPLETE",
+		Components: []domain.VisionComponent{{Name: "SG90 Servo"}},
+		Warnings:   []string{"Vision findings are AI suggestions and require user confirmation."},
+	}}
+	to := &domain.PhysicalCommitVisionAnalysis{Analysis: domain.VisionAnalysis{
+		Status:     "VISION_COMPLETE",
+		Components: []domain.VisionComponent{{Name: "SG90 Servo"}},
+	}}
+	diff := DiffVisionAnalyses(from, to)
+	if diff.Status != domain.EvidenceUnchanged || len(diff.Changes) != 0 {
 		t.Fatalf("diff = %#v", diff)
 	}
 }

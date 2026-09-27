@@ -17,3 +17,5 @@ __pycache__/
 data/uploads/
 apps/api/data/
 .vercel
+
+apps/web/out/

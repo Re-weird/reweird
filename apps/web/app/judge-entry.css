@@ -1,0 +1,5 @@
+/* Browser-only demo: local styles, no external font or service requests. */
+@import "./globals.css";
+@import "./workbench.css";
+@import "./weird-demo.css";
+@import "./judge-demo.css";

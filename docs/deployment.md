@@ -1,3 +1,25 @@
+# Judge deployment (default)
+
+The default Next.js build is a static, browser-only judge simulation. It has no
+sign-in routes, API rewrites, session providers, or hardware connections.
+`npm run build` exports it into `apps/web/out`; `npm start` serves that export.
+GitHub Pages publishes it at https://re-weird.github.io/reweird/ using
+`.github/workflows/deploy-demo.yml` on each push to `main`. Pages must use
+**GitHub Actions** as its source. The workflow sets `REWEIRD_BASE_PATH=/reweird`
+so scripts, navigation, and the logo work under the repository path.
+
+No existing API keys or provider secrets are needed or deleted by this change.
+They belong only to the original hardware stack, which is excluded from the
+judge build. A Vercel redeployment of the default build also serves the demo;
+the previously deployed Vercel site does not change until redeployed.
+
+The notes below describe the separately enabled original hardware stack
+(`REWEIRD_APP_MODE=hardware`), not the public judge demo. Hardware standalone
+packaging requires copying `public` and `.next/static` beside the server output
+as usual; the default `npm start` is for the static judge export.
+
+---
+
 # Deployment
 
 ## Web (Vercel)

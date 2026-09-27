@@ -40,12 +40,22 @@ func demoCommitID(sequence int) string { return fmt.Sprintf("pcommit-%032x", seq
 // GitHub. The project is anonymous (OwnerID == "") so any unauthenticated
 // judge can reach it, exactly like the existing Demo Mode project pool.
 func Seed(repository domain.Repository, uploadRoot string) error {
-	existing, err := repository.GetProject(PhysicalGitDemoProjectID)
+	commitRepository, ok := repository.(domain.PhysicalCommitRepository)
+	if !ok {
+		return fmt.Errorf("demodata: repository does not implement PhysicalCommitRepository")
+	}
+	// The completeness gate is commit count, not bare project existence:
+	// if a prior seed attempt partially failed (e.g. an unrelated storage
+	// limit), the project row can exist with zero commits. Gating on
+	// project existence alone would then skip seeding forever. Every write
+	// below is safe to repeat -- SaveProject/SaveProfile overwrite by id,
+	// and saveCommitIfMissing skips a commit id that already exists.
+	existingCommits, err := commitRepository.ListPhysicalCommits(PhysicalGitDemoProjectID)
 	if err != nil {
 		return err
 	}
-	if existing != nil {
-		return nil // already seeded -- idempotent, no duplicate commits.
+	if len(existingCommits) >= 3 {
+		return nil // already fully seeded -- idempotent, no duplicate commits.
 	}
 
 	now := time.Now().UTC().UnixMilli()
@@ -70,10 +80,6 @@ func Seed(repository domain.Repository, uploadRoot string) error {
 		return err
 	}
 
-	commitRepository, ok := repository.(domain.PhysicalCommitRepository)
-	if !ok {
-		return fmt.Errorf("demodata: repository does not implement PhysicalCommitRepository")
-	}
 	measurementRepository, ok := repository.(domain.MeasurementRepository)
 	if !ok {
 		return fmt.Errorf("demodata: repository does not implement MeasurementRepository")
@@ -97,7 +103,7 @@ func Seed(repository domain.Repository, uploadRoot string) error {
 	if err := attachDemoImage(uploadRoot, &hw1, color.RGBA{40, 180, 99, 255}); err != nil {
 		return err
 	}
-	if _, err := commitRepository.SavePhysicalCommit(hw1); err != nil {
+	if err := saveCommitIfMissing(commitRepository, hw1); err != nil {
 		return err
 	}
 	if err := seedVision(visionRepository, PhysicalGitDemoProjectID, hw1.ID, []domain.VisionComponent{
@@ -126,7 +132,7 @@ func Seed(repository domain.Repository, uploadRoot string) error {
 	if err := attachDemoImage(uploadRoot, &hw2, color.RGBA{196, 43, 43, 255}); err != nil {
 		return err
 	}
-	if _, err := commitRepository.SavePhysicalCommit(hw2); err != nil {
+	if err := saveCommitIfMissing(commitRepository, hw2); err != nil {
 		return err
 	}
 	if err := seedVision(visionRepository, PhysicalGitDemoProjectID, hw2.ID, []domain.VisionComponent{
@@ -157,7 +163,7 @@ func Seed(repository domain.Repository, uploadRoot string) error {
 	if err := attachDemoImage(uploadRoot, &hw3, color.RGBA{40, 180, 99, 255}); err != nil {
 		return err
 	}
-	if _, err := commitRepository.SavePhysicalCommit(hw3); err != nil {
+	if err := saveCommitIfMissing(commitRepository, hw3); err != nil {
 		return err
 	}
 	if err := seedVision(visionRepository, PhysicalGitDemoProjectID, hw3.ID, []domain.VisionComponent{
@@ -201,6 +207,22 @@ func applyState(repository domain.Repository, broken bool, echo echoState) error
 		return fmt.Errorf("demodata: repository does not implement MeasurementRepository")
 	}
 	_, err := measurementRepository.SaveMeasurement(buildMeasurement(PhysicalGitDemoProjectID, echo))
+	return err
+}
+
+// saveCommitIfMissing makes commit creation itself resumable: if a prior
+// seed attempt already created this exact commit id (e.g. it succeeded but
+// a later step in the same run failed), re-running Seed must not try to
+// insert it again and fail on the id's uniqueness constraint.
+func saveCommitIfMissing(repository domain.PhysicalCommitRepository, commit domain.PhysicalCommit) error {
+	existing, err := repository.GetPhysicalCommit(commit.ProjectID, commit.ID)
+	if err != nil {
+		return err
+	}
+	if existing != nil {
+		return nil
+	}
+	_, err = repository.SavePhysicalCommit(commit)
 	return err
 }
 

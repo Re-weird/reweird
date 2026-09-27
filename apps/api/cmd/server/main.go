@@ -59,8 +59,11 @@ func main() {
 	if err := seedDemoProfile(repository); err != nil {
 		log.Fatalf("seed demo Project Profile: %v", err)
 	}
+	// The Physical Git demo is optional, judge-facing convenience, not core
+	// functionality -- a failure here (e.g. this dev database's unrelated
+	// measurement-retention limit) must never take down the whole API.
 	if err := demodata.Seed(repository, uploadRoot); err != nil {
-		log.Fatalf("seed Physical Git demo: %v", err)
+		log.Printf("seed Physical Git demo: %v (Physical Git demo project unavailable this run)", err)
 	}
 	activeProfile, err := repository.GetProfile(profileID)
 	if err != nil {

@@ -222,6 +222,33 @@ func TestApplyRestorationAndApplyBreakFlipVerifyOutcome(t *testing.T) {
 	}
 }
 
+// TestSeedResumesAfterAPartialFailure simulates the exact failure this
+// package hit in development: a prior Seed call created the project/profile
+// but failed before any commit was written (e.g. an unrelated measurement-
+// retention limit). Re-running Seed must complete the story, not skip
+// seeding forever just because the project row already exists.
+func TestSeedResumesAfterAPartialFailure(t *testing.T) {
+	repository, uploadRoot := openTestStore(t)
+	if err := repository.SaveProject(domain.Project{ID: PhysicalGitDemoProjectID, Name: "Ultrasonic Robot Demo", Controller: "ESP32", LogicVoltage: 3.3}); err != nil {
+		t.Fatal(err)
+	}
+	if err := repository.SaveProfile(buildProfile(false)); err != nil {
+		t.Fatal(err)
+	}
+	items, err := repository.ListPhysicalCommits(PhysicalGitDemoProjectID)
+	if err != nil || len(items) != 0 {
+		t.Fatalf("precondition: expected zero commits, got %d, err=%v", len(items), err)
+	}
+
+	if err := Seed(repository, uploadRoot); err != nil {
+		t.Fatalf("Seed did not resume after a partial failure: %v", err)
+	}
+	items, err = repository.ListPhysicalCommits(PhysicalGitDemoProjectID)
+	if err != nil || len(items) != 3 {
+		t.Fatalf("commit count = %d, want 3, err=%v", len(items), err)
+	}
+}
+
 func TestSeedNeverInvokesGeminiOrGitHub(t *testing.T) {
 	// Seed takes only a domain.Repository and an upload root -- there is no
 	// vision.Analyzer, no HTTP client, and no GitHub client anywhere in its

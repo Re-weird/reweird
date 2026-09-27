@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/re-weird/reweird/apps/api/internal/domain"
+	"github.com/re-weird/reweird/apps/api/internal/signalanalysis"
 )
 
 type Planner struct{}
@@ -20,6 +21,23 @@ func (planner *Planner) Recommend(profile domain.ProjectProfile, analysis domain
 			ID: "recommended-" + string(kind), SessionID: sessionID,
 			TestType: kind, TargetProbes: probes, Reason: reason,
 			DurationSeconds: int(analysis.WindowMS / 1000), RequiresUserAction: userAction,
+		}
+	}
+	// Loss of formerly confirmed activity outranks unrelated secondary drift.
+	for _, configuration := range profile.Probes {
+		facts, ok := analysis.Probe(configuration.Probe)
+		if ok && signalanalysis.KnownGoodActivityLost(facts, configuration) {
+			recommendation := makeRecommendation(domain.TestRemeasure, []string{facts.Probe}, fmt.Sprintf("%s/%s has no valid activity compared with Known Good. Inspect the passive monitoring path, then capture fresh evidence; invalid edges do not establish a frequency.", facts.Probe, facts.Role), true)
+			recommendation.Instructions = []string{"Inspect the passive probe connection against the confirmed probe plan; do not drive the target node or alter protection circuitry."}
+			return recommendation
+		}
+	}
+	// An unreliable capture must be fixed before any circuit test can be
+	// interpreted; re-measure that probe instead of testing a hypothesis.
+	for _, configuration := range profile.Probes {
+		facts, ok := analysis.Probe(configuration.Probe)
+		if ok && configuration.Role != "UNASSIGNED" && facts.CaptureUnreliable {
+			return makeRecommendation(domain.TestRemeasure, []string{facts.Probe}, "The raw capture is inconsistent; verify the probe connection and capture a new window before testing a cause.", false)
 		}
 	}
 	for _, group := range analysis.SimultaneousDropoutGroups {
@@ -41,7 +59,7 @@ func (planner *Planner) Recommend(profile domain.ProjectProfile, analysis domain
 		if facts.MissingExpectedActivity {
 			return makeRecommendation(domain.TestSignalActivity, []string{facts.Probe}, "Check whether the expected signal activity is present.", false)
 		}
-		if facts.FrequencyHz != nil && frequencyOutside(*facts.FrequencyHz, configuration.Expected) {
+		if facts.FrequencyHz != nil && frequencyOutside(*facts.FrequencyHz, configuration.Expected) || facts.PulseWidthOutOfRange {
 			return makeRecommendation(domain.TestFrequencyTiming, []string{facts.Probe}, "Compare measured timing with the confirmed signal limits.", false)
 		}
 		if facts.DropoutEvents > configuration.Expected.MaxDropouts {
@@ -50,7 +68,10 @@ func (planner *Planner) Recommend(profile domain.ProjectProfile, analysis domain
 	}
 	for _, configuration := range profile.Probes {
 		facts, ok := analysis.Probe(configuration.Probe)
-		if ok && configuration.Role != "UNASSIGNED" && facts.BaselineDeviationPercent != nil && configuration.Baseline != nil && configuration.Baseline.Status.Trusted() {
+		if ok && configuration.Role != "UNASSIGNED" && len(facts.KnownGoodDeviations) > 0 {
+			return makeRecommendation(domain.TestBaselineComparison, []string{facts.Probe}, "This signal left its confirmed Known Good envelope; compare it with the Known Good capture.", false)
+		}
+		if ok && configuration.Role != "UNASSIGNED" && facts.BaselineDeviationPercent != nil && configuration.Baseline != nil && configuration.Baseline.Status.Trusted() && configuration.Baseline.WindowCount == 0 {
 			return makeRecommendation(domain.TestBaselineComparison, []string{facts.Probe}, "Compare this signal with its trusted healthy baseline.", false)
 		}
 	}

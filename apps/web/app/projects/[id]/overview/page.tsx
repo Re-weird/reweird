@@ -7,7 +7,7 @@ import { legacyViewPath } from "@/lib/project-routes";
 
 export default function ProjectOverviewPage() {
   const router = useRouter();
-  const { project, profile, probePlan, session, saveProfile, confirmProfile, syncRepository, currentProjectID } = useAppState();
+  const { project, profile, probePlan, session, saveProfile, confirmProfile, syncRepository, reviseProfile, currentProjectID } = useAppState();
   return (
     <ProjectOverviewView
       project={project}
@@ -17,6 +17,7 @@ export default function ProjectOverviewPage() {
       onSave={saveProfile}
       onConfirm={confirmProfile}
       onSync={syncRepository}
+      onRevise={project ? reviseProfile : undefined}
       onNavigate={(view) => router.push(legacyViewPath(currentProjectID, view))}
     />
   );

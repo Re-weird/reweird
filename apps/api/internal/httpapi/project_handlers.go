@@ -14,6 +14,7 @@ import (
 	"github.com/re-weird/reweird/apps/api/internal/profiles"
 	"github.com/re-weird/reweird/apps/api/internal/projects"
 	"github.com/re-weird/reweird/apps/api/internal/projectunderstanding"
+	"github.com/re-weird/reweird/apps/api/internal/telemetry"
 )
 
 func (controller *Controller) createProject(ctx *fiber.Ctx) error {
@@ -302,6 +303,11 @@ func (controller *Controller) analyzeLocked(ctx context.Context, project *domain
 		}
 	}
 	analysis, profile := controller.understanding.Analyze(ctx, *project, imagePath)
+	if controller.source.Name() == "serial" {
+		if frame, frameErr := controller.source.Latest(ctx); frameErr == nil && telemetry.Validate(frame) == nil {
+			profile = projectunderstanding.SuggestPhysicalProbeMapping(profile, frame)
+		}
+	}
 	project.Analysis = &analysis
 	project.AnalysisStatus = domain.AnalysisDraftReady
 	project.ProbePlan = nil
@@ -442,6 +448,57 @@ func (controller *Controller) confirmProjectProfile(ctx *fiber.Ctx) error {
 		return internalError(ctx, err)
 	}
 	return ctx.JSON(fiber.Map{"profile": profile, "probe_plan": plan})
+}
+
+// reviseProjectProfile opens an explicit new revision of a confirmed
+// profile. The confirmed revision is never edited in place: the draft gets
+// version+1, the probe plan must be generated and confirmed again, and every
+// Known Good learned under the previous revision becomes incompatible.
+func (controller *Controller) reviseProjectProfile(ctx *fiber.Ctx) error {
+	controller.profileMu.Lock()
+	defer controller.profileMu.Unlock()
+	project, err := controller.findProject(ctx, ctx.Params("id"))
+	if err != nil {
+		return internalError(ctx, err)
+	}
+	if project == nil {
+		return apiError(ctx, fiber.StatusNotFound, "PROJECT_NOT_FOUND", "The requested project does not exist.")
+	}
+	profile, err := controller.repository.GetProfile(project.ID)
+	if err != nil {
+		return internalError(ctx, err)
+	}
+	if profile == nil {
+		return apiError(ctx, fiber.StatusNotFound, "PROFILE_NOT_FOUND", "Analyze the project before revising its profile.")
+	}
+	if !profile.Confirmed {
+		return apiError(ctx, fiber.StatusConflict, "PROFILE_NOT_CONFIRMED", "This profile is still a draft; edit it directly.")
+	}
+	revision := *profile
+	revision.Version = profile.Version + 1
+	revision.Confirmed = false
+	revision.ConfirmedAtMS = 0
+	revision.ConfirmedBy = ""
+	revision.AnalysisStatus = "DRAFT"
+	revision.Probes = nil
+	revision.UpdatedAtMS = time.Now().UTC().UnixMilli()
+	revision.Components = append([]domain.ComponentSpecification(nil), profile.Components...)
+	revision.Connections = append([]domain.ProfileConnection(nil), profile.Connections...)
+	for index := range revision.Components {
+		revision.Components[index].Confirmed = false
+	}
+	for index := range revision.Connections {
+		revision.Connections[index].Confirmed = false
+	}
+	if err := profiles.Validate(revision); err != nil {
+		return apiError(ctx, fiber.StatusUnprocessableEntity, "INVALID_PROFILE", err.Error())
+	}
+	project.ProbePlan = nil
+	project.AnalysisStatus = domain.AnalysisDraftReady
+	if err := controller.repository.SaveProjectProfile(*project, revision); err != nil {
+		return internalError(ctx, err)
+	}
+	return ctx.JSON(revision)
 }
 
 func (controller *Controller) getProbePlan(ctx *fiber.Ctx) error {

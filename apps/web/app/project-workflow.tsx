@@ -100,6 +100,10 @@ export function NewProjectModal({
   const [status, setStatus] = useState("");
   const [error, setError] = useState("");
   const [createdID, setCreatedID] = useState("");
+  const [inputMethod, setInputMethod] = useState<"github" | "local">("github");
+  const [image, setImage] = useState<File | null>(null);
+  const [codeFile, setCodeFile] = useState<File | null>(null);
+  const [pastedCode, setPastedCode] = useState("");
   const formRef = useRef<HTMLFormElement>(null);
 
   useEffect(() => {
@@ -143,16 +147,30 @@ export function NewProjectModal({
   async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError("");
-    if (!repo) { setError("Choose the GitHub repository that holds this project's firmware."); return; }
+    if (inputMethod === "github" && !repo) { setError("Choose the GitHub repository that holds this project's firmware."); return; }
     setBusy(true);
     let projectID = createdID;
     try {
+      if (inputMethod === "local") {
+        if (!image && !codeFile && !pastedCode.trim()) throw new Error("Upload a photo or source code before analysis.");
+        if (image && image.size > 5 * 1024 * 1024) throw new Error("The hardware photo exceeds the 5 MB limit.");
+        if ((codeFile?.size ?? 0) > 512 * 1024 || new TextEncoder().encode(pastedCode).length > 512 * 1024) throw new Error("Source code exceeds the 512 KB limit.");
+      }
       if (!projectID) {
         setStatus("Creating the project…");
-        const project = await projectApi.createProject({ name: name.trim() || repo.name, description, controller, logic_voltage: logicVoltage, repository: repo.full_name });
+        const project = await projectApi.createProject({ name: name.trim() || repo?.name || "My electronics project", description, controller, logic_voltage: logicVoltage, ...(inputMethod === "github" && repo ? { repository: repo.full_name } : {}) });
         projectID = project.id;
         setCreatedID(project.id);
       }
+      if (inputMethod === "local") {
+        setStatus("Uploading validated project data and analyzing evidence…");
+        if (image) await projectApi.uploadProjectImage(projectID, image);
+        if (codeFile) await projectApi.uploadProjectCode(projectID, codeFile);
+        else if (pastedCode.trim()) await projectApi.submitPastedCode(projectID, pastedCode, controller.toLowerCase().includes("raspberry") ? "main.py" : "main.ino");
+        onComplete(await projectApi.analyzeProject(projectID));
+        return;
+      }
+      if (!repo) throw new Error("Choose a GitHub repository.");
       setStatus(`Reading ${repo.default_branch} from ${repo.full_name} and analyzing the code…`);
       const result = await projectApi.syncRepository(projectID);
       if (!result.profile || !result.analysis) throw new Error("The repository was read, but no analysis was produced.");
@@ -170,11 +188,15 @@ export function NewProjectModal({
     <div className="modal-backdrop" role="presentation" onMouseDown={busy ? undefined : onClose}>
       <form ref={formRef} tabIndex={-1} className="modal project-modal" role="dialog" aria-modal="true" aria-labelledby="new-project-title" onKeyDown={handleDialogKey} onSubmit={submit} onMouseDown={(event) => event.stopPropagation()}>
         <div className="modal-head">
-          <div><span className="eyebrow">New project</span><h2 id="new-project-title">Start from a GitHub repository</h2></div>
+          <div><span className="eyebrow">New project</span><h2 id="new-project-title">Create project</h2></div>
           <button type="button" className="icon-button" onClick={onClose} disabled={busy} aria-label="Close"><X size={18} /></button>
         </div>
 
-        <div data-tw className="mb-4">
+        <div className="form-row" role="group" aria-label="Project input method">
+          <button type="button" className={inputMethod === "github" ? "primary" : "secondary"} aria-pressed={inputMethod === "github"} disabled={busy || Boolean(createdID)} onClick={() => { setInputMethod("github"); setError(""); }}>Import from GitHub</button>
+          <button type="button" className={inputMethod === "local" ? "primary" : "secondary"} aria-pressed={inputMethod === "local"} disabled={busy || Boolean(createdID)} onClick={() => { setInputMethod("local"); setError(""); }}>Upload local project</button>
+        </div>
+        {inputMethod === "github" && <div data-tw className="mb-4">
           {githubError ? (
             <div className="flex flex-wrap items-center gap-3 text-sm text-muted-foreground"><WifiOff className="size-4" strokeWidth={1.5} /> {githubError}<Button type="button" size="sm" variant="outline" onClick={() => void refreshGitHub()}><RefreshCw /> Try again</Button></div>
           ) : !github ? (
@@ -202,16 +224,21 @@ export function NewProjectModal({
               {github.install_url && <button type="button" className="mt-2 text-xs text-muted-foreground underline-offset-4 hover:text-foreground hover:underline" onClick={() => startGitHubInstall(github.install_url!, true)}>Missing a repository? Change which ones ReWeird can see</button>}
             </>
           )}
-        </div>
+        </div>}
 
-        {connected && <>
+        {(inputMethod === "local" || connected) && <>
           <label>Project name<input required value={name} maxLength={120} disabled={busy} placeholder={repo?.name ?? "Pick a repository first"} onChange={(event) => { setName(event.target.value); setNameEdited(true); }} /></label>
           <label>Short description <small className="label-hint">optional, but helps define expected behavior</small><textarea rows={2} maxLength={2000} value={description} disabled={busy} onChange={(event) => setDescription(event.target.value)} placeholder="What should this project do?" /></label>
           <div className="form-row">
             <label>Controller<select value={controller} disabled={busy || Boolean(createdID)} onChange={(event) => setController(event.target.value)}><option>ESP32</option><option>Arduino Uno</option><option>Raspberry Pi Pico</option><option>Other controller</option></select></label>
             <label>Logic voltage<select value={logicVoltage} disabled={busy || Boolean(createdID)} onChange={(event) => setLogicVoltage(Number(event.target.value))}><option value={3.3}>3.3 V</option><option value={5}>5 V</option><option value={1.8}>1.8 V</option></select></label>
           </div>
-          <div className="input-security"><Camera size={15} /><span>Hardware photos come from the ReWeird camera on your bench as you build; there&apos;s nothing to upload. Code is read from GitHub as text and never compiled or run.</span></div>
+          {inputMethod === "local" ? <>
+            <label>Hardware photo · PNG/JPEG · max 5 MB<input type="file" accept="image/png,image/jpeg,.png,.jpg,.jpeg" disabled={busy} onChange={(event) => setImage(event.target.files?.[0] ?? null)} /></label>
+            <label>Source code · max 512 KB<input type="file" accept=".ino,.cpp,.h,.hpp,.c,.py,.txt" disabled={busy || Boolean(pastedCode.trim())} onChange={(event) => setCodeFile(event.target.files?.[0] ?? null)} /></label>
+            <label>Or paste source code<textarea rows={6} value={pastedCode} disabled={busy || Boolean(codeFile)} onChange={(event) => setPastedCode(event.target.value)} /></label>
+            <p className="input-security">Uploads are validated and stored as data only. Uploaded code is never compiled or executed.</p>
+          </> : <div className="input-security"><Camera size={15} /><span>Hardware photos come from the ReWeird camera on your bench as you build. Code is read from GitHub as text and never compiled or run.</span></div>}
         </>}
 
         {status && <div className="analysis-progress"><RefreshCw className="spin" size={15} /><span>{status}</span></div>}
@@ -220,7 +247,7 @@ export function NewProjectModal({
           <button type="button" className="text-button" onClick={onLoadDemo} disabled={busy}>Load Demo Project</button>
           <span />
           <button type="button" className="secondary" onClick={onClose} disabled={busy}>Cancel</button>
-          <button className="primary" type="submit" disabled={busy || !connected || !repo}>{busy ? <RefreshCw className="spin" size={16} /> : <FolderGit2 size={16} />} {createdID ? "Try again" : "Create project"}</button>
+          <button className="primary" type="submit" disabled={busy || (inputMethod === "github" && (!connected || !repo))}>{busy ? <RefreshCw className="spin" size={16} /> : <FolderGit2 size={16} />} {createdID ? "Try again" : "Create project"}</button>
         </div>
       </form>
     </div>
@@ -235,9 +262,9 @@ export function ProbePlanView({ project, plan, onConnected }: { project: Project
   if (!plan) return <section className="empty-state panel"><Cable size={32} /><h2>No probe plan yet</h2><p>Confirm a generated Project Profile first. ReWeird will then map GND and P1–P6 from that project—not from demo assumptions.</p></section>;
   async function proceed() { setBusy(true); setError(""); try { await onConnected(); } catch (caught) { setError(errorMessage(caught)); } finally { setBusy(false); } }
   return <>
-    <section className="page-heading"><div><p className="kicker">Connect ReWeird</p><h1>Probe placement plan</h1><p>Generated from the confirmed profile for {project?.name ?? "this project"}. Verify voltage and polarity before touching the circuit.</p></div><span className="confirmed"><Check size={13} /> Profile confirmed</span></section>
+    <section className="page-heading"><div><p className="kicker">Connect ReWeird</p><h1>Probe placement plan</h1><p>Generated from the confirmed profile for {project?.name ?? "this project"}. Verify voltage and polarity before touching the circuit.</p><p>Physical profile ID: <code>{plan.profile_id}</code>. Firmware and API must use this exact ID before live diagnostics.</p></div><span className="confirmed"><Check size={13} /> Profile confirmed</span></section>
     {error && <div className="form-error page-error"><AlertTriangle size={15} />{error}</div>}
-    <section className="probe-plan-grid">{plan.instructions.map((instruction) => <article className={`probe-instruction ${instruction.probe === "GND" ? "ground" : ""}`} key={instruction.probe}><div className="probe-badge">{instruction.probe}</div><div><span className="eyebrow">{instruction.role}</span><h2>{instruction.target}</h2><p>{instruction.expected} · {instruction.signal_type}</p>{instruction.explanation && <small>{instruction.explanation}</small>}<div className="safety-warning"><ShieldCheck size={13} />{instruction.safe_warning}</div></div></article>)}</section>
+    <section className="probe-plan-grid">{plan.instructions.map((instruction) => <article className={`probe-instruction ${instruction.probe === "GND" ? "ground" : ""}`} key={instruction.probe}><div className="probe-badge">{instruction.probe}</div><div><span className="eyebrow">{instruction.role}</span><h2>{instruction.target}</h2><p>{instruction.expected} · {instruction.signal_type}</p>{instruction.explanation && <small>{instruction.explanation}</small>}<div className="safety-warning"><ShieldCheck size={13} />{instruction.safe_warning}</div></div></article>)}{["P1", "P2", "P3", "P4", "P5", "P6"].filter((probe) => !plan.instructions.some((step) => step.probe === probe)).map((probe) => <article className="probe-instruction" key={probe}><div className="probe-badge">{probe}</div><div><span className="eyebrow">Unassigned</span><h2>Spare / disconnected</h2><p>No target node is assigned in this confirmed profile.</p><div className="safety-warning"><ShieldCheck size={13} />Leave this probe disconnected.</div></div></article>)}</section>
     <section className="connection-confirm"><label><input type="checkbox" checked={checked} onChange={(event) => setChecked(event.target.checked)} /><span><strong>I connected the probes exactly as shown</strong><small>I verified circuit ground, voltage range, divider/level-shifter requirements, and that PATCH remains disconnected.</small></span></label><button className="primary" disabled={!checked || busy} onClick={proceed}>{busy ? <RefreshCw className="spin" size={16} /> : <CheckCircle2 size={16} />} Proceed to live diagnostics</button></section>
   </>;
 }

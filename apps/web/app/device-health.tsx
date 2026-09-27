@@ -7,6 +7,7 @@ import type { BaselineSource, DevicePassport, HistoryDetail, KnownGoodBaseline, 
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ApiError, historyApi, passportApi } from "@/lib/api";
+import { CalibrationPanel } from "./calibration-panel";
 import { cn } from "@/lib/utils";
 
 type Destination = "profile" | "connect" | "live" | "diagnosis" | "guided" | "history";
@@ -17,6 +18,7 @@ const reveal = { hidden: { opacity: 0, transform: "translateY(8px)" }, show: { o
 type Tone = "pass" | "warn" | "fail" | "neutral";
 
 const statusMeta: Record<PassportStatus, { label: string; tone: Tone }> = {
+  BASELINE_INCOMPATIBLE: { label: "Known Good incompatible with this revision", tone: "warn" },
   HEALTHY: { label: "Healthy", tone: "pass" },
   DEVIATION_DETECTED: { label: "Deviation detected", tone: "fail" },
   NEEDS_VERIFICATION: { label: "Needs verification", tone: "warn" },
@@ -68,6 +70,7 @@ function BaselineSlot({ label, baseline, empty }: { label: string; baseline?: Kn
         <>
           <p className="mt-2 text-sm font-semibold text-foreground">Capture <span className="font-mono">#{baseline.measurement_id}</span></p>
           <p className="mt-1 truncate text-xs text-muted-foreground">{baseline.device_id} · {when(baseline.captured_at_ms || baseline.ingested_at_ms)}</p>
+          <p className="mt-1 text-xs text-subtle">{baseline.provenance ?? baseline.source} · Profile revision {baseline.profile_version} · {baseline.window_count ?? 1} windows</p>
           {baseline.note && <p className="mt-1 truncate text-xs text-subtle">&ldquo;{baseline.note}&rdquo;</p>}
         </>
       ) : <p className="mt-2 text-sm text-muted-foreground">{empty}</p>}
@@ -145,7 +148,7 @@ function SaveBaseline({ captures, knownGood, onSave, onNavigate }: {
           <span>{selected.source === "SIMULATED" ? "This simulated behavior is the expected reference." : "The device was working correctly during this capture."}</span>
         </label>
         <p className="text-xs leading-relaxed text-subtle">
-          {selected.source === "SIMULATED" ? "Simulated baselines only compare against simulator captures. They never count as physical health." : "Saved from stored ESP32 serial telemetry. Your report, not a certification."}
+          {selected.source === "SIMULATED" ? "Simulated baselines only compare against simulator captures. They never count as physical health." : "Physical Known Good requires 10 consecutive REAL SERIAL windows ending at this capture and your confirmation. Use Physical calibration above; this is not a certification."}
         </p>
         <div className="mt-auto flex flex-wrap items-center gap-3">
           <Button size="sm" className="active:scale-[0.97]" disabled={!confirmed || saving || alreadySaved} onClick={() => void save()}>
@@ -274,10 +277,12 @@ export function DeviceHealthView({ profile, onNavigate }: {
 
       {error && <p role="alert" className="text-sm text-fail">{error}</p>}
 
+      {profile.id !== "ultrasonic-demo" && <CalibrationPanel profileID={profile.id} onSaved={() => void load()} />}
+
       <motion.section variants={reveal} aria-labelledby="known-good-title" className="space-y-4">
         <SectionTitle eyebrow="Reference" title="Known good" />
         <div className="grid grid-cols-1 divide-y divide-line-soft rounded-xl bg-surface ring-1 ring-border md:grid-cols-2 md:divide-x md:divide-y-0">
-          <BaselineSlot label="Physical · ESP32 serial" baseline={record.physical_baseline} empty="None yet. Needs a matching serial capture you mark as healthy." />
+          <BaselineSlot label="Physical · ESP32 serial" baseline={record.physical_baseline} empty="None yet. Learn 10 matching REAL SERIAL windows, then confirm healthy operation." />
           <BaselineSlot label="Simulated · test harness" baseline={record.simulated_baseline} empty="None saved. Never counts as physical health." />
         </div>
         <SaveBaseline captures={record.recent_captures} knownGood={record.known_good} onSave={saveBaseline} onNavigate={onNavigate} />

@@ -365,6 +365,11 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--cyan); outline-
 
 .git-files > div { background: var(--bg); }
 
+.demo-placeholder-notice { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; margin-bottom: 18px; padding: 11px 14px; border: 1px dashed color-mix(in srgb, var(--amber) 55%, transparent); border-radius: 8px; background: color-mix(in srgb, var(--amber) 7%, var(--surface)); }
+.demo-placeholder-notice p { flex: 1; min-width: 240px; margin: 0; font-size: 12px; line-height: 1.6; color: var(--muted); }
+.demo-placeholder-tag { font: 500 10px "DM Mono", monospace; letter-spacing: 1.2px; text-transform: uppercase; color: var(--amber); padding: 3px 8px; border: 1px solid color-mix(in srgb, var(--amber) 50%, transparent); border-radius: 999px; }
+.demo-placeholder-notice .text-button { display: inline-flex; align-items: center; gap: 4px; }
+
 @media (prefers-reduced-motion: reduce) {
   .guided-panel .eyebrow::before, .history-detail .eyebrow::before, .report-preview .eyebrow::before { animation: none; }
   .live-badge span, .status-dot.stable, .status-dot.active { animation: none; }

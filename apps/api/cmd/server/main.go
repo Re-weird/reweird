@@ -6,10 +6,12 @@ import (
 	"log"
 	"net"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
 
+	"github.com/joho/godotenv"
 	"github.com/re-weird/reweird/apps/api/internal/codeanalysis"
 	"github.com/re-weird/reweird/apps/api/internal/diagnostics"
 	"github.com/re-weird/reweird/apps/api/internal/domain"
@@ -28,6 +30,8 @@ import (
 )
 
 func main() {
+	loadLocalDotEnv()
+
 	databasePath := environment("DATABASE_PATH", "./reweird.db")
 	port := environment("API_PORT", "8080")
 	host := environment("API_HOST", "127.0.0.1")
@@ -226,6 +230,44 @@ func authStatus(configured bool) string {
 		return "google"
 	}
 	return "anonymous-only"
+}
+
+// loadLocalDotEnv is a local-development convenience only: it searches
+// upward from the current working directory for the repository's canonical
+// .env file (reweird/.env) and loads any keys from it into the process
+// environment, so `go run ./cmd/server` works identically whether launched
+// from the repository root or from apps/api. Production deployments are
+// unaffected either way -- they inject real environment variables directly
+// and never rely on a .env file being present.
+//
+// godotenv.Load only sets a key if it is not already present in the
+// process environment (see joho/godotenv's documented behavior), so a real,
+// already-exported OS environment variable always takes precedence over
+// whatever the .env file says -- this must never let a stale local .env
+// value override production configuration.
+func loadLocalDotEnv() {
+	dir, err := os.Getwd()
+	if err != nil {
+		return
+	}
+	for depth := 0; depth < 8; depth++ {
+		candidate := filepath.Join(dir, ".env")
+		if _, statErr := os.Stat(candidate); statErr == nil {
+			// Only the path is logged, never the file's contents -- it
+			// carries real database credentials.
+			if loadErr := godotenv.Load(candidate); loadErr != nil {
+				log.Printf("warning: found %s but failed to load it: %v", candidate, loadErr)
+			} else {
+				log.Printf("loaded local development environment from %s", candidate)
+			}
+			return
+		}
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			return
+		}
+		dir = parent
+	}
 }
 
 func environment(key, fallback string) string {

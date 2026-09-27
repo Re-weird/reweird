@@ -87,6 +87,10 @@ async function demoRequest(path: string, init?: RequestInit): Promise<DemoSessio
   }
 }
 
+export const patchApi = {
+  status: () => requestJSON<{ state: string; physical_enabled: boolean; master_enabled: boolean; detail: string }>("/api/v1/patch/status"),
+};
+
 export const demoApi = {
   load: () => demoRequest("/api/v1/session"),
   currentSession: () => requestJSON<DemoSession>("/api/v1/session"),

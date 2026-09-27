@@ -17,6 +17,7 @@ import (
 	"github.com/re-weird/reweird/apps/api/internal/domain"
 	"github.com/re-weird/reweird/apps/api/internal/githubapp"
 	"github.com/re-weird/reweird/apps/api/internal/passport"
+	"github.com/re-weird/reweird/apps/api/internal/patchcontrol"
 	"github.com/re-weird/reweird/apps/api/internal/profiles"
 	"github.com/re-weird/reweird/apps/api/internal/projectunderstanding"
 	"github.com/re-weird/reweird/apps/api/internal/reports"
@@ -24,6 +25,7 @@ import (
 )
 
 type Controller struct {
+	patch         *patchcontrol.Controller
 	mu            sync.RWMutex
 	testMu        sync.Mutex
 	profileMu     sync.Mutex
@@ -97,6 +99,13 @@ func newApp(engine *diagnostics.Engine, repository domain.Repository, source dom
 	if scenario, ok := source.(domain.ScenarioTelemetrySource); ok {
 		scenario.SetStage(domain.StageDiagnose)
 	}
+	if audit, ok := repository.(patchcontrol.Store); ok {
+		var err error
+		controller.patch, err = patchcontrol.New(audit)
+		if err != nil {
+			log.Printf("PATCH remains locked: audit storage initialization failed: %v", err)
+		}
+	}
 
 	app.Get("/health", func(ctx *fiber.Ctx) error {
 		return controller.systemStatus(ctx)
@@ -111,6 +120,10 @@ func newApp(engine *diagnostics.Engine, repository domain.Repository, source dom
 	api.Get("/status", controller.systemStatus)
 	api.Get("/report", controller.report)
 	api.Get("/telemetry/status", controller.telemetryStatus)
+	api.Get("/patch/status", controller.patchStatus)
+	api.Get("/projects/:id/patch/actions", controller.patchActions)
+	api.Post("/projects/:id/patch/proposals", controller.proposePatch)
+	api.Post("/projects/:id/patch/actions/:action/approve", controller.approvePatch)
 	api.Get("/measurements", controller.listMeasurements)
 	api.Get("/computer/status", controller.computerStatus)
 	api.Get("/computer/scenarios", controller.computerScenarios)

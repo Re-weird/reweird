@@ -59,6 +59,8 @@ interface AppState {
 
 const AppStateContext = createContext<AppState | null>(null);
 
+export function useOptionalAppState(): AppState | null { return useContext(AppStateContext); }
+
 export function useAppState(): AppState {
   const context = useContext(AppStateContext);
   if (!context) throw new Error("useAppState must be used within AppStateProvider");

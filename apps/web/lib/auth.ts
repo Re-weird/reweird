@@ -9,7 +9,7 @@ import { useSession } from "next-auth/react";
  * violate the rules of hooks (every render of a given component calls the
  * same fixed function reference for the lifetime of the app).
  */
-export const AUTH_ENABLED = !!process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID;
+export const AUTH_ENABLED = process.env.NEXT_PUBLIC_JUDGE_MODE !== "true" && !!process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID;
 
 export interface AuthUser {
   isLoaded: boolean;

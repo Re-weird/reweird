@@ -329,9 +329,12 @@ function Result({ state, file, onNext }: { state: DemoState; file: CaseFile; onN
     let frame = 0; const start = performance.now();
     const tick = (now: number) => { const t = Math.min(1, (now - start) / 900); setShown(Math.round(state.score * (1 - Math.pow(1 - t, 3)))); if (t < 1) frame = requestAnimationFrame(tick); };
     frame = requestAnimationFrame(tick);
-    // Browsers pause animation frames in hidden tabs; always land on the real score.
-    const settle = window.setTimeout(() => setShown(state.score), 1000);
-    return () => { cancelAnimationFrame(frame); window.clearTimeout(settle); };
+    // Hidden tabs freeze animation frames and timers; never leave the count stuck.
+    const settle = () => setShown(state.score);
+    if (document.hidden) settle();
+    const timeout = window.setTimeout(settle, 1000);
+    document.addEventListener("visibilitychange", settle);
+    return () => { cancelAnimationFrame(frame); window.clearTimeout(timeout); document.removeEventListener("visibilitychange", settle); };
   }, [state.score]);
   function download() {
     const blob = new Blob([JSON.stringify(record, null, 2)], { type: "application/json" });

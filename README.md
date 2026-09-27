@@ -23,6 +23,33 @@ remain stable. ReWeird isolates the anomaly, recommends a wiggle test, observes
 that failures correlate with movement, simulates a repair, and verifies that the
 signal returns to its healthy baseline.
 
+## Judges: start here (no hardware needed)
+
+Open [http://localhost:3000/demo](http://localhost:3000/demo) and pick one:
+
+- **Project demo**: starts from the landing page, with our real ESP32 + HC-SR04 connected live.
+- **Try it yourself**: a simulated circuit at `/try`. It needs no hardware, no
+  Go API, no Python services and no sign-in:
+
+```bash
+npm install
+npm run dev
+```
+
+In the simulation you:
+
+1. **Make it weird.** Pick a fault, or let ReWeird secretly pick a **Mystery fault**.
+2. **Investigate.** Read three simulated probes and choose a test. The right test
+   changes the evidence. A wrong one says *That wasn’t it.* Hints are available.
+3. **Fix.** Pick a simulated repair. A wrong one is allowed.
+4. **VERIFY.** It shows **NOT WEIRD ANYMORE.** only when all four checks pass
+   again. Otherwise it shows **STILL WEIRD.**
+5. **Device Passport.** The whole run: time, tests, fixes and hints. You can
+   download it as JSON.
+
+A **SIMULATED DEMO** banner stays pinned throughout. Every simulated reading comes
+from fixed tables in `apps/web/lib/judge-demo.ts`, and nothing is sent to a server.
+
 ## What is included
 
 - A polished Next.js + TypeScript diagnostic dashboard
@@ -466,6 +493,7 @@ See [docs/security.md](docs/security.md) for the full trust-boundary checklist.
 ```bash
 npm run typecheck
 npm run build
+npm run test:experience --workspace @reweird/web
 npm audit
 
 cd apps/api

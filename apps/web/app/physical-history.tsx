@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { AlertTriangle, CheckCircle2, Cpu, GitCommitHorizontal, Image as ImageIcon, RefreshCw, Upload, Zap, X } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Circle, Cpu, GitCommitHorizontal, Image as ImageIcon, RefreshCw, ShieldCheck, Upload, Zap, X } from "lucide-react";
 import type {
   ComponentChange,
   ConnectionChange,
@@ -11,9 +11,13 @@ import type {
   PhysicalCommitDetail,
   PhysicalCommitDiff,
   PhysicalCommitVisionAnalysis,
+  PhysicalRestorePlan,
+  PhysicalVerifyResult,
   ProbeElectricalChange,
   Project,
+  RestoreSection,
   SemanticVisionComponentChange,
+  VerifyCategoryResult,
 } from "@reweird/shared-types";
 import { ApiError, physicalGitApi } from "@/lib/api";
 
@@ -42,6 +46,122 @@ const statusColor: Record<EvidenceState, string> = {
   NOT_CAPTURED: "var(--muted)",
   UNAVAILABLE: "var(--amber)",
 };
+
+const restoreStatusLabel: Record<PhysicalRestorePlan["components"]["status"], string> = {
+  MATCH: "Match",
+  ACTION_REQUIRED: "Action required",
+  VERIFY_REQUIRED: "Verification required",
+  NOT_CAPTURED: "Not captured",
+  UNAVAILABLE: "Insufficient evidence to compare",
+};
+
+const restoreStatusColor: Record<PhysicalRestorePlan["components"]["status"], string> = {
+  MATCH: "var(--green)",
+  ACTION_REQUIRED: "var(--red)",
+  VERIFY_REQUIRED: "var(--amber)",
+  NOT_CAPTURED: "var(--muted)",
+  UNAVAILABLE: "var(--amber)",
+};
+
+const verifyStatusLabel: Record<PhysicalVerifyResult["overall"], string> = {
+  SUPPORTED: "Supported by available evidence",
+  NOT_SUPPORTED: "Not supported by available evidence",
+  INCONCLUSIVE: "Inconclusive",
+  NOT_CAPTURED: "Not captured",
+  UNAVAILABLE: "Unavailable",
+};
+
+const verifyStatusColor: Record<PhysicalVerifyResult["overall"], string> = {
+  SUPPORTED: "var(--green)",
+  NOT_SUPPORTED: "var(--red)",
+  INCONCLUSIVE: "var(--amber)",
+  NOT_CAPTURED: "var(--muted)",
+  UNAVAILABLE: "var(--amber)",
+};
+
+function RestoreActionIcon({ status }: { status: PhysicalRestorePlan["components"]["status"] }) {
+  if (status === "MATCH") return <CheckCircle2 size={14} color="var(--green)" />;
+  if (status === "ACTION_REQUIRED") return <AlertTriangle size={14} color="var(--red)" />;
+  if (status === "VERIFY_REQUIRED") return <Circle size={14} color="var(--amber)" />;
+  return <Circle size={14} color="var(--muted)" />;
+}
+
+function RestoreSectionView({ title, section }: { title: string; section: RestoreSection }) {
+  return (
+    <div style={{ marginBottom: 16 }}>
+      <div className="panel-heading">
+        <div><span className="eyebrow">{title}</span></div>
+        <b style={{ color: restoreStatusColor[section.status], fontSize: 9, textTransform: "uppercase", letterSpacing: 0.6 }}>{restoreStatusLabel[section.status]}</b>
+      </div>
+      {section.actions?.map((action, index) => (
+        <div key={`${action.title}-${index}`} style={{ display: "flex", gap: 8, padding: "6px 0", borderTop: "1px solid var(--line-soft)" }}>
+          <RestoreActionIcon status={action.status} />
+          <div style={{ flex: 1 }}>
+            <div style={{ fontSize: 9, display: "flex", justifyContent: "space-between" }}>
+              <span>{action.title}{action.ai_interpreted && <em style={{ marginLeft: 6, color: "var(--muted)" }}>AI-detected, unconfirmed</em>}</span>
+              {(action.target_value || action.current_value) && <span style={{ color: "var(--muted)" }}>{action.current_value ?? "—"} &rarr; {action.target_value ?? "—"}</span>}
+            </div>
+            {action.description && <p className="inline-empty" style={{ textAlign: "left", padding: "2px 0 0", fontSize: 9 }}>{action.description}</p>}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function VerifyCategoryView({ title, result }: { title: string; result: VerifyCategoryResult }) {
+  return (
+    <div style={{ display: "flex", justifyContent: "space-between", padding: "8px 0", borderTop: "1px solid var(--line-soft)" }}>
+      <div>
+        <span className="eyebrow">{title}</span>
+        {result.detail && <p className="inline-empty" style={{ textAlign: "left", padding: "2px 0 0", fontSize: 9 }}>{result.detail}</p>}
+      </div>
+      <b style={{ color: verifyStatusColor[result.status], fontSize: 9, textTransform: "uppercase", letterSpacing: 0.6, whiteSpace: "nowrap" }}>{verifyStatusLabel[result.status]}</b>
+    </div>
+  );
+}
+
+function RestorePanel({ plan, targetLabel, sourceLabel, onVerify }: { plan: PhysicalRestorePlan; targetLabel: string; sourceLabel: string; onVerify: () => void }) {
+  return (
+    <section className="panel history-detail">
+      <span className="eyebrow">Physical Restore</span>
+      <h2>Restore {targetLabel}</h2>
+      {plan.has_source ? <p className="inline-empty" style={{ textAlign: "left" }}>Reference state: {sourceLabel}</p> : <p className="inline-empty" style={{ textAlign: "left" }}>No reference commit is available -- restoration guidance is limited.</p>}
+
+      <RestoreSectionView title="Components" section={plan.components} />
+      <RestoreSectionView title="Circuit" section={plan.circuit} />
+      <RestoreSectionView title="Electrical" section={plan.electrical} />
+      <RestoreSectionView title="Visual" section={plan.visual} />
+      <RestoreSectionView title="Software" section={plan.software} />
+
+      <div className="modal-actions" style={{ justifyContent: "flex-start", marginTop: 8 }}>
+        <button type="button" className="primary" onClick={onVerify}><ShieldCheck size={16} /> Verify restoration</button>
+      </div>
+    </section>
+  );
+}
+
+function VerifyPanel({ result, targetLabel, onCommitRestored }: { result: PhysicalVerifyResult; targetLabel: string; onCommitRestored: () => void }) {
+  return (
+    <section className="panel history-detail">
+      <span className="eyebrow">Physical Verify</span>
+      <h2>Verify restoration &rarr; {targetLabel}</h2>
+      <div className="spec-chips"><b style={{ color: verifyStatusColor[result.overall] }}>{result.summary}</b></div>
+
+      <div style={{ marginTop: 12 }}>
+        <VerifyCategoryView title="Components" result={result.components} />
+        <VerifyCategoryView title="Circuit" result={result.circuit} />
+        <VerifyCategoryView title="Electrical" result={result.electrical} />
+        <VerifyCategoryView title="Visual" result={result.visual} />
+        <VerifyCategoryView title="Software" result={result.software} />
+      </div>
+
+      <div className="modal-actions" style={{ justifyContent: "flex-start", marginTop: 8 }}>
+        <button type="button" className="primary" onClick={onCommitRestored}><GitCommitHorizontal size={16} /> Commit restored state</button>
+      </div>
+    </section>
+  );
+}
 
 function formatFieldValue(value: unknown): string {
   if (value === null || value === undefined) return "—";
@@ -159,12 +279,14 @@ function CommitPhysicalStateModal({
   projectID,
   onClose,
   onCommitted,
+  defaultNote,
 }: {
   projectID: string;
   onClose: () => void;
   onCommitted: (commit: PhysicalCommit) => void;
+  defaultNote?: string;
 }) {
-  const [note, setNote] = useState("");
+  const [note, setNote] = useState(defaultNote ?? "");
   const [image, setImage] = useState<File | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -328,7 +450,7 @@ function VisualEvidenceSection({ commit }: { commit: PhysicalCommit }) {
   );
 }
 
-function CommitDetailPanel({ detail }: { detail: PhysicalCommitDetail }) {
+function CommitDetailPanel({ detail, onRestore }: { detail: PhysicalCommitDetail; onRestore: () => void }) {
   const { commit, measurement } = detail;
   const components = commit.profile_snapshot?.components ?? null;
   const connections = commit.profile_snapshot?.connections ?? null;
@@ -336,8 +458,10 @@ function CommitDetailPanel({ detail }: { detail: PhysicalCommitDetail }) {
 
   return (
     <section className="panel history-detail">
-      <span className="eyebrow">Physical Commit</span>
-      <h2>{commit.display_id}</h2>
+      <div className="panel-heading">
+        <div><span className="eyebrow">Physical Commit</span><h2 style={{ margin: "3px 0" }}>{commit.display_id}</h2></div>
+        <button type="button" className="secondary" onClick={onRestore}><ShieldCheck size={15} /> Restore this state</button>
+      </div>
       <div className="spec-chips"><span>{formatTimestamp(commit.created_at_ms)}</span></div>
       {commit.note && <p>{commit.note}</p>}
 
@@ -442,10 +566,13 @@ function CommitDiffPanel({ diff, commits, fromID, toID, onChangeFrom, onChangeTo
 type Selection =
   | { kind: "view"; commitID: string }
   | { kind: "compare"; fromID: string; toID: string }
+  | { kind: "restore"; commitID: string }
+  | { kind: "verify"; commitID: string }
   | null;
 
 export function PhysicalHistoryView({ project }: { project: Project | null }) {
   const [modalOpen, setModalOpen] = useState(false);
+  const [modalDefaultNote, setModalDefaultNote] = useState<string | undefined>(undefined);
   const [lastCommitted, setLastCommitted] = useState<PhysicalCommit | null>(null);
   const [commits, setCommits] = useState<PhysicalCommit[]>([]);
   const [loadError, setLoadError] = useState("");
@@ -453,6 +580,8 @@ export function PhysicalHistoryView({ project }: { project: Project | null }) {
   const [selection, setSelection] = useState<Selection>(null);
   const [detail, setDetail] = useState<PhysicalCommitDetail | null>(null);
   const [diff, setDiff] = useState<PhysicalCommitDiff | null>(null);
+  const [restorePlan, setRestorePlan] = useState<PhysicalRestorePlan | null>(null);
+  const [verifyResult, setVerifyResult] = useState<PhysicalVerifyResult | null>(null);
   const [paneBusy, setPaneBusy] = useState(false);
   const [paneError, setPaneError] = useState("");
 
@@ -464,13 +593,17 @@ export function PhysicalHistoryView({ project }: { project: Project | null }) {
   }, [project]);
 
   useEffect(() => {
-    if (!project || !selection) { setDetail(null); setDiff(null); return; }
+    if (!project || !selection) { setDetail(null); setDiff(null); setRestorePlan(null); setVerifyResult(null); return; }
     let active = true;
     setPaneBusy(true);
     setPaneError("");
     const request = selection.kind === "view"
-      ? physicalGitApi.getDetail(project.id, selection.commitID).then((result) => { if (active) { setDetail(result); setDiff(null); } })
-      : physicalGitApi.diff(project.id, selection.fromID, selection.toID).then((result) => { if (active) { setDiff(result); setDetail(null); } });
+      ? physicalGitApi.getDetail(project.id, selection.commitID).then((result) => { if (active) { setDetail(result); setDiff(null); setRestorePlan(null); setVerifyResult(null); } })
+      : selection.kind === "compare"
+      ? physicalGitApi.diff(project.id, selection.fromID, selection.toID).then((result) => { if (active) { setDiff(result); setDetail(null); setRestorePlan(null); setVerifyResult(null); } })
+      : selection.kind === "restore"
+      ? physicalGitApi.restore(project.id, selection.commitID).then((result) => { if (active) { setRestorePlan(result); setDetail(null); setDiff(null); setVerifyResult(null); } })
+      : physicalGitApi.verify(project.id, selection.commitID).then((result) => { if (active) { setVerifyResult(result); setDetail(null); setDiff(null); setRestorePlan(null); } });
     request.catch((caught) => { if (active) setPaneError(errorMessage(caught)); }).finally(() => { if (active) setPaneBusy(false); });
     return () => { active = false; };
   }, [project, selection]);
@@ -522,6 +655,12 @@ export function PhysicalHistoryView({ project }: { project: Project | null }) {
                     style={{ flex: 1, textAlign: "left", background: "none", border: 0, padding: 0, color: "inherit", cursor: "pointer" }}
                   >
                     <span><strong>{commit.display_id}</strong><small>{formatTimestamp(commit.created_at_ms)}</small>{commit.note && <em>{commit.note}</em>}</span>
+                    <span className="spec-chips" style={{ marginTop: 4 }}>
+                      {commit.image && <span>PHOTO</span>}
+                      {(commit.profile_snapshot?.components?.length || commit.profile_snapshot?.connections?.length) ? <span>CIRCUIT</span> : null}
+                      {commit.measurement_id != null && <span>MEASUREMENT</span>}
+                      {commit.software_revision && <span>SOFTWARE</span>}
+                    </span>
                   </button>
                   {previous && (
                     <button type="button" className="text-button" onClick={() => setSelection({ kind: "compare", fromID: previous.id, toID: commit.id })}>
@@ -536,7 +675,7 @@ export function PhysicalHistoryView({ project }: { project: Project | null }) {
           <div className="history-main">
             {paneBusy && <div className="analysis-progress"><RefreshCw className="spin" size={15} /><span>Loading&hellip;</span></div>}
             {paneError && <div className="form-error" role="alert"><AlertTriangle size={15} />{paneError}</div>}
-            {!paneBusy && detail && <CommitDetailPanel detail={detail} />}
+            {!paneBusy && detail && <CommitDetailPanel detail={detail} onRestore={() => setSelection({ kind: "restore", commitID: detail.commit.id })} />}
             {!paneBusy && diff && selection?.kind === "compare" && (
               <CommitDiffPanel
                 diff={diff}
@@ -547,7 +686,26 @@ export function PhysicalHistoryView({ project }: { project: Project | null }) {
                 onChangeTo={(id) => setSelection({ kind: "compare", fromID: selection.fromID, toID: id })}
               />
             )}
-            {!paneBusy && !detail && !diff && !paneError && (
+            {!paneBusy && restorePlan && selection?.kind === "restore" && (
+              <RestorePanel
+                plan={restorePlan}
+                targetLabel={commits.find((commit) => commit.id === selection.commitID)?.display_id ?? selection.commitID}
+                sourceLabel={commits.find((commit) => commit.id === restorePlan.source_commit)?.display_id ?? restorePlan.source_commit ?? "—"}
+                onVerify={() => setSelection({ kind: "verify", commitID: selection.commitID })}
+              />
+            )}
+            {!paneBusy && verifyResult && selection?.kind === "verify" && (
+              <VerifyPanel
+                result={verifyResult}
+                targetLabel={commits.find((commit) => commit.id === selection.commitID)?.display_id ?? selection.commitID}
+                onCommitRestored={() => {
+                  const target = commits.find((commit) => commit.id === selection.commitID);
+                  setModalDefaultNote(target ? `Restored toward ${target.display_id}` : undefined);
+                  setModalOpen(true);
+                }}
+              />
+            )}
+            {!paneBusy && !detail && !diff && !restorePlan && !verifyResult && !paneError && (
               <section className="panel history-detail">
                 <Cpu size={24} />
                 <p>Select a commit to view its captured evidence, or Compare it against the previous one.</p>
@@ -560,9 +718,11 @@ export function PhysicalHistoryView({ project }: { project: Project | null }) {
       {modalOpen && (
         <CommitPhysicalStateModal
           projectID={project.id}
-          onClose={() => setModalOpen(false)}
+          defaultNote={modalDefaultNote}
+          onClose={() => { setModalOpen(false); setModalDefaultNote(undefined); }}
           onCommitted={(commit) => {
             setModalOpen(false);
+            setModalDefaultNote(undefined);
             setLastCommitted(commit);
             setCommits((current) => [commit, ...current]);
           }}

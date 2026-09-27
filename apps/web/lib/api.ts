@@ -16,6 +16,8 @@ import type {
   PhysicalCommitDetail,
   PhysicalCommitDiff,
   PhysicalCommitVisionAnalysis,
+  PhysicalRestorePlan,
+  PhysicalVerifyResult,
   ProbePlan,
   Project,
   ProjectProfile,
@@ -192,6 +194,10 @@ export const physicalGitApi = {
       throw error;
     }
   },
+  restore: (projectID: string, commitID: string, sourceID?: string) =>
+    requestJSON<PhysicalRestorePlan>(`/api/v1/projects/${projectID}/physical-commits/${encodeURIComponent(commitID)}/restore${sourceID ? `?source=${encodeURIComponent(sourceID)}` : ""}`),
+  verify: (projectID: string, commitID: string, observedID?: string) =>
+    requestJSON<PhysicalVerifyResult>(`/api/v1/projects/${projectID}/physical-commits/${encodeURIComponent(commitID)}/verify${observedID ? `?observed=${encodeURIComponent(observedID)}` : ""}`),
 };
 
 export const testApi = {

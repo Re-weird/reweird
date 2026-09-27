@@ -11,7 +11,12 @@ const nextConfig: NextConfig = {
     // Excludes /api/auth/* so NextAuth's own route handlers (app/api/auth/**)
     // handle those requests instead of being proxied to the Go backend, which
     // has no routes for them.
-    return [{ source: "/api/:path((?!auth/).*)", destination: `${api}/api/:path` }];
+    return [
+      { source: "/api/:path((?!auth/).*)", destination: `${api}/api/:path` },
+      // GitHub App webhooks. The API checks each delivery's HMAC signature, so
+      // exposing this path through the web app's public URL is safe.
+      { source: "/webhooks/github", destination: `${api}/webhooks/github` },
+    ];
   },
 };
 

@@ -154,6 +154,17 @@ func newApp(engine *diagnostics.Engine, repository domain.Repository, source dom
 	api.Get("/github/repos", controller.githubRepositories)
 	api.Get("/projects/:id/probe-plan", controller.getProbePlan)
 	api.Post("/projects/:id/probe-plan/confirm", controller.confirmProbePlan)
+	api.Post("/projects/:id/physical-commits", controller.createPhysicalCommit)
+	api.Get("/projects/:id/physical-commits", controller.listPhysicalCommits)
+	// diff must be registered before :commitId -- gofiber v2 matches routes
+	// in registration order within the same path-segment depth, so a
+	// request to .../physical-commits/diff would otherwise bind
+	// commitId="diff" and 400 instead of reaching diffPhysicalCommits.
+	api.Get("/projects/:id/physical-commits/diff", controller.diffPhysicalCommits)
+	api.Get("/projects/:id/physical-commits/:commitId", controller.getPhysicalCommit)
+	api.Get("/projects/:id/physical-commits/:commitId/detail", controller.getPhysicalCommitDetail)
+	api.Post("/projects/:id/physical-commits/:commitId/analyze-hardware", controller.analyzePhysicalCommitHardware)
+	api.Get("/projects/:id/physical-commits/:commitId/vision-analysis", controller.getPhysicalCommitVisionAnalysis)
 	api.Get("/profiles/:id/passport", controller.devicePassport)
 	api.Post("/profiles/:id/known-good", controller.saveKnownGood)
 

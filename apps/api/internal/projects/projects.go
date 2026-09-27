@@ -30,6 +30,7 @@ var ErrStorageLimit = errors.New("project upload storage limit exceeded")
 var ErrPayloadTooLarge = errors.New("uploaded payload exceeds the size limit")
 
 var safeIDPattern = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{2,63}$`)
+var physicalCommitIDPattern = regexp.MustCompile(`^pcommit-[a-f0-9]{32}$`)
 
 func NewID(name string) (string, error) {
 	suffix := make([]byte, 5)
@@ -143,6 +144,65 @@ func SaveImage(uploadRoot, projectID, filename string, codeBytes int64, reader i
 		return nil, err
 	}
 	return &domain.ProjectMedia{StorageRef: filepath.ToSlash(reference), OriginalFilename: original, ContentType: contentType, SizeBytes: int64(len(payload)), SHA256: hashText}, nil
+}
+
+// SavePhysicalCommitImage stores a Physical Commit's photo. Unlike SaveImage
+// (a 2-slot "current + replacement" hero image), commit images accumulate
+// permanently as history, so there is no MaxProjectImages/MaxProjectStoredBytes
+// quota here and no pruning; the commit id is already globally unique so it
+// is used directly as the stored filename instead of a content hash.
+func SavePhysicalCommitImage(uploadRoot, projectID, commitID string, reader io.Reader) (*domain.ProjectMedia, error) {
+	if !safeIDPattern.MatchString(projectID) {
+		return nil, errors.New("invalid project id")
+	}
+	if !physicalCommitIDPattern.MatchString(commitID) {
+		return nil, errors.New("invalid physical commit id")
+	}
+	payload, err := readLimited(reader, int64(limits.Bounded("MAX_IMAGE_BYTES", MaxImageBytes, 1024, MaxImageBytes)))
+	if err != nil {
+		return nil, err
+	}
+	contentType := http.DetectContentType(payload)
+	extension := ""
+	switch contentType {
+	case "image/png":
+		extension = ".png"
+	case "image/jpeg":
+		extension = ".jpg"
+	default:
+		return nil, fmt.Errorf("unsupported image type %q; use PNG or JPEG", contentType)
+	}
+	hash := sha256.Sum256(payload)
+	hashText := hex.EncodeToString(hash[:])
+	root, err := filepath.Abs(uploadRoot)
+	if err != nil {
+		return nil, err
+	}
+	directory := filepath.Join(root, projectID, "physical-commits")
+	if err := os.MkdirAll(directory, 0o700); err != nil {
+		return nil, fmt.Errorf("create physical commit upload directory: %w", err)
+	}
+	storedName := commitID + extension
+	target := filepath.Join(directory, storedName)
+	if err := ensureWithin(root, target); err != nil {
+		return nil, err
+	}
+	file, err := os.OpenFile(target, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
+	if err != nil {
+		return nil, fmt.Errorf("store physical commit image: %w", err)
+	}
+	if _, writeErr := file.Write(payload); writeErr != nil {
+		_ = file.Close()
+		return nil, fmt.Errorf("store physical commit image: %w", writeErr)
+	}
+	if closeErr := file.Close(); closeErr != nil {
+		return nil, closeErr
+	}
+	reference, err := filepath.Rel(root, target)
+	if err != nil {
+		return nil, err
+	}
+	return &domain.ProjectMedia{StorageRef: filepath.ToSlash(reference), OriginalFilename: storedName, ContentType: contentType, SizeBytes: int64(len(payload)), SHA256: hashText}, nil
 }
 
 // PruneObsoleteImages runs only after the replacement image reference has been

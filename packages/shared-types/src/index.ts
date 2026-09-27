@@ -364,16 +364,32 @@ export interface VisionRelationship {
   source: "VISION_AI";
 }
 
+export interface VisionAnalysis {
+  status: string;
+  model?: string;
+  components: VisionComponent[];
+  relationships: VisionRelationship[];
+  warnings: string[];
+}
+
 export interface ProjectAnalysis {
   code: CodeAnalysis;
-  vision: {
-    status: string;
-    model?: string;
-    components: VisionComponent[];
-    relationships: VisionRelationship[];
-    warnings: string[];
-  };
+  vision: VisionAnalysis;
   generated_at_ms: number;
+}
+
+// PhysicalCommitVisionAnalysis is a persisted AI interpretation of a
+// Physical Commit's raw image -- never the raw image itself, and never
+// merged into the ProjectProfile/Circuit Map. Only ever exists when Gemini
+// genuinely succeeded (status "VISION_COMPLETE"); a skipped or failed
+// attempt is never stored.
+export interface PhysicalCommitVisionAnalysis {
+  id: string;
+  project_id: string;
+  physical_commit_id: string;
+  provider: string;
+  analysis: VisionAnalysis;
+  created_at_ms: number;
 }
 
 export interface ProjectMedia {
@@ -602,7 +618,93 @@ export interface DiagnosticWorkflow {
 }
 
 export interface UserAction { id: string; description: string; timestamp_ms: number }
-export type HistoryStatus = "OPEN" | "TESTING" | "WAITING_FOR_USER" | "VERIFYING" | "RESOLVED" | "IMPROVED" | "UNRESOLVED" | "CANCELLED" | "INCONCLUSIVE";
+
+// PhysicalCommit is a point-in-time snapshot of a real project's physical
+// state (Circuit Map/component state, referenced Device Passport baseline
+// and measurement, optional photo). Every evidence field is independently
+// optional -- a normal project with none of this evidence yet still
+// produces a valid commit. Software fields are reserved for a later GitHub
+// integration milestone and stay undefined for now.
+export interface PhysicalCommit {
+  id: string;
+  project_id: string;
+  sequence: number;
+  display_id: string;
+  note?: string;
+  created_at_ms: number;
+  image?: ProjectMedia;
+  profile_snapshot?: ProjectProfile;
+  passport_baseline_ids?: number[];
+  measurement_id?: number;
+  software_provider?: string;
+  software_repository?: string;
+  software_revision?: string;
+}
+
+// PhysicalCommitDetail is the read-time-enriched view from
+// GET .../physical-commits/:commitId/detail. It resolves the commit's
+// referenced measurement for display; the stored commit itself is
+// unchanged, and a resolution failure simply omits `measurement` rather
+// than fabricating one.
+export interface PhysicalCommitDetail {
+  commit: PhysicalCommit;
+  measurement?: MeasurementWindow;
+}
+
+// Six distinct outcomes -- "not captured" and "unavailable" must never
+// collapse into "unchanged".
+export type EvidenceState = "UNCHANGED" | "CHANGED" | "ADDED" | "REMOVED" | "NOT_CAPTURED" | "UNAVAILABLE";
+
+export interface FieldChange {
+  field: string;
+  before?: unknown;
+  after?: unknown;
+}
+export interface ComponentChange { component_id: string; name?: string; status: EvidenceState; fields?: FieldChange[] }
+export interface ConnectionChange { connection_id: string; summary?: string; status: EvidenceState; fields?: FieldChange[] }
+export interface ProbeElectricalChange { probe: string; status: EvidenceState; fields?: FieldChange[] }
+export interface VisualDiff { status: EvidenceState; before_image?: ProjectMedia; after_image?: ProjectMedia }
+export interface ComponentsDiff { status: EvidenceState; changes?: ComponentChange[] }
+export interface CircuitDiff { status: EvidenceState; changes?: ConnectionChange[] }
+export interface ElectricalDiff { status: EvidenceState; before_measurement_id?: number; after_measurement_id?: number; probes?: ProbeElectricalChange[] }
+export interface SoftwareDiff { status: EvidenceState; fields?: FieldChange[] }
+
+// SemanticVisionComponentChange is a delta between two stored Gemini Vision
+// interpretations, grouped by component identity (catalog_id when
+// available, else normalized name) and compared by COUNT only -- never a
+// claim about a specific physical instance.
+export interface SemanticVisionComponentChange {
+  key: string;
+  name: string;
+  status: EvidenceState;
+  before_count: number;
+  after_count: number;
+}
+
+// SemanticVisualDiff compares two commits' already-persisted AI
+// interpretations (VisionAnalysis), not the raw images themselves -- see
+// `visual` for the raw image evidence comparison. Computing this never
+// triggers a new Gemini call; it is a pure comparison of what was already
+// stored the last time each commit was explicitly analyzed.
+export interface SemanticVisualDiff { status: EvidenceState; from_analyzed: boolean; to_analyzed: boolean; changes?: SemanticVisionComponentChange[] }
+
+// PhysicalCommitDiff is a deterministic, structured comparison of two
+// commits in the same project -- computed by the backend, never generated
+// as prose. The frontend renders fixed labels off `status`, it does not
+// draw its own conclusions from raw fields.
+export interface PhysicalCommitDiff {
+  project_id: string;
+  from_commit: string;
+  to_commit: string;
+  visual: VisualDiff;
+  components: ComponentsDiff;
+  circuit: CircuitDiff;
+  electrical: ElectricalDiff;
+  software: SoftwareDiff;
+  semantic_visual: SemanticVisualDiff;
+}
+
+export type HistoryStatus ="OPEN" | "TESTING" | "WAITING_FOR_USER" | "VERIFYING" | "RESOLVED" | "IMPROVED" | "UNRESOLVED" | "CANCELLED" | "INCONCLUSIVE";
 export interface HistorySummary {
   id: string;
   project_id: string;

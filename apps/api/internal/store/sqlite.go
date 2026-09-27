@@ -16,8 +16,9 @@ import (
 )
 
 type SQLiteStore struct {
-	db            *sql.DB
-	measurementMu sync.Mutex
+	db               *sql.DB
+	measurementMu    sync.Mutex
+	physicalCommitMu sync.Mutex
 }
 
 func (store *SQLiteStore) Ping() error { return store.db.Ping() }
@@ -132,6 +133,24 @@ func (store *SQLiteStore) migrate() error {
 		);
 		CREATE INDEX IF NOT EXISTS idx_test_workflows_profile_updated
 			ON test_workflows(profile_id, updated_at_ms DESC);
+		CREATE TABLE IF NOT EXISTS physical_commits (
+			id TEXT PRIMARY KEY,
+			project_id TEXT NOT NULL,
+			sequence INTEGER NOT NULL,
+			created_at_ms INTEGER NOT NULL,
+			payload TEXT NOT NULL,
+			UNIQUE(project_id, sequence)
+		);
+		CREATE INDEX IF NOT EXISTS idx_physical_commits_project
+			ON physical_commits(project_id, sequence DESC);
+		CREATE TABLE IF NOT EXISTS physical_commit_vision_analyses (
+			physical_commit_id TEXT PRIMARY KEY,
+			project_id TEXT NOT NULL,
+			created_at_ms INTEGER NOT NULL,
+			payload TEXT NOT NULL
+		);
+		CREATE INDEX IF NOT EXISTS idx_physical_commit_vision_project
+			ON physical_commit_vision_analyses(project_id);
 	`)
 	return err
 }

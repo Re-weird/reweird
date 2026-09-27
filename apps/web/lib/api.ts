@@ -12,6 +12,10 @@ import type {
   HistorySummary,
   KnownGoodBaseline,
   MeasurementWindow,
+  PhysicalCommit,
+  PhysicalCommitDetail,
+  PhysicalCommitDiff,
+  PhysicalCommitVisionAnalysis,
   ProbePlan,
   Project,
   ProjectProfile,
@@ -155,6 +159,39 @@ export const githubApi = {
     requestJSON<GitHubStatus>("/api/v1/github/connect", { method: "POST", body: JSON.stringify(input) }, 20_000),
   disconnect: () => requestJSON<GitHubStatus>("/api/v1/github/disconnect", { method: "POST" }),
   repos: () => requestJSON<GitHubRepoList>("/api/v1/github/repos", undefined, 20_000),
+};
+
+export const physicalGitApi = {
+  create: (projectID: string, input: { note?: string; file?: File }) => {
+    if (input.file) {
+      const form = new FormData();
+      if (input.note) form.append("note", input.note);
+      form.append("file", input.file, input.file.name);
+      return requestJSON<PhysicalCommit>(`/api/v1/projects/${projectID}/physical-commits`, { method: "POST", body: form });
+    }
+    return requestJSON<PhysicalCommit>(`/api/v1/projects/${projectID}/physical-commits`, {
+      method: "POST",
+      body: JSON.stringify({ note: input.note ?? "" }),
+    });
+  },
+  list: (projectID: string) =>
+    requestJSON<{ items: PhysicalCommit[]; count: number }>(`/api/v1/projects/${projectID}/physical-commits`),
+  get: (projectID: string, commitID: string) =>
+    requestJSON<PhysicalCommit>(`/api/v1/projects/${projectID}/physical-commits/${encodeURIComponent(commitID)}`),
+  getDetail: (projectID: string, commitID: string) =>
+    requestJSON<PhysicalCommitDetail>(`/api/v1/projects/${projectID}/physical-commits/${encodeURIComponent(commitID)}/detail`),
+  diff: (projectID: string, fromID: string, toID: string) =>
+    requestJSON<PhysicalCommitDiff>(`/api/v1/projects/${projectID}/physical-commits/diff?from=${encodeURIComponent(fromID)}&to=${encodeURIComponent(toID)}`),
+  analyzeHardware: (projectID: string, commitID: string) =>
+    requestJSON<PhysicalCommitVisionAnalysis>(`/api/v1/projects/${projectID}/physical-commits/${encodeURIComponent(commitID)}/analyze-hardware`, { method: "POST" }, 35_000),
+  getVisionAnalysis: async (projectID: string, commitID: string): Promise<PhysicalCommitVisionAnalysis | null> => {
+    try {
+      return await requestJSON<PhysicalCommitVisionAnalysis>(`/api/v1/projects/${projectID}/physical-commits/${encodeURIComponent(commitID)}/vision-analysis`);
+    } catch (error) {
+      if (error instanceof ApiError && error.code === "VISION_ANALYSIS_NOT_FOUND") return null;
+      throw error;
+    }
+  },
 };
 
 export const testApi = {

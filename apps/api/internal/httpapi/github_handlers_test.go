@@ -313,3 +313,19 @@ func waitFor(t *testing.T, condition func() bool) {
 	}
 	t.Fatal("condition not met within 5s")
 }
+
+func TestGitHubConnectWithoutInstallationIDUsesExistingInstall(t *testing.T) {
+	app, client, _, _ := testGitHubApp(t)
+	status := decodeGitHubBody[map[string]any](t, doJSONAs(t, app, http.MethodGet, "/api/v1/github/status", "owner-a", nil))
+	if url, _ := status["authorize_url"].(string); !strings.Contains(url, "/login/oauth/authorize?client_id=cid") {
+		t.Fatalf("authorize_url = %v", status["authorize_url"])
+	}
+	response := doJSONAs(t, app, http.MethodPost, "/api/v1/github/connect", "owner-a", map[string]any{"code": "good-code", "state": client.SignState("owner-a")})
+	connected := decodeGitHubBody[map[string]any](t, response)
+	if response.StatusCode != http.StatusOK || connected["connected"] != true || connected["account_login"] != "octo" {
+		t.Fatalf("authorize-only connect = %d %#v", response.StatusCode, connected)
+	}
+	if response := doJSONAs(t, app, http.MethodPost, "/api/v1/github/connect", "owner-a", map[string]any{"code": "good-code", "state": client.SignState("owner-b")}); response.StatusCode != http.StatusForbidden {
+		t.Fatalf("another owner's state must be refused, got %d", response.StatusCode)
+	}
+}

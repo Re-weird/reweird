@@ -21,10 +21,26 @@ export function useGitHubStatus() {
   return { status, setStatus, error, refresh };
 }
 
-/** Sends the user to GitHub to install the ReWeird App, remembering where to come back to. */
+/** Sends the user to GitHub to install or configure the ReWeird App, remembering where to come back to. */
 export function startGitHubInstall(installURL: string, reopenNewProject: boolean) {
   rememberGitHubReturn({ path: window.location.pathname, reopenNewProject });
   window.location.assign(installURL);
+}
+
+/**
+ * Connects GitHub. Starts with GitHub's authorize step, which returns
+ * straight away when the App is already installed (the install page would
+ * leave the user on GitHub); the callback falls back to installing.
+ */
+export function startGitHubConnect(status: GitHubStatus, reopenNewProject: boolean) {
+  if (!status.authorize_url) {
+    if (status.install_url) startGitHubInstall(status.install_url, reopenNewProject);
+    return;
+  }
+  rememberGitHubReturn({ path: window.location.pathname, reopenNewProject });
+  const url = new URL(status.authorize_url);
+  url.searchParams.set("redirect_uri", `${window.location.origin}/settings/github/callback`);
+  window.location.assign(url.toString());
 }
 
 export function GitHubNotConfigured() {
@@ -85,7 +101,7 @@ export function GitHubSettingsSection() {
         </div>
       ) : (
         <div className="flex max-w-xl flex-wrap items-center gap-4">
-          <Button onClick={() => status.install_url && startGitHubInstall(status.install_url, false)} disabled={!status.install_url}><Github /> Connect GitHub</Button>
+          <Button onClick={() => startGitHubConnect(status, false)} disabled={!status.authorize_url && !status.install_url}><Github /> Connect GitHub</Button>
           <p className="text-xs leading-relaxed text-muted-foreground">You choose which repositories ReWeird can read on GitHub.</p>
         </div>
       )}

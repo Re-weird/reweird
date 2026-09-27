@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { AlertTriangle, ArrowLeft, Clock, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { githubApi } from "@/lib/api";
+import { ApiError, githubApi } from "@/lib/api";
 import { useAppState } from "@/lib/app-state";
 import { refreshAccountActivity } from "@/lib/account-activity";
 import { takeGitHubReturn } from "@/lib/github-return";
@@ -29,19 +29,31 @@ function GitHubCallback() {
       setState("pending");
       return;
     }
-    if (!installationID) {
-      setState("error");
-      setMessage("GitHub didn't say which installation to connect. Start again from Settings.");
+    if (params.get("setup_action") === "update" && !params.get("code")) {
+      // Repository access changed on GitHub for an existing connection.
+      refreshAccountActivity();
+      router.replace(takeGitHubReturn().path);
       return;
     }
-    githubApi.connect({ installation_id: installationID, code: params.get("code") ?? "", state: params.get("state") ?? "" })
+    if (!installationID && !params.get("code")) {
+      setState("error");
+      setMessage(params.get("error_description") ?? "GitHub didn't send an authorization code. Start again from Settings.");
+      return;
+    }
+    // Without installation_id this is the authorize step: the API looks up
+    // the user's existing installation, or asks for an install.
+    githubApi.connect({ installation_id: installationID || 0, code: params.get("code") ?? "", state: params.get("state") ?? "" })
       .then(() => {
         refreshAccountActivity();
         const destination = takeGitHubReturn();
         router.replace(destination.path);
         if (destination.reopenNewProject) setShowNewProject(true);
       })
-      .catch((cause) => {
+      .catch(async (cause) => {
+        if (cause instanceof ApiError && cause.code === "INSTALL_REQUIRED") {
+          const status = await githubApi.status().catch(() => null);
+          if (status?.install_url) { window.location.assign(status.install_url); return; }
+        }
         setState("error");
         setMessage(cause instanceof Error ? cause.message : "GitHub couldn't be connected.");
       });

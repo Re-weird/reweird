@@ -465,6 +465,8 @@ export interface GitHubStatus {
   configured: boolean;
   connected: boolean;
   install_url?: string;
+  /** GitHub's authorize step; finds an existing installation without the install page. */
+  authorize_url?: string;
   account_login?: string;
   account_type?: string;
   connected_at_ms?: number;

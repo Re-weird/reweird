@@ -40,7 +40,7 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ApiError, githubApi, projectApi } from "@/lib/api";
 import { CircuitMap } from "./circuit-map";
-import { GitHubNotConfigured, startGitHubInstall, useGitHubStatus } from "./github-connection";
+import { GitHubNotConfigured, startGitHubConnect, startGitHubInstall, useGitHubStatus } from "./github-connection";
 
 const sourceLabels: Record<ProjectFactSource, string> = {
   CODE_STATIC_ANALYSIS: "CODE",
@@ -211,7 +211,7 @@ export function NewProjectModal({
             <div className="flex flex-col items-start gap-3 rounded-lg bg-surface-2 px-4 py-4 ring-1 ring-border">
               <p className="text-sm leading-relaxed text-foreground">Connect GitHub to choose the repository this project&apos;s firmware lives in.</p>
               <p className="text-xs leading-relaxed text-muted-foreground">ReWeird reads the code whenever you push to the default branch. You pick which repositories it can see; access is read-only.</p>
-              <Button type="button" onClick={() => github.install_url && startGitHubInstall(github.install_url, true)} disabled={!github.install_url}><Github /> Connect GitHub</Button>
+              <Button type="button" onClick={() => startGitHubConnect(github, true)} disabled={!github.authorize_url && !github.install_url}><Github /> Connect GitHub</Button>
             </div>
           ) : reposError ? (
             <p role="alert" className="text-sm text-fail">{reposError}</p>

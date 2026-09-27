@@ -130,6 +130,13 @@ func (client *Client) InstallURL(state string) string {
 	return fmt.Sprintf("%s/apps/%s/installations/new?state=%s", client.config.WebURL, url.PathEscape(client.config.Slug), url.QueryEscape(state))
 }
 
+// AuthorizeURL asks GitHub who the user is (skipped automatically once
+// they've approved the App). Used when the App may already be installed,
+// where the install page would not redirect back.
+func (client *Client) AuthorizeURL(state string) string {
+	return fmt.Sprintf("%s/login/oauth/authorize?client_id=%s&state=%s", client.config.WebURL, url.QueryEscape(client.config.ClientID), url.QueryEscape(state))
+}
+
 // SignState binds an install round trip to the ReWeird user who started it,
 // so a callback can't attach someone else's session to an installation.
 // The key is per process, so a restart invalidates in-flight installs.
@@ -228,10 +235,11 @@ type Installation struct {
 	} `json:"account"`
 }
 
-// VerifyUserInstallation exchanges the OAuth code GitHub appends to the
-// setup redirect for a short-lived user token, then confirms that user can
-// actually access installationID. The user token is discarded afterwards.
-func (client *Client) VerifyUserInstallation(ctx context.Context, code string, installationID int64) (*Installation, error) {
+// UserInstallations exchanges the OAuth code GitHub sends back after
+// authorization (or after an install that requests authorization) for a
+// short-lived user token, and returns the installations of this App that
+// user can access. The user token is discarded afterwards.
+func (client *Client) UserInstallations(ctx context.Context, code string) ([]Installation, error) {
 	form := url.Values{"client_id": {client.config.ClientID}, "client_secret": {client.config.ClientSecret}, "code": {code}}
 	var exchanged struct {
 		AccessToken string `json:"access_token"`
@@ -243,6 +251,7 @@ func (client *Client) VerifyUserInstallation(ctx context.Context, code string, i
 	if exchanged.AccessToken == "" {
 		return nil, fmt.Errorf("github: authorization code rejected (%s)", exchanged.Error)
 	}
+	installations := []Installation{}
 	for page := 1; page <= 10; page++ {
 		var listing struct {
 			Installations []Installation `json:"installations"`
@@ -251,13 +260,24 @@ func (client *Client) VerifyUserInstallation(ctx context.Context, code string, i
 		if err := client.do(ctx, http.MethodGet, endpoint, "Bearer "+exchanged.AccessToken, "", nil, &listing); err != nil {
 			return nil, err
 		}
-		for _, installation := range listing.Installations {
-			if installation.ID == installationID {
-				return &installation, nil
-			}
-		}
+		installations = append(installations, listing.Installations...)
 		if len(listing.Installations) < 100 {
 			break
+		}
+	}
+	return installations, nil
+}
+
+// VerifyUserInstallation confirms, via the OAuth code, that the user can
+// access installationID.
+func (client *Client) VerifyUserInstallation(ctx context.Context, code string, installationID int64) (*Installation, error) {
+	installations, err := client.UserInstallations(ctx, code)
+	if err != nil {
+		return nil, err
+	}
+	for _, installation := range installations {
+		if installation.ID == installationID {
+			return &installation, nil
 		}
 	}
 	return nil, ErrNotFound

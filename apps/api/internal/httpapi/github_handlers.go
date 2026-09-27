@@ -33,7 +33,8 @@ func (controller *Controller) githubStatus(ctx *fiber.Ctx) error {
 	if err != nil {
 		return internalError(ctx, err)
 	}
-	response := fiber.Map{"configured": true, "connected": connection != nil, "install_url": controller.github.InstallURL(controller.github.SignState(owner))}
+	state := controller.github.SignState(owner)
+	response := fiber.Map{"configured": true, "connected": connection != nil, "install_url": controller.github.InstallURL(state), "authorize_url": controller.github.AuthorizeURL(state)}
 	if connection != nil {
 		response["account_login"] = connection.AccountLogin
 		response["account_type"] = connection.AccountType
@@ -56,8 +57,8 @@ func (controller *Controller) githubConnect(ctx *fiber.Ctx) error {
 		Code           string `json:"code"`
 		State          string `json:"state"`
 	}
-	if err := ctx.BodyParser(&input); err != nil || input.InstallationID <= 0 {
-		return apiError(ctx, fiber.StatusBadRequest, "INVALID_JSON", "installation_id, code, and state are required.")
+	if err := ctx.BodyParser(&input); err != nil || input.InstallationID < 0 {
+		return apiError(ctx, fiber.StatusBadRequest, "INVALID_JSON", "code and state are required; installation_id is optional.")
 	}
 	owner := ownerID(ctx)
 	if !controller.github.VerifyState(input.State, owner) {
@@ -66,7 +67,24 @@ func (controller *Controller) githubConnect(ctx *fiber.Ctx) error {
 	if strings.TrimSpace(input.Code) == "" {
 		return apiError(ctx, fiber.StatusBadRequest, "GITHUB_CODE_REQUIRED", "GitHub didn't return an authorization code. Enable \"Request user authorization (OAuth) during installation\" on the GitHub App.")
 	}
-	installation, err := controller.github.VerifyUserInstallation(ctx.Context(), input.Code, input.InstallationID)
+	var installation *githubapp.Installation
+	var err error
+	if input.InstallationID == 0 {
+		// Authorization only (the App may already be installed): use the
+		// user's existing installation, preferring their personal account.
+		var installations []githubapp.Installation
+		installations, err = controller.github.UserInstallations(ctx.Context(), input.Code)
+		if err == nil && len(installations) == 0 {
+			return ctx.Status(fiber.StatusConflict).JSON(fiber.Map{"error": "INSTALL_REQUIRED", "detail": "Install the ReWeird GitHub App on your account to choose repositories.", "install_url": controller.github.InstallURL(controller.github.SignState(owner))})
+		}
+		for index := range installations {
+			if installation == nil || installations[index].Account.Type == "User" && installation.Account.Type != "User" {
+				installation = &installations[index]
+			}
+		}
+	} else {
+		installation, err = controller.github.VerifyUserInstallation(ctx.Context(), input.Code, input.InstallationID)
+	}
 	if errors.Is(err, githubapp.ErrNotFound) {
 		return apiError(ctx, fiber.StatusForbidden, "INSTALLATION_NOT_YOURS", "That GitHub installation isn't accessible to the GitHub account that authorized it.")
 	}

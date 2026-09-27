@@ -132,6 +132,8 @@ func newApp(engine *diagnostics.Engine, repository domain.Repository, source dom
 	api.Get("/projects/:id/physical-commits/diff", controller.diffPhysicalCommits)
 	api.Get("/projects/:id/physical-commits/:commitId", controller.getPhysicalCommit)
 	api.Get("/projects/:id/physical-commits/:commitId/detail", controller.getPhysicalCommitDetail)
+	api.Post("/projects/:id/physical-commits/:commitId/analyze-hardware", controller.analyzePhysicalCommitHardware)
+	api.Get("/projects/:id/physical-commits/:commitId/vision-analysis", controller.getPhysicalCommitVisionAnalysis)
 	api.Get("/profiles/:id/passport", controller.devicePassport)
 	api.Post("/profiles/:id/known-good", controller.saveKnownGood)
 

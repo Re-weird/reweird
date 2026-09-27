@@ -126,6 +126,14 @@ func (store *SQLiteStore) migrate() error {
 		);
 		CREATE INDEX IF NOT EXISTS idx_physical_commits_project
 			ON physical_commits(project_id, sequence DESC);
+		CREATE TABLE IF NOT EXISTS physical_commit_vision_analyses (
+			physical_commit_id TEXT PRIMARY KEY,
+			project_id TEXT NOT NULL,
+			created_at_ms INTEGER NOT NULL,
+			payload TEXT NOT NULL
+		);
+		CREATE INDEX IF NOT EXISTS idx_physical_commit_vision_project
+			ON physical_commit_vision_analyses(project_id);
 	`)
 	return err
 }

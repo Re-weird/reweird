@@ -93,3 +93,13 @@
   from { opacity: 0; transform: translateY(4px) scale(0.6); }
   to { opacity: 1; transform: none; }
 }
+
+/* A signal pulse travelling along a circuit-map trace (controller -> part).
+   Applied to a full-width layer whose dot sits at its left edge, so the dot
+   crosses the whole trace once regardless of its length. */
+@keyframes trace-flow {
+  from { transform: translateX(0); opacity: 0; }
+  12% { opacity: 1; }
+  88% { opacity: 1; }
+  to { transform: translateX(100%); opacity: 0; }
+}

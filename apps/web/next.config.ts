@@ -27,7 +27,7 @@ const judgeConfig: NextConfig = {
   pageExtensions: ["judge.tsx", "judge.ts"],
   trailingSlash: true,
   basePath: process.env.REWEIRD_BASE_PATH ?? "",
-  env: { NEXT_PUBLIC_DEMO_BASE_PATH: process.env.REWEIRD_BASE_PATH ?? "" },
+  env: { NEXT_PUBLIC_DEMO_BASE_PATH: process.env.REWEIRD_BASE_PATH ?? "", NEXT_PUBLIC_JUDGE_MODE: "true" },
   images: { unoptimized: true },
 };
 

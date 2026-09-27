@@ -421,6 +421,8 @@ export interface Project {
   logic_voltage: number;
   image?: ProjectMedia;
   code?: ProjectCode;
+  /** The GitHub repo the project's code comes from; pushes to its default branch are analyzed. */
+  repository?: LinkedRepository;
   analysis?: ProjectAnalysis;
   analysis_status: "PENDING" | "PROCESSING" | "DRAFT_READY" | "FAILED" | "CONFIRMED";
   analysis_error?: string;
@@ -429,6 +431,68 @@ export interface Project {
   visibility: "private" | "public";
   created_at_ms: number;
   updated_at_ms: number;
+}
+
+export type RepositorySyncStatus = "PENDING" | "SYNCING" | "SYNCED" | "FAILED" | "BLOCKED";
+
+export interface RepositoryCommit {
+  sha: string;
+  message: string;
+  author_name: string;
+  committed_at_ms: number;
+  html_url: string;
+}
+
+export interface LinkedRepository {
+  id: number;
+  full_name: string;
+  default_branch: string;
+  html_url: string;
+  private: boolean;
+  installation_id: number;
+  /** The commit the current code analysis came from. */
+  last_commit?: RepositoryCommit;
+  latest_seen_sha?: string;
+  sync_status: RepositorySyncStatus;
+  sync_error?: string;
+  synced_at_ms?: number;
+  analyzed_files?: string[];
+  skipped_files?: number;
+}
+
+export interface GitHubStatus {
+  /** False when the server has no GitHub App settings. */
+  configured: boolean;
+  connected: boolean;
+  install_url?: string;
+  account_login?: string;
+  account_type?: string;
+  connected_at_ms?: number;
+}
+
+export interface GitHubRepo {
+  id: number;
+  name: string;
+  full_name: string;
+  description: string;
+  private: boolean;
+  default_branch: string;
+  html_url: string;
+  language: string;
+  pushed_at_ms: number;
+  archived: boolean;
+}
+
+export interface GitHubRepoList {
+  account_login: string;
+  items: GitHubRepo[];
+}
+
+/** Returned by a repo sync; profile and analysis are present when a new commit was analyzed. */
+export interface RepositorySyncResponse {
+  project: Project;
+  analysis?: ProjectAnalysis;
+  profile?: ProjectProfile;
 }
 
 export interface AnalyzeProjectResponse {

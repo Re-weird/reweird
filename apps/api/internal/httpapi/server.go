@@ -19,6 +19,7 @@ import (
 	"github.com/re-weird/reweird/apps/api/internal/profiles"
 	"github.com/re-weird/reweird/apps/api/internal/projectunderstanding"
 	"github.com/re-weird/reweird/apps/api/internal/reports"
+	componentcatalog "github.com/re-weird/reweird/packages/component-catalog"
 )
 
 type Controller struct {
@@ -33,11 +34,20 @@ type Controller struct {
 	profileID     string
 	understanding *projectunderstanding.Service
 	uploadRoot    string
+	// product is nil when this deployment has no MongoDB configured;
+	// every equipment/me/product-data handler must check for nil and fail
+	// clearly (productUnavailable) rather than panic or silently no-op.
+	product domain.ProductRepository
+	catalog []componentcatalog.Entry
 }
 
 type ProjectServices struct {
 	Understanding *projectunderstanding.Service
 	UploadRoot    string
+	// Product and Catalog are optional: nil/empty when MongoDB is not
+	// configured for this deployment. See Controller.product's comment.
+	Product domain.ProductRepository
+	Catalog []componentcatalog.Entry
 }
 
 func NewApp(engine *diagnostics.Engine, repository domain.Repository, source domain.TelemetrySource, profileID string, projectServices ProjectServices, authConfigured bool) *fiber.App {
@@ -58,7 +68,7 @@ func newApp(engine *diagnostics.Engine, repository domain.Repository, source dom
 	app.Use(cors.New(cors.Config{
 		AllowOrigins: "http://localhost:3000,http://127.0.0.1:3000",
 		AllowHeaders: "Origin, Content-Type, Accept, Authorization",
-		AllowMethods: "GET,POST,PUT,OPTIONS",
+		AllowMethods: "GET,POST,PUT,PATCH,DELETE,OPTIONS",
 	}))
 	app.Use(ownerMiddleware)
 
@@ -70,6 +80,8 @@ func newApp(engine *diagnostics.Engine, repository domain.Repository, source dom
 		profileID:     profileID,
 		understanding: projectServices.Understanding,
 		uploadRoot:    projectServices.UploadRoot,
+		product:       projectServices.Product,
+		catalog:       projectServices.Catalog,
 	}
 	if scenario, ok := source.(domain.ScenarioTelemetrySource); ok {
 		scenario.SetStage(domain.StageDiagnose)
@@ -125,6 +137,18 @@ func newApp(engine *diagnostics.Engine, repository domain.Repository, source dom
 	api.Post("/projects/:id/probe-plan/confirm", controller.confirmProbePlan)
 	api.Get("/profiles/:id/passport", controller.devicePassport)
 	api.Post("/profiles/:id/known-good", controller.saveKnownGood)
+
+	api.Get("/me", controller.me)
+	api.Get("/catalog", controller.listCatalog)
+	api.Get("/catalog/:id", controller.getCatalogEntry)
+	api.Post("/equipment", controller.createEquipment)
+	api.Get("/equipment", controller.listEquipment)
+	api.Get("/equipment/:id", controller.getEquipment)
+	api.Patch("/equipment/:id", controller.updateEquipment)
+	api.Delete("/equipment/:id", controller.deleteEquipment)
+	api.Get("/projects/:id/equipment", controller.listProjectEquipment)
+	api.Post("/projects/:id/equipment", controller.attachProjectEquipment)
+	api.Delete("/projects/:id/equipment/:equipmentId", controller.detachProjectEquipment)
 
 	// Compatibility routes preserve the original dashboard and hackathon demo.
 	api.Get("/demo/session", controller.current)

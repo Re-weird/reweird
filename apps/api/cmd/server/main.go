@@ -8,12 +8,14 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/re-weird/reweird/apps/api/internal/codeanalysis"
 	"github.com/re-weird/reweird/apps/api/internal/diagnostics"
 	"github.com/re-weird/reweird/apps/api/internal/domain"
 	"github.com/re-weird/reweird/apps/api/internal/httpapi"
 	"github.com/re-weird/reweird/apps/api/internal/probe"
+	"github.com/re-weird/reweird/apps/api/internal/productdata"
 	"github.com/re-weird/reweird/apps/api/internal/profiles"
 	"github.com/re-weird/reweird/apps/api/internal/projectunderstanding"
 	"github.com/re-weird/reweird/apps/api/internal/signalanalysis"
@@ -86,9 +88,16 @@ func main() {
 		vision.NewGemini(geminiAPIKey, geminiModel),
 		catalog,
 	)
-	app := httpapi.NewApp(engine, repository, source, profileID, httpapi.ProjectServices{Understanding: understanding, UploadRoot: uploadRoot}, authTokenSecret != "")
 
-	log.Printf("ReWeird API listening on %s (telemetry=%s, profile=%s, auth=%s, PATCH=locked)", net.JoinHostPort(host, port), source.Name(), profileID, authStatus(authTokenSecret != ""))
+	product, closeProduct := connectProductData(ctx)
+	defer closeProduct()
+
+	app := httpapi.NewApp(engine, repository, source, profileID, httpapi.ProjectServices{
+		Understanding: understanding, UploadRoot: uploadRoot,
+		Product: product, Catalog: catalog,
+	}, authTokenSecret != "")
+
+	log.Printf("ReWeird API listening on %s (telemetry=%s, profile=%s, auth=%s, product_data=%s, PATCH=locked)", net.JoinHostPort(host, port), source.Name(), profileID, authStatus(authTokenSecret != ""), productDataStatus(product != nil))
 	if err := app.Listen(net.JoinHostPort(host, port)); err != nil {
 		log.Fatal(err)
 	}
@@ -131,6 +140,46 @@ func seedDemoProfile(repository domain.Repository) error {
 		return err
 	}
 	return repository.SaveProfile(profile)
+}
+
+// connectProductData connects to MongoDB when MONGODB_URI/MONGODB_DATABASE
+// are both configured, and returns a no-op closer plus a nil
+// domain.ProductRepository otherwise. MongoDB being unconfigured or
+// unreachable must never take down the rest of the API -- every equipment/
+// me handler already checks for a nil product repository and fails clearly
+// (503 PRODUCT_DATA_UNAVAILABLE) instead.
+func connectProductData(ctx context.Context) (domain.ProductRepository, func()) {
+	config := productdata.Config{URI: os.Getenv("MONGODB_URI"), Database: environment("MONGODB_DATABASE", "reweird")}
+	if os.Getenv("MONGODB_URI") == "" {
+		log.Printf("MONGODB_URI not set; accounts/equipment (product data) are disabled for this run")
+		return nil, func() {}
+	}
+	mongoStore, err := productdata.Connect(ctx, config)
+	if err != nil {
+		log.Printf("product data unavailable: %v (accounts/equipment endpoints will return 503)", err)
+		return nil, func() {}
+	}
+	indexCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+	if err := mongoStore.EnsureIndexes(indexCtx); err != nil {
+		log.Printf("product data index setup failed: %v (accounts/equipment endpoints will return 503)", err)
+		_ = mongoStore.Close(ctx)
+		return nil, func() {}
+	}
+	return mongoStore, func() {
+		closeCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if err := mongoStore.Close(closeCtx); err != nil {
+			log.Printf("error closing product data store: %v", err)
+		}
+	}
+}
+
+func productDataStatus(configured bool) string {
+	if configured {
+		return "mongodb"
+	}
+	return "disabled"
 }
 
 func authStatus(configured bool) string {

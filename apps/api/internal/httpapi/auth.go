@@ -9,6 +9,29 @@ import (
 )
 
 const ownerIDLocalsKey = "owner_id"
+const ownerProfileLocalsKey = "owner_profile"
+
+// ownerTokenClaims adds the email/name custom claims apps/web's
+// /api/auth/token route signs alongside the standard subject claim (see
+// that route's own comment: both come from the server-side NextAuth
+// session, itself derived from Google's verified profile - never from
+// anything the browser asserts about itself). They are covered by the same
+// HMAC signature as Subject, so trusting them here is exactly as safe as
+// trusting Subject.
+type ownerTokenClaims struct {
+	Email string `json:"email"`
+	Name  string `json:"name"`
+	jwt.RegisteredClaims
+}
+
+// ownerProfile is the optional, server-verified display profile that
+// travelled with a verified token. Fields are empty when the token did not
+// carry them (e.g. Google did not return a name/email for this account) -
+// callers must treat an empty field as "unknown", never invent one.
+type ownerProfile struct {
+	Email string
+	Name  string
+}
 
 // ownerContext verifies an optional bearer token minted by apps/web's
 // /api/auth/token route and records the verified caller identity for
@@ -39,7 +62,7 @@ func ownerContext(authConfigured bool) fiber.Handler {
 		if !ok || strings.TrimSpace(token) == "" {
 			return apiError(ctx, fiber.StatusUnauthorized, "INVALID_AUTHORIZATION", "The Authorization header must use the Bearer scheme.")
 		}
-		claims := &jwt.RegisteredClaims{}
+		claims := &ownerTokenClaims{}
 		_, err := jwt.ParseWithClaims(token, claims, func(t *jwt.Token) (interface{}, error) {
 			if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
 				return nil, jwt.ErrTokenSignatureInvalid
@@ -50,6 +73,7 @@ func ownerContext(authConfigured bool) fiber.Handler {
 			return apiError(ctx, fiber.StatusUnauthorized, "INVALID_TOKEN", "The provided session token could not be verified.")
 		}
 		ctx.Locals(ownerIDLocalsKey, claims.Subject)
+		ctx.Locals(ownerProfileLocalsKey, ownerProfile{Email: claims.Email, Name: claims.Name})
 		return ctx.Next()
 	}
 }
@@ -59,5 +83,15 @@ func ownerContext(authConfigured bool) fiber.Handler {
 // set from a verified token - a request can never set this itself.
 func ownerID(ctx *fiber.Ctx) string {
 	value, _ := ctx.Locals(ownerIDLocalsKey).(string)
+	return value
+}
+
+// ownerProfileFromContext returns the verified email/name that travelled
+// with this request's token, or a zero-value ownerProfile for an
+// anonymous/Demo Mode caller. Same non-fabrication rule as ownerID: this
+// only ever reflects what ownerContext verified, never anything a request
+// sets itself.
+func ownerProfileFromContext(ctx *fiber.Ctx) ownerProfile {
+	value, _ := ctx.Locals(ownerProfileLocalsKey).(ownerProfile)
 	return value
 }

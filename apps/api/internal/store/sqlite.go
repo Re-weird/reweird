@@ -45,6 +45,10 @@ func Open(path string) (*SQLiteStore, error) {
 		_ = database.Close()
 		return nil, err
 	}
+	if err := store.migrateGitHub(); err != nil {
+		_ = database.Close()
+		return nil, err
+	}
 	return store, nil
 }
 

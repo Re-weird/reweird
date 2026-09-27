@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useParams, usePathname } from "next/navigation";
 import { AnimatePresence, LayoutGroup, motion, useReducedMotion } from "framer-motion";
-import { BarChart3, Box, Cable, CheckCircle2, Cpu, Fingerprint, FileBarChart, FolderGit2, LayoutDashboard, Microscope, RefreshCw, Settings, TestTube2 } from "lucide-react";
+import { BarChart3, Box, Cable, CheckCircle2, Cpu, FileBarChart, FolderGit2, HeartPulse, LayoutDashboard, Microscope, RefreshCw, Settings, TestTube2 } from "lucide-react";
 import { useAppState } from "@/lib/app-state";
 import { projectTabs, type ProjectTabID } from "@/lib/project-routes";
 import { cn } from "@/lib/utils";
@@ -16,7 +16,7 @@ const tabIcons: Record<ProjectTabID, typeof Box> = {
   workbench: LayoutDashboard,
   overview: Box,
   "probe-setup": Cable,
-  passport: Fingerprint,
+  health: HeartPulse,
   simulator: TestTube2,
   diagnosis: Microscope,
   "next-test": TestTube2,

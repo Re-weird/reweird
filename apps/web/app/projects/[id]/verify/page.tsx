@@ -21,6 +21,6 @@ export default function VerifyPage() {
     onRemeasure={() => runTestAction("remeasure")}
     onCancel={() => runTestAction("cancel")}
     onRecordAction={recordUserAction}
-    onPassport={() => router.push(projectPath(currentProjectID, "passport"))}
+    onHealth={() => router.push(projectPath(currentProjectID, "health"))}
   />;
 }

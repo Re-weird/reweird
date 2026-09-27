@@ -106,7 +106,7 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   // From main: with no real project open, show the demo's probe plan (used by
-  // the circuit map and device passport).
+  // the circuit map).
   useEffect(() => {
     if (project) return;
     let cancelled = false;

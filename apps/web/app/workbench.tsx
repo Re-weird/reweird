@@ -5,7 +5,6 @@ import { Activity, ArrowDownToLine, ArrowUpRight, Bolt, Check, ChevronRight, Cpu
 import type { DemoSession, HistorySummary, ProbePlan, Project, ProjectProfile, SimulatorScenario } from "@reweird/shared-types";
 import { historyApi } from "@/lib/api";
 import { realBreakReady, telemetryLabel } from "@/lib/weird-demo";
-import { MakeItWeird } from "./make-it-weird";
 import { JudgeCircuit } from "./judge-circuit";
 import { ProbeCard, RuleRow, SignalChart } from "./signal-components";
 import type { ProjectTabID } from "@/lib/project-routes";
@@ -25,7 +24,7 @@ type Props = {
   onBrowserDemo: () => Promise<void>;
 };
 
-export function Workbench({ session, project, profile, source, onNavigate, historyProjectID, plan, scenarios, busy, onRunScenario, onBrowserDemo }: Props) {
+export function Workbench({ session, project, profile, source, onNavigate, historyProjectID, plan }: Props) {
   const [recent, setRecent] = useState<HistorySummary[]>([]);
   const [historyState, setHistoryState] = useState<"loading" | "ready" | "offline">("loading");
   useEffect(() => {
@@ -53,11 +52,6 @@ export function Workbench({ session, project, profile, source, onNavigate, histo
         <span className="welcome-caption" aria-hidden="true"></span>
       </section>
 
-      <MakeItWeird scenarios={scenarios} busy={busy} onRun={onRunScenario} onBrowserDemo={onBrowserDemo} />
-      <nav className="weird-journey" aria-label="Optional demo journey"><span className="bench-label">Demo journey</span>{([
-        ["Understand", "overview"], ["Map", "overview"], ["Make it weird", "simulator"], ["Detect", "workbench"],
-        ["Diagnose", "diagnosis"], ["Test", "next-test"], ["VERIFY", "verify"], ["Passport", "passport"],
-      ] as [string, ProjectTabID][]).map(([label, tab], index) => <button key={`${label}-${index}`} onClick={() => onNavigate(tab)} className={index === currentStep + 3 && matchesProject ? "current" : ""}>{label}</button>)}</nav>
       {canBreakPhysical && <JudgeCircuit key={`${profile?.id}-${session.raw_telemetry?.device_id}`} session={session} onDiagnose={() => onNavigate("diagnosis")} onTest={() => onNavigate("next-test")} onVerify={() => onNavigate("verify")} />}
 
       <section className="bench-stats" aria-label="Current project summary">

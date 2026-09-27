@@ -1,5 +1,8 @@
 import type {
   AnalyzeProjectResponse,
+  CameraConfig,
+  CameraTestFrame,
+  CameraTestResult,
   ConfirmProfileResponse,
   DemoSession,
   DiagnosticWorkflow,
@@ -153,6 +156,20 @@ export const projectApi = {
   getProbePlan: (projectID: string) => requestJSON<ProbePlan>(`/api/v1/projects/${projectID}/probe-plan`),
   confirmProbeConnections: (projectID: string) =>
     requestJSON<ProbePlan>(`/api/v1/projects/${projectID}/probe-plan/confirm`, { method: "POST" }),
+};
+
+// A camera source can be tested/captured either from the project's already
+// saved config (no override) or from a not-yet-saved URL the user just
+// typed, so every call here takes an optional override.
+export const cameraApi = {
+  saveConfig: (projectID: string, config: CameraConfig) =>
+    requestJSON<Project>(`/api/v1/projects/${projectID}/camera-config`, { method: "PUT", body: JSON.stringify(config) }),
+  clearConfig: (projectID: string) =>
+    requestJSON<Project>(`/api/v1/projects/${projectID}/camera-config`, { method: "DELETE" }),
+  test: (projectID: string, override?: Partial<CameraConfig>) =>
+    requestJSON<CameraTestResult>(`/api/v1/projects/${projectID}/camera/test`, { method: "POST", body: JSON.stringify(override ?? {}) }, 12_000),
+  captureTestFrame: (projectID: string, override?: Partial<CameraConfig>) =>
+    requestJSON<CameraTestFrame>(`/api/v1/projects/${projectID}/camera/capture-test-frame`, { method: "POST", body: JSON.stringify(override ?? {}) }, 12_000),
 };
 
 export const githubApi = {

@@ -408,6 +408,30 @@ export interface ProjectCode {
   sha256: string;
 }
 
+/** A project's optional vision camera source (an MJPEG stream over HTTP). */
+export interface CameraConfig {
+  source_type: "mjpeg";
+  url: string;
+}
+
+export type CameraStatus = "CONNECTED" | "UNREACHABLE" | "INVALID_STREAM" | "TIMEOUT" | "NOT_CONFIGURED";
+
+export interface CameraTestResult {
+  status: CameraStatus;
+  content_type?: string;
+  frame_available?: boolean;
+  latency_ms?: number;
+  message?: string;
+}
+
+export interface CameraTestFrame {
+  content_type: string;
+  width: number;
+  height: number;
+  size_bytes: number;
+  image_base64: string;
+}
+
 export interface ProbeInstruction {
   probe: string;
   role: string;
@@ -437,6 +461,8 @@ export interface Project {
   logic_voltage: number;
   image?: ProjectMedia;
   code?: ProjectCode;
+  /** The project's configured vision camera source, if any. */
+  camera_config?: CameraConfig;
   /** The GitHub repo the project's code comes from; pushes to its default branch are analyzed. */
   repository?: LinkedRepository;
   analysis?: ProjectAnalysis;

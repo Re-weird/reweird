@@ -124,13 +124,19 @@ function SchematicBoard({ controller, voltage, groups, selectedID, onSelect, sta
     });
 
   return (
-    <div className="overflow-x-auto rounded-xl ring-1 ring-border">
-      <svg viewBox={`0 0 ${BOARD_W} ${height}`} className="block h-auto w-full min-w-[640px]" role="group" aria-label={`Schematic: ${controller} connected to ${groups.map((group) => group.name).join(", ")}`}>
+    <div className="rounded-[1.75rem] bg-border/40 p-1.5 ring-1 ring-border/60">
+      <div className="overflow-x-auto rounded-[1.4rem] bg-background shadow-[inset_0_1px_0_rgba(255,255,255,0.05)] ring-1 ring-border">
+        <svg viewBox={`0 0 ${BOARD_W} ${height}`} className="block h-auto w-full min-w-[640px] rounded-[1.4rem]" role="group" aria-label={`Schematic: ${controller} connected to ${groups.map((group) => group.name).join(", ")}`}>
         <defs>
           <PartDefs />
           <pattern id="soldermask" width="14" height="14" patternUnits="userSpaceOnUse">
             <circle cx="1" cy="1" r="0.9" fill="var(--line-soft)" />
           </pattern>
+          {(Object.keys(stroke) as CircuitDisplayState[]).map((state) => (
+            <marker key={state} id={`arrow-${state}`} viewBox="0 0 8 8" refX="6" refY="4" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+              <path d="M 0 0 L 8 4 L 0 8 Z" fill={stroke[state]} />
+            </marker>
+          ))}
         </defs>
         <rect width={BOARD_W} height={height} fill="var(--scope-bg)" />
         <rect width={BOARD_W} height={height} fill="url(#soldermask)" />
@@ -142,7 +148,14 @@ function SchematicBoard({ controller, voltage, groups, selectedID, onSelect, sta
           const id = trace.item.connection.id;
           const selected = id === selectedID;
           const color = stroke[trace.state];
+          const assigned = Boolean(trace.item.instruction);
+          // Live capture runs the fast "signal present" dash; an assigned-but-
+          // unconfirmed-by-data wire still gets a slow perpetual pulse so the
+          // map never looks inert while waiting for the first capture.
           const running = live && !reduce && trace.state !== "waiting";
+          const inviting = !running && assigned && !reduce;
+          const direction = trace.item.connection.direction;
+          const forward = direction === "input"; // signal flows part -> controller
           const label = `${trace.item.connection.component_name} ${trace.item.connection.role}, ${trace.item.instruction?.probe ?? "no probe"}, ${trace.state}`;
           return (
             <g key={id} role="button" tabIndex={0} aria-pressed={selected} aria-label={label} className="cursor-pointer outline-none focus-visible:[&>path.hit]:stroke-[var(--cyan)]"
@@ -153,14 +166,22 @@ function SchematicBoard({ controller, voltage, groups, selectedID, onSelect, sta
                 d={trace.d} fill="none" stroke={color} strokeWidth={selected ? 2.25 : 1.5} strokeLinecap="round" strokeLinejoin="round"
                 strokeOpacity={trace.state === "waiting" ? 1 : selected ? 1 : 0.7}
                 strokeDasharray={trace.state === "waiting" ? "3 4" : undefined}
+                markerEnd={assigned && !forward ? `url(#arrow-${trace.state})` : undefined}
+                markerStart={assigned && forward ? `url(#arrow-${trace.state})` : undefined}
+                style={trace.state === "suspect" && !reduce ? { animation: "trace-flicker 3.2s linear infinite" } : undefined}
                 initial={reduce ? false : { pathLength: 0 }} animate={{ pathLength: 1 }}
                 transition={{ duration: 0.5, delay: 0.1 + index * 0.06, ease: [0.23, 1, 0.32, 1] }}
-                style={trace.state === "suspect" && !reduce ? { animation: "trace-flicker 3.2s linear infinite" } : undefined}
               />
               {running && (
                 <path d={trace.d} pathLength={100} fill="none" stroke={color} strokeWidth={2.5} strokeLinecap="round"
                   strokeDasharray={trace.state === "suspect" ? "2 98" : "4 96"}
                   style={{ animationName: "trace-run", animationDuration: trace.state === "suspect" ? "3.4s" : "2.2s", animationTimingFunction: "linear", animationIterationCount: "infinite", animationDelay: `${index * 0.35}s` }} />
+              )}
+              {inviting && (
+                <circle r={3.4} fill={color}>
+                  <animateMotion dur="2.6s" repeatCount="indefinite" keyPoints={forward ? "1;0" : "0;1"} keyTimes="0;1" calcMode="linear" path={trace.d} begin={`${index * 0.22}s`} />
+                  <animate attributeName="opacity" values="0;1;1;0" keyTimes="0;0.08;0.85;1" dur="2.6s" repeatCount="indefinite" begin={`${index * 0.22}s`} />
+                </circle>
               )}
               {trace.bends.map(([bx, by]) => (
                 <g key={`${bx}-${by}`}>
@@ -178,7 +199,8 @@ function SchematicBoard({ controller, voltage, groups, selectedID, onSelect, sta
                 <g transform={`translate(${trace.padX} ${trace.y1})`}>
                   <circle r={7} fill="var(--scope-bg)" stroke={color} strokeWidth={1.5} />
                   <circle r={2.5} fill={color} />
-                  <text y={-11} textAnchor="middle" className="fill-muted-foreground font-mono text-[9.5px]">{trace.item.instruction.probe}</text>
+                  <rect x={-27} y={-22} width={54} height={13} rx={6.5} fill="var(--scope-bg)" stroke={color} strokeOpacity={0.35} />
+                  <text y={-12.5} textAnchor="middle" className="fill-foreground font-mono text-[9.5px] font-bold">{trace.item.instruction.probe}<tspan className="fill-muted-foreground font-normal"> · {trace.item.connection.role}</tspan></text>
                 </g>
               )}
             </g>
@@ -202,7 +224,8 @@ function SchematicBoard({ controller, voltage, groups, selectedID, onSelect, sta
             </g>
           );
         })}
-      </svg>
+        </svg>
+      </div>
     </div>
   );
 }

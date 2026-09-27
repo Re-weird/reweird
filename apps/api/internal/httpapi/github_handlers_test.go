@@ -332,3 +332,27 @@ func TestGitHubConnectWithoutInstallationIDUsesExistingInstall(t *testing.T) {
 		t.Fatalf("another owner's state must be refused, got %d", response.StatusCode)
 	}
 }
+
+func TestProjectsSurviveGitHubDisconnectAndUninstall(t *testing.T) {
+	app, client, _, _ := testGitHubApp(t)
+	connectOcto(t, app, client, "owner-a")
+	created := decodeGitHubBody[domain.Project](t, doJSONAs(t, app, http.MethodPost, "/api/v1/projects", "owner-a", map[string]any{"name": "Rig", "controller": "ESP32", "logic_voltage": 3.3, "repository": "octo/rig"}))
+	doJSONAs(t, app, http.MethodPost, "/api/v1/projects/"+created.ID+"/sync", "owner-a", nil).Body.Close()
+
+	stillListed := func(step string) {
+		t.Helper()
+		projects := decodeGitHubBody[[]domain.Project](t, doJSONAs(t, app, http.MethodGet, "/api/v1/projects", "owner-a", nil))
+		if len(projects) != 1 || projects[0].ID != created.ID || projects[0].Repository == nil {
+			t.Fatalf("after %s the project list = %#v", step, projects)
+		}
+		if response := doJSONAs(t, app, http.MethodGet, "/api/v1/projects/"+created.ID+"/profile", "owner-a", nil); response.StatusCode != http.StatusOK {
+			t.Fatalf("after %s the profile returned %d", step, response.StatusCode)
+		}
+	}
+	if response := doJSONAs(t, app, http.MethodPost, "/api/v1/github/disconnect", "owner-a", nil); response.StatusCode != http.StatusOK {
+		t.Fatalf("disconnect = %d", response.StatusCode)
+	}
+	stillListed("disconnect")
+	sendWebhook(t, app, "installation", []byte(`{"action":"deleted","installation":{"id":7}}`), "hook").Body.Close()
+	stillListed("uninstall")
+}

@@ -136,6 +136,98 @@ func TestMissingBaselineDoesNotBecomeEvidence(t *testing.T) {
 	}
 }
 
+// fakeProviderCapture is a probe.Provider test double that records exactly
+// what Evidence it was called with, so a test can assert what did and
+// did not reach PROBE without needing a real Gemini call.
+type fakeProviderCapture struct {
+	received domain.Evidence
+	called   int
+}
+
+func (fake *fakeProviderCapture) Diagnose(_ context.Context, evidence domain.Evidence, deterministic domain.Diagnosis) domain.Diagnosis {
+	fake.received = evidence
+	fake.called++
+	return deterministic
+}
+
+func TestAnalyzeEnvelopeWithContextMergesPhysicalContextIntoEvidenceProbeSees(t *testing.T) {
+	fake := &fakeProviderCapture{}
+	engine := NewEngineWithProbe(signalanalysis.New(), fake)
+	profile := pulseProfile(nil)
+	physicalContext := []domain.EvidenceFact{
+		{Name: "physical_history_change", Value: "HW-001 -> HW-002: ECHO connection changed.", Provenance: domain.ProvenancePhysicalHistory},
+		{Name: "vision_interpreted_component", Value: "SG90 Servo", Provenance: domain.ProvenanceAIInterpretation},
+	}
+
+	session, err := engine.AnalyzeEnvelopeWithContext(context.Background(), profile, domain.StageDiagnose, "test", pulseEnvelope(7, []float64{1, 0, 1}), nil, physicalContext)
+	if err != nil {
+		t.Fatalf("AnalyzeEnvelopeWithContext() error = %v", err)
+	}
+	if fake.called != 1 {
+		t.Fatalf("probe called %d times, want exactly 1", fake.called)
+	}
+	if len(fake.received.PhysicalContext) != 2 {
+		t.Fatalf("PROBE received PhysicalContext = %#v, want the 2 facts passed in", fake.received.PhysicalContext)
+	}
+	if len(session.Evidence.PhysicalContext) != 2 {
+		t.Fatalf("session.Evidence.PhysicalContext = %#v, want the 2 facts to also be on the returned Evidence", session.Evidence.PhysicalContext)
+	}
+	// Every measured/derived fact from the ordinary deterministic path must
+	// still be present -- merging physical context must never replace it.
+	if len(session.Evidence.DerivedFacts) == 0 {
+		t.Fatal("DerivedFacts were lost when PhysicalContext was merged in")
+	}
+}
+
+func TestAnalyzeEnvelopeWithoutContextLeavesPhysicalContextEmpty(t *testing.T) {
+	engine := NewEngine(signalanalysis.New())
+	profile := pulseProfile(nil)
+	session, err := engine.AnalyzeEnvelope(context.Background(), profile, domain.StageDiagnose, "test", pulseEnvelope(7, []float64{1, 0, 1}), nil)
+	if err != nil {
+		t.Fatalf("AnalyzeEnvelope() error = %v", err)
+	}
+	if len(session.Evidence.PhysicalContext) != 0 {
+		t.Fatalf("PhysicalContext = %#v, want empty when no context is supplied (AnalyzeEnvelope's existing behavior must be unchanged)", session.Evidence.PhysicalContext)
+	}
+}
+
+// TestDiagnoseAnalysisWorksFromAnAlreadyPersistedAnalysisWithNoRawEnvelope
+// is a direct regression test for a real bug found via manual testing: a
+// stored MeasurementWindow whose Raw.SchemaVersion the current
+// signalanalysis build no longer accepts (e.g. synthetic/demo data seeded
+// with schema_version 0) must still be diagnosable from its own already-
+// persisted Analysis -- DiagnoseAnalysis never touches Raw at all, so it
+// can't fail this way.
+func TestDiagnoseAnalysisWorksFromAnAlreadyPersistedAnalysisWithNoRawEnvelope(t *testing.T) {
+	profile := pulseProfile(nil)
+	analysis, err := signalanalysis.New().Analyze(pulseEnvelope(10, []float64{1, 1, 1}), profile)
+	if err != nil {
+		t.Fatalf("analyze reference: %v", err)
+	}
+	engine := NewEngine(signalanalysis.New())
+	// No envelope is passed at all -- proving this path never depends on one.
+	session, err := engine.DiagnoseAnalysis(context.Background(), profile, domain.StageDiagnose, "serial", analysis, nil, nil)
+	if err != nil {
+		t.Fatalf("DiagnoseAnalysis() error = %v", err)
+	}
+	if session.Diagnosis.Headline == "" {
+		t.Fatalf("session = %#v", session)
+	}
+}
+
+func TestAnalyzeSignalsRunsOnlyDeterministicAnalysis(t *testing.T) {
+	engine := NewEngine(signalanalysis.New())
+	profile := pulseProfile(nil)
+	analysis, err := engine.AnalyzeSignals(pulseEnvelope(10, []float64{1, 1, 1}), profile)
+	if err != nil {
+		t.Fatalf("AnalyzeSignals() error = %v", err)
+	}
+	facts, ok := analysis.Probe("P2")
+	if !ok || facts.FrequencyHz == nil {
+		t.Fatalf("analysis = %#v, want a resolved frequency for the pulse probe", analysis)
+	}
+}
+
 func pulseProfile(baseline *domain.TrustedBaseline) domain.ProjectProfile {
 	return domain.ProjectProfile{
 		ID:           "generic-pulse-test",

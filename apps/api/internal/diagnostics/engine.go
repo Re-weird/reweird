@@ -57,14 +57,68 @@ func (engine *Engine) AnalyzeEnvelope(
 	envelope domain.TelemetryEnvelope,
 	reference *domain.AnalysisResult,
 ) (domain.Session, error) {
+	return engine.AnalyzeEnvelopeWithContext(ctx, profile, stage, telemetryMode, envelope, reference, nil)
+}
+
+// AnalyzeSignals runs only the deterministic signal-analysis step (no
+// rules, no diagnosis, no PROBE) against an already-received envelope. It
+// exists so a caller that ingests telemetry outside the built-in
+// TelemetrySource loop (e.g. a per-project measurement submitted over HTTP)
+// can reuse the exact same analyzer this engine already uses, rather than
+// constructing a second one.
+func (engine *Engine) AnalyzeSignals(envelope domain.TelemetryEnvelope, profile domain.ProjectProfile) (domain.AnalysisResult, error) {
+	return engine.analyzer.Analyze(envelope, profile)
+}
+
+// AnalyzeEnvelopeWithContext is AnalyzeEnvelope plus a bounded slice of
+// supplementary, already-provenance-tagged EvidenceFacts (e.g. from
+// internal/diagnosticcontext) merged into the returned Evidence before
+// PROBE ever sees it. Passing nil is exactly AnalyzeEnvelope's behavior --
+// this engine still never reads a repository directly; the caller is
+// responsible for building physicalContext from persisted state and
+// keeping it small.
+func (engine *Engine) AnalyzeEnvelopeWithContext(
+	ctx context.Context,
+	profile domain.ProjectProfile,
+	stage domain.Stage,
+	telemetryMode string,
+	envelope domain.TelemetryEnvelope,
+	reference *domain.AnalysisResult,
+	physicalContext []domain.EvidenceFact,
+) (domain.Session, error) {
 	analysis, err := engine.analyzer.Analyze(envelope, profile)
 	if err != nil {
 		return domain.Session{}, fmt.Errorf("analyze telemetry: %w", err)
 	}
+	return engine.DiagnoseAnalysis(ctx, profile, stage, telemetryMode, analysis, reference, physicalContext)
+}
+
+// DiagnoseAnalysis is AnalyzeEnvelopeWithContext for a caller that already
+// has a persisted, previously-computed domain.AnalysisResult (e.g. a stored
+// MeasurementWindow's own Analysis field) and should not re-run signal
+// analysis against its raw envelope -- re-deriving would needlessly require
+// that historical envelope to still match this build's current
+// signalanalysis schema/version expectations, when the already-persisted
+// analysis is exactly what was already trusted and shown at the time it was
+// captured. This is the same "derive from what's already persisted, don't
+// recompute" pattern Physical Restore/Verify already use for their own
+// evidence.
+func (engine *Engine) DiagnoseAnalysis(
+	ctx context.Context,
+	profile domain.ProjectProfile,
+	stage domain.Stage,
+	telemetryMode string,
+	analysis domain.AnalysisResult,
+	reference *domain.AnalysisResult,
+	physicalContext []domain.EvidenceFact,
+) (domain.Session, error) {
 	rules := evaluateRules(profile, analysis, stage, reference)
 	focus := selectFocus(profile, analysis, rules, reference)
 	diagnosis := buildDiagnosis(profile, analysis, rules, focus, stage)
 	evidence := buildEvidence(profile, analysis, rules, focus, stage, reference)
+	if len(physicalContext) > 0 {
+		evidence.PhysicalContext = physicalContext
+	}
 	diagnosis = engine.probe.Diagnose(ctx, evidence, diagnosis)
 
 	beforeFacts := focus

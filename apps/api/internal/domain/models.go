@@ -186,6 +186,7 @@ const (
 )
 
 type TelemetryEnvelope struct {
+	Patch         *PatchCapability  `json:"patch,omitempty"`
 	SchemaVersion int               `json:"schema_version"`
 	DeviceID      string            `json:"device_id"`
 	ProfileID     string            `json:"profile_id"`
@@ -194,6 +195,16 @@ type TelemetryEnvelope struct {
 	WindowMS      uint32            `json:"window_ms"`
 	Sequence      uint64            `json:"sequence"`
 	Samples       []TelemetrySample `json:"samples"`
+}
+
+// Optional Telemetry-v2 capability advertisement. An advertisement alone is
+// never an arming handshake or permission to drive hardware.
+type PatchCapability struct {
+	Capable       bool   `json:"capable"`
+	State         string `json:"state"`
+	Reason        string `json:"reason"`
+	BootID        uint32 `json:"boot_id"`
+	MaxDurationMS uint32 `json:"max_duration_ms"`
 }
 
 type TelemetrySample struct {

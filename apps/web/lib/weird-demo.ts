@@ -1,4 +1,4 @@
-import type { DemoSession, DiagnosticWorkflow, ProbePlan, ProjectProfile, SimulatorScenario } from "@reweird/shared-types";
+import type { DemoSession, DiagnosticWorkflow, ProbePlan, ProjectProfile, SimulatorScenario, TestRecommendation } from "@reweird/shared-types";
 
 export const weirdChoices = [
   { label: "Loose connection", scenario: "intermittent-connection" },
@@ -6,6 +6,39 @@ export const weirdChoices = [
   { label: "Missing signal", scenario: "dead-signal" },
   { label: "Timing problem", scenario: "timing-drift" },
 ] as const;
+
+export interface TelemetryStatus {
+  mode: string;
+  connected: boolean;
+  error?: string;
+  device_id?: string;
+  profile_id?: string;
+  captured_at_ms?: number;
+}
+
+// A connected serial port is not proof that the diagnostic engine accepted
+// its frame. In particular, a profile/mode mismatch makes /session return
+// 503 while /telemetry/status still reports connected=true.
+export function isCompatibleSerialSession(status: TelemetryStatus | null, session: DemoSession | null): session is DemoSession {
+  return Boolean(status?.connected && status.mode === "serial" && status.device_id && status.profile_id &&
+    session?.telemetry_mode === "serial" && session.measurement_id && session.raw_telemetry &&
+    session.profile_id === status.profile_id && session.raw_telemetry.profile_id === status.profile_id &&
+    session.raw_telemetry.device_id === status.device_id);
+}
+
+export function sessionForView(practice: boolean, live: DemoSession | null, simulator: DemoSession): DemoSession | null {
+  return practice ? simulator : live;
+}
+
+export function serialWorkflowMatches(workflow: DiagnosticWorkflow | null, session: DemoSession | null): boolean {
+  if (!workflow || !session || workflow.profile_id !== session.profile_id || workflow.scenario_id) return false;
+  return [workflow.baseline, workflow.during, workflow.after].every((window) =>
+    !window || (window.source === "serial" && window.device_id === session.raw_telemetry?.device_id));
+}
+
+export function serialRecommendationMatches(recommendation: TestRecommendation | null, session: DemoSession | null): boolean {
+  return Boolean(recommendation && session?.telemetry_mode === "serial" && recommendation.session_id === session.id);
+}
 
 export function availableWeirdChoices(scenarios: SimulatorScenario[]) {
   return weirdChoices.filter((choice) => scenarios.some((scenario) => scenario.id === choice.scenario));

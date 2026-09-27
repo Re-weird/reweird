@@ -28,6 +28,17 @@ func TestDecodeLineRejectsUnknownFields(t *testing.T) {
 	}
 }
 
+func TestDecodeLinePreservesLockedPatchCapability(t *testing.T) {
+	line := []byte(`{"schema_version":2,"device_id":"reweird-001","profile_id":"ultrasonic-demo","window_ms":1000,"samples":[{"probe":"P1","mode":"analog","analog_mv":[1650]}],"patch":{"capable":false,"state":"LOCKED","reason":"NO_VERIFIED_DEDICATED_OUTPUT_STAGE","boot_id":3,"max_duration_ms":0}}`)
+	envelope, err := DecodeLine(line)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if envelope.Patch == nil || envelope.Patch.Capable || envelope.Patch.State != "LOCKED" || envelope.Patch.BootID != 3 {
+		t.Fatalf("capability lost: %+v", envelope.Patch)
+	}
+}
+
 func TestWaitNextRequiresANewerSequence(t *testing.T) {
 	source := &Source{
 		latest:     &domain.TelemetryEnvelope{Sequence: 4, WindowMS: 1000},

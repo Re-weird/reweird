@@ -34,14 +34,14 @@ export function SectionNav() {
   const pathname = usePathname() ?? "/";
   const params = useParams<{ id?: string }>();
   const reduce = useReducedMotion();
-  const { session } = useAppState();
+  const { session, liveAvailable } = useAppState();
 
   const projectID = params?.id;
   const base = projectID ? `/projects/${projectID}` : "";
   const items: NavItem[] = projectID
     ? projectTabs.map((tab) => {
       const href = tab.segment ? `${base}/${tab.segment}` : base;
-      return { key: tab.id, label: tab.label, href, icon: tabIcons[tab.id], active: pathname === href, dot: tab.id === "diagnosis" && session.stage !== "verify" };
+      return { key: tab.id, label: tab.label, href, icon: tabIcons[tab.id], active: pathname === href, dot: tab.id === "diagnosis" && liveAvailable && session != null && session.stage !== "verify" };
     })
     : [
       { key: "dashboard", label: "Dashboard", href: "/dashboard", icon: BarChart3, active: pathname === "/dashboard" },

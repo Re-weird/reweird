@@ -160,7 +160,7 @@ function SchematicBoard({ controller, voltage, groups, selectedID, onSelect, sta
               {running && (
                 <path d={trace.d} pathLength={100} fill="none" stroke={color} strokeWidth={2.5} strokeLinecap="round"
                   strokeDasharray={trace.state === "suspect" ? "2 98" : "4 96"}
-                  style={{ animation: `trace-run ${trace.state === "suspect" ? "3.4s" : "2.2s"} linear infinite`, animationDelay: `${index * 0.35}s` }} />
+                  style={{ animationName: "trace-run", animationDuration: trace.state === "suspect" ? "3.4s" : "2.2s", animationTimingFunction: "linear", animationIterationCount: "infinite", animationDelay: `${index * 0.35}s` }} />
               )}
               {trace.bends.map(([bx, by]) => (
                 <g key={`${bx}-${by}`}>

@@ -60,7 +60,7 @@ func ValidateForProfile(envelope domain.TelemetryEnvelope, profile domain.Projec
 		return errors.New("project profile must be user-confirmed before hardware telemetry is accepted")
 	}
 	if envelope.ProfileID != profile.ID {
-		return fmt.Errorf("telemetry profile_id %q does not match active profile %q", envelope.ProfileID, profile.ID)
+		return fmt.Errorf("Profile mismatch: firmware reports %s but this project expects %s (telemetry profile_id does not match active profile); reflash with the project's profile ID", envelope.ProfileID, profile.ID)
 	}
 	for _, sample := range envelope.Samples {
 		configuration, ok := profile.Probe(sample.Probe)
@@ -68,7 +68,7 @@ func ValidateForProfile(envelope domain.TelemetryEnvelope, profile domain.Projec
 			return fmt.Errorf("%s is not assigned in project profile %s", sample.Probe, profile.ID)
 		}
 		if configuration.Mode != sample.Mode {
-			return fmt.Errorf("%s mode %s does not match configured mode %s", sample.Probe, sample.Mode, configuration.Mode)
+			return fmt.Errorf("%s mode mismatch: received %s, profile expects %s", sample.Probe, sample.Mode, configuration.Mode)
 		}
 		if configuration.SafeMeasurement.MaxPinVoltage <= 0 || configuration.SafeMeasurement.MaxPinVoltage > 3.3 {
 			return fmt.Errorf("%s has invalid max_pin_voltage; ESP32 inputs must not exceed 3.3 V", sample.Probe)

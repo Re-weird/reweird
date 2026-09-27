@@ -164,6 +164,11 @@ const (
 	ProvenanceBaseline         Provenance = "BASELINE"
 	ProvenanceSoftware         Provenance = "SOFTWARE"
 	ProvenanceAIInterpretation Provenance = "AI_INTERPRETATION"
+	// ProvenancePhysicalHistory marks a fact drawn from this project's
+	// Physical Git history (e.g. a deterministic PhysicalCommitDiff line) --
+	// a factual observation about what changed between two captured states,
+	// never a causal claim about why a fault occurred.
+	ProvenancePhysicalHistory Provenance = "PHYSICAL_HISTORY"
 )
 
 type BaselineStatus string
@@ -415,6 +420,14 @@ type Evidence struct {
 	BaselineComparison   []EvidenceFact `json:"baseline_comparison"`
 	RuleResults          []RuleResult   `json:"rule_results"`
 	UnresolvedQuestions  []string       `json:"unresolved_questions"`
+	// PhysicalContext is bounded, deterministically-selected supplementary
+	// context from this project's Physical Git history, software intent,
+	// vision interpretation, and Component Catalog matches -- see
+	// internal/diagnosticcontext. Every entry keeps its own Provenance so
+	// PROBE (and this JSON's readers) can never mistake an AI interpretation
+	// or a historical observation for a live measurement. Always small: it
+	// never grows without bound as a project accumulates history.
+	PhysicalContext []EvidenceFact `json:"physical_context,omitempty"`
 }
 
 type Diagnosis struct {

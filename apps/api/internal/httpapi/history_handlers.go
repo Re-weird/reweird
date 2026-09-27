@@ -121,7 +121,7 @@ func (controller *Controller) historyWorkflow(ctx *fiber.Ctx) (*domain.Diagnosti
 		return nil, internalError(ctx, err)
 	}
 	if project != nil && project.OwnerID != ownerID(ctx) {
-		return nil, apiError(ctx, 404, "HISTORY_NOT_FOUND", "History not found.")
+		return nil, fiber.NewError(fiber.StatusNotFound, "History not found.")
 	}
 	return workflow, nil
 }

@@ -145,6 +145,15 @@ func TestUSBBridgeCloudLifecycle(t *testing.T) {
 	if status, _ = request("GET", "/api/v1/profiles/"+p.ID, "", "X-ReWeird-Share", share, nil); status != 404 {
 		t.Fatal("judge accessed private profile", status)
 	}
+	privateTestID := "test-01234567890123456789012345678901"
+	if err = repo.SaveTestWorkflow(domain.DiagnosticWorkflow{ID: privateTestID, ProjectID: p.ID, ProfileID: p.ID, Status: domain.TestPlanned}); err != nil {
+		t.Fatal(err)
+	}
+	for _, route := range []string{"/api/v1/history/", "/api/v1/reports/", "/api/v1/tests/"} {
+		if status, _ = request("GET", route+privateTestID, "", "X-ReWeird-Share", share, nil); status != 404 {
+			t.Fatal("judge accessed private workflow", route, status)
+		}
+	}
 	if status, _ = request("POST", "/api/v1/profiles/"+p.ID+"/known-good", "", "X-ReWeird-Share", share, map[string]any{"measurement_id": 1, "confirm_healthy": true}); status != 404 {
 		t.Fatal("judge could confirm Known Good", status)
 	}

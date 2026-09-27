@@ -13,6 +13,7 @@ import type {
   PhysicalCommitVisionAnalysis,
   ProbeElectricalChange,
   Project,
+  SemanticVisionComponentChange,
 } from "@reweird/shared-types";
 import { ApiError, physicalGitApi } from "@/lib/api";
 
@@ -67,6 +68,56 @@ function DiffSection({ title, status, children }: { title: string; status: Evide
         <b style={{ color: statusColor[status], fontSize: 9, textTransform: "uppercase", letterSpacing: 0.6 }}>{statusLabel[status]}</b>
       </div>
       {children}
+    </div>
+  );
+}
+
+function SemanticVisionComponentDiffRow({ change }: { change: SemanticVisionComponentChange }) {
+  const prefix = change.status === "ADDED" ? "+" : change.status === "REMOVED" ? "-" : "~";
+  return (
+    <div style={{ padding: "6px 0", borderTop: "1px solid var(--line-soft)" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", fontSize: 9 }}>
+        <span style={{ color: statusColor[change.status] }}>{prefix} {change.name}</span>
+        <span style={{ color: "var(--muted)" }}>{change.before_count} &rarr; {change.after_count}</span>
+      </div>
+    </div>
+  );
+}
+
+// SemanticVisualSection renders the AI interpretation layer of the Visual
+// diff -- a deterministic comparison of two already-stored Gemini Vision
+// analyses, kept visually and semantically separate from the raw image
+// evidence comparison above it. It never triggers Analyze Hardware itself:
+// analysis only ever happens from the commit detail view, on request.
+function SemanticVisualSection({ diff, fromLabel, toLabel }: { diff: PhysicalCommitDiff; fromLabel: string; toLabel: string }) {
+  const semantic = diff.semantic_visual;
+  return (
+    <div style={{ border: "1px solid var(--line-soft)", borderRadius: 10, padding: 12, marginTop: 4, marginBottom: 16 }}>
+      <div className="panel-heading">
+        <div><span className="eyebrow">AI interpretation, not evidence</span><h2 style={{ fontSize: 12, margin: "3px 0" }}>Detected Hardware Comparison</h2></div>
+        <b style={{ color: statusColor[semantic.status], fontSize: 9, textTransform: "uppercase", letterSpacing: 0.6 }}>{statusLabel[semantic.status]}</b>
+      </div>
+
+      {semantic.status === "NOT_CAPTURED" && (
+        <p className="inline-empty">Neither commit has been analyzed. Analyze both from their commit detail views to compare detected hardware.</p>
+      )}
+
+      {semantic.status === "UNAVAILABLE" && (
+        <>
+          <p className="inline-empty">Insufficient analyzed evidence to compare.</p>
+          <div className="spec-chips" style={{ marginTop: 4 }}>
+            <span>{fromLabel}: {semantic.from_analyzed ? "analyzed" : "not analyzed"}</span>
+            <span>{toLabel}: {semantic.to_analyzed ? "analyzed" : "not analyzed"}</span>
+          </div>
+          <p className="inline-empty" style={{ marginTop: 4 }}>Analyze both commits from their commit detail views to enable semantic comparison.</p>
+        </>
+      )}
+
+      {semantic.status === "UNCHANGED" && (
+        <p className="inline-empty">Detected components are the same on both sides.</p>
+      )}
+
+      {semantic.status === "CHANGED" && semantic.changes?.map((change) => <SemanticVisionComponentDiffRow key={change.key} change={change} />)}
     </div>
   );
 }
@@ -367,6 +418,7 @@ function CommitDiffPanel({ diff, commits, fromID, toID, onChangeFrom, onChangeTo
       </div>
 
       <DiffSection title="Visual" status={diff.visual.status} />
+      <SemanticVisualSection diff={diff} fromLabel={fromLabel} toLabel={toLabel} />
 
       <DiffSection title="Hardware" status={diff.components.status}>
         {diff.components.changes?.map((change) => <ComponentDiffRow key={change.component_id} change={change} />)}

@@ -336,7 +336,7 @@ func DiffVisionAnalyses(from, to *domain.PhysicalCommitVisionAnalysis) domain.Se
 	case from == nil && to == nil:
 		return domain.SemanticVisualDiff{Status: domain.EvidenceNotCaptured}
 	case from == nil || to == nil:
-		return domain.SemanticVisualDiff{Status: domain.EvidenceUnavailable}
+		return domain.SemanticVisualDiff{Status: domain.EvidenceUnavailable, FromAnalyzed: from != nil, ToAnalyzed: to != nil}
 	}
 
 	beforeGroups, beforeOrder := groupVisionComponents(from.Analysis.Components)
@@ -376,7 +376,7 @@ func DiffVisionAnalyses(from, to *domain.PhysicalCommitVisionAnalysis) domain.Se
 	if len(changes) > 0 {
 		status = domain.EvidenceChanged
 	}
-	return domain.SemanticVisualDiff{Status: status, Changes: changes}
+	return domain.SemanticVisualDiff{Status: status, FromAnalyzed: true, ToAnalyzed: true, Changes: changes}
 }
 
 type visionComponentGroup struct {

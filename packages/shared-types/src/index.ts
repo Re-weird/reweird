@@ -600,6 +600,25 @@ export interface CircuitDiff { status: EvidenceState; changes?: ConnectionChange
 export interface ElectricalDiff { status: EvidenceState; before_measurement_id?: number; after_measurement_id?: number; probes?: ProbeElectricalChange[] }
 export interface SoftwareDiff { status: EvidenceState; fields?: FieldChange[] }
 
+// SemanticVisionComponentChange is a delta between two stored Gemini Vision
+// interpretations, grouped by component identity (catalog_id when
+// available, else normalized name) and compared by COUNT only -- never a
+// claim about a specific physical instance.
+export interface SemanticVisionComponentChange {
+  key: string;
+  name: string;
+  status: EvidenceState;
+  before_count: number;
+  after_count: number;
+}
+
+// SemanticVisualDiff compares two commits' already-persisted AI
+// interpretations (VisionAnalysis), not the raw images themselves -- see
+// `visual` for the raw image evidence comparison. Computing this never
+// triggers a new Gemini call; it is a pure comparison of what was already
+// stored the last time each commit was explicitly analyzed.
+export interface SemanticVisualDiff { status: EvidenceState; from_analyzed: boolean; to_analyzed: boolean; changes?: SemanticVisionComponentChange[] }
+
 // PhysicalCommitDiff is a deterministic, structured comparison of two
 // commits in the same project -- computed by the backend, never generated
 // as prose. The frontend renders fixed labels off `status`, it does not
@@ -613,6 +632,7 @@ export interface PhysicalCommitDiff {
   circuit: CircuitDiff;
   electrical: ElectricalDiff;
   software: SoftwareDiff;
+  semantic_visual: SemanticVisualDiff;
 }
 
 export type HistoryStatus ="OPEN" | "TESTING" | "WAITING_FOR_USER" | "VERIFYING" | "RESOLVED" | "IMPROVED" | "UNRESOLVED" | "CANCELLED" | "INCONCLUSIVE";

@@ -100,8 +100,10 @@ type SemanticVisionComponentChange struct {
 // VisibleLabels, Warnings, Model, and Relationships are never compared here;
 // only component identity/count.
 type SemanticVisualDiff struct {
-	Status  EvidenceState                   `json:"status"`
-	Changes []SemanticVisionComponentChange `json:"changes,omitempty"`
+	Status       EvidenceState                   `json:"status"`
+	FromAnalyzed bool                            `json:"from_analyzed"`
+	ToAnalyzed   bool                            `json:"to_analyzed"`
+	Changes      []SemanticVisionComponentChange `json:"changes,omitempty"`
 }
 
 // PhysicalCommitDiff is a deterministic, structured comparison of two

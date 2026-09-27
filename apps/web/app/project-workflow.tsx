@@ -20,13 +20,16 @@ import {
 } from "lucide-react";
 import type {
   AnalyzeProjectResponse,
+  DemoSession,
   GitHubRepo,
   ProbePlan,
   Project,
+  ProjectProfile,
 } from "@reweird/shared-types";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ApiError, githubApi, projectApi } from "@/lib/api";
+import { CircuitMap } from "./circuit-map";
 import { GitHubNotConfigured, startGitHubConnect, startGitHubInstall, useGitHubStatus } from "./github-connection";
 
 function errorMessage(error: unknown): string {
@@ -255,7 +258,7 @@ export function NewProjectModal({
   );
 }
 
-export function ProbePlanView({ project, plan, onConnected }: { project: Project | null; plan: ProbePlan | null; onConnected: () => Promise<void> }) {
+export function ProbePlanView({ project, profile, plan, session, onConnected }: { project: Project | null; profile: ProjectProfile | null; plan: ProbePlan | null; session: DemoSession | null; onConnected: () => Promise<void> }) {
   const [checked, setChecked] = useState(Boolean(plan?.connected));
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -265,6 +268,11 @@ export function ProbePlanView({ project, plan, onConnected }: { project: Project
   return <>
     <section className="page-heading"><div><p className="kicker">Connect ReWeird</p><h1>Probe placement plan</h1><p>Generated from the confirmed profile for {project?.name ?? "this project"}. Verify voltage and polarity before touching the circuit.</p><p>Physical profile ID: <code>{plan.profile_id}</code>. Firmware and API must use this exact ID before live diagnostics.</p></div><span className="confirmed"><Check size={13} /> Profile confirmed</span></section>
     {error && <div className="form-error page-error"><AlertTriangle size={15} />{error}</div>}
+    {profile && (
+      <div className="mt-2 mb-6" data-tw>
+        <CircuitMap profile={profile} plan={plan} session={session} demoMode={!project} onNavigate={() => {}} showActions={false} />
+      </div>
+    )}
     <motion.section className="probe-plan-grid" initial="hidden" animate="show" variants={{ hidden: {}, show: { transition: { staggerChildren: 0.06 } } }}>
       {plan.instructions.map((instruction) => <motion.article variants={{ hidden: { opacity: 0, y: 10 }, show: { opacity: 1, y: 0, transition: { duration: 0.3, ease: [0.16, 1, 0.3, 1] } } }} className={`probe-instruction ${instruction.probe === "GND" ? "ground" : ""}`} key={instruction.probe}><div className="probe-badge">{instruction.probe}</div><div><span className="eyebrow">{instruction.role}</span><h2>{instruction.target}</h2><p>{instruction.expected} · {instruction.signal_type}</p>{instruction.explanation && <small>{instruction.explanation}</small>}<div className="safety-warning"><ShieldCheck size={13} />{instruction.safe_warning}</div></div></motion.article>)}
       {["P1", "P2", "P3", "P4", "P5", "P6"].filter((probe) => !plan.instructions.some((step) => step.probe === probe)).map((probe) => <motion.article variants={{ hidden: { opacity: 0, y: 10 }, show: { opacity: 1, y: 0, transition: { duration: 0.3, ease: [0.16, 1, 0.3, 1] } } }} className="probe-instruction" key={probe}><div className="probe-badge">{probe}</div><div><span className="eyebrow">Unassigned</span><h2>Spare / disconnected</h2><p>No target node is assigned in this confirmed profile.</p><div className="safety-warning"><ShieldCheck size={13} />Leave this probe disconnected.</div></div></motion.article>)}

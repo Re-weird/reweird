@@ -1,6 +1,7 @@
 # Judge deployment (default)
 
-The default Next.js build is a static, browser-only judge simulation. It has no
+The default Next.js build is a static, browser-only judge experience: the original landing page, the
+project demo at `/software`, and the optional game at `/try`. It has no
 sign-in routes, API rewrites, session providers, or hardware connections.
 `npm run build` exports it into `apps/web/out`; `npm start` serves that export.
 GitHub Pages publishes it at https://re-weird.github.io/reweird/ using

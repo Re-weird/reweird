@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useParams, usePathname } from "next/navigation";
 import { AnimatePresence, LayoutGroup, motion, useReducedMotion } from "framer-motion";
-import { BarChart3, Box, Cable, CheckCircle2, Cpu, Fingerprint, FileBarChart, FolderGit2, GitCommitHorizontal, LayoutDashboard, Microscope, RefreshCw, Settings, TestTube2 } from "lucide-react";
+import { BarChart3, Box, Cable, CheckCircle2, Cpu, FileBarChart, FolderGit2, GitCommitHorizontal, HeartPulse, LayoutDashboard, Microscope, RefreshCw, Settings, TestTube2 } from "lucide-react";
 import { useAppState } from "@/lib/app-state";
 import { projectTabs, type ProjectTabID } from "@/lib/project-routes";
 import { cn } from "@/lib/utils";
@@ -16,7 +16,7 @@ const tabIcons: Record<ProjectTabID, typeof Box> = {
   workbench: LayoutDashboard,
   overview: Box,
   "probe-setup": Cable,
-  passport: Fingerprint,
+  health: HeartPulse,
   simulator: TestTube2,
   diagnosis: Microscope,
   "physical-history": GitCommitHorizontal,
@@ -44,7 +44,7 @@ export function SectionNav() {
       return { key: tab.id, label: tab.label, href, icon: tabIcons[tab.id], active: pathname === href, dot: tab.id === "diagnosis" && session.stage !== "verify" };
     })
     : [
-      { key: "dashboard", label: "Dashboard", href: "/", icon: BarChart3, active: pathname === "/" },
+      { key: "dashboard", label: "Dashboard", href: "/dashboard", icon: BarChart3, active: pathname === "/dashboard" },
       { key: "projects", label: "Projects", href: "/projects", icon: FolderGit2, active: pathname.startsWith("/projects") },
       { key: "settings", label: "Settings", href: "/settings", icon: Settings, active: pathname === "/settings" },
     ];

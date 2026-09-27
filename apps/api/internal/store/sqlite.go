@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -37,12 +38,22 @@ func (store *SQLiteStore) MeasurementWindowCount() (int, error) {
 }
 
 func Open(path string) (*SQLiteStore, error) {
-	database, err := sql.Open("sqlite", path)
+	// Without a busy timeout, a write that overlaps a read on another pooled
+	// connection fails at once with SQLITE_BUSY; wait up to 5s instead.
+	separator := "?"
+	if strings.Contains(path, "?") {
+		separator = "&"
+	}
+	database, err := sql.Open("sqlite", path+separator+"_pragma=busy_timeout(5000)")
 	if err != nil {
 		return nil, err
 	}
 	store := &SQLiteStore{db: database}
 	if err := store.migrate(); err != nil {
+		_ = database.Close()
+		return nil, err
+	}
+	if err := store.migrateGitHub(); err != nil {
 		_ = database.Close()
 		return nil, err
 	}
@@ -94,6 +105,12 @@ func (store *SQLiteStore) migrate() error {
 			ON measurement_windows(profile_id, captured_at_ms DESC, id DESC);
 		CREATE INDEX IF NOT EXISTS idx_measurements_profile_ingested
 			ON measurement_windows(profile_id, ingested_at_ms DESC, id DESC);
+		CREATE INDEX IF NOT EXISTS idx_measurements_device_captured
+			ON measurement_windows(device_id, captured_at_ms DESC, id DESC);
+		CREATE INDEX IF NOT EXISTS idx_measurements_source_captured
+			ON measurement_windows(source, captured_at_ms DESC, id DESC);
+		CREATE INDEX IF NOT EXISTS idx_measurements_captured
+			ON measurement_windows(captured_at_ms DESC, id DESC);
 		CREATE TABLE IF NOT EXISTS known_good_baselines (
 			id INTEGER PRIMARY KEY AUTOINCREMENT,
 			profile_id TEXT NOT NULL,
@@ -275,6 +292,105 @@ func (store *SQLiteStore) ListMeasurements(profileID string, limit int) ([]domai
 		windows = append(windows, window)
 	}
 	return windows, rows.Err()
+}
+
+// probeOverfetchLimit bounds how many extra rows QueryMeasurements will
+// scan when a Probe filter is set (measurement_windows has no per-probe
+// column to index on, so probe filtering is applied in Go after an
+// indexed profile/device/source/time-range fetch) -- this can never
+// become an unbounded scan even when very few matching windows exist.
+const probeOverfetchLimit = 500
+
+// QueryMeasurements supports the scoped telemetry reads ReWeird actually
+// needs (a profile/session, a device or source, a time range, latest-first
+// chronological order) directly against the existing measurement_windows
+// table -- it does not introduce a second telemetry store. Every filter is
+// optional; Limit is always clamped to the same [1, 200] bound as
+// ListMeasurements.
+func (store *SQLiteStore) QueryMeasurements(query domain.MeasurementQuery) ([]domain.MeasurementWindow, error) {
+	limit := query.Limit
+	if limit < 1 || limit > 200 {
+		limit = 50
+	}
+	fetchLimit := limit
+	if query.Probe != "" && fetchLimit < probeOverfetchLimit {
+		// Probe isn't an indexed column, so overfetch (still bounded) and
+		// filter in Go below, rather than scanning the whole table.
+		fetchLimit = probeOverfetchLimit
+	}
+
+	conditions := make([]string, 0, 5)
+	args := make([]any, 0, 6)
+	if query.ProfileID != "" {
+		conditions = append(conditions, "profile_id = ?")
+		args = append(args, query.ProfileID)
+	}
+	if query.DeviceID != "" {
+		conditions = append(conditions, "device_id = ?")
+		args = append(args, query.DeviceID)
+	}
+	if query.Source != "" {
+		conditions = append(conditions, "source = ?")
+		args = append(args, query.Source)
+	}
+	if query.SinceMS != nil {
+		conditions = append(conditions, "captured_at_ms >= ?")
+		args = append(args, *query.SinceMS)
+	}
+	if query.UntilMS != nil {
+		conditions = append(conditions, "captured_at_ms <= ?")
+		args = append(args, *query.UntilMS)
+	}
+	where := "1 = 1"
+	if len(conditions) > 0 {
+		where = strings.Join(conditions, " AND ")
+	}
+	args = append(args, fetchLimit)
+
+	rows, err := store.db.Query(fmt.Sprintf(`
+		SELECT id, profile_id, source, device_id, sequence, captured_at_ms, ingested_at_ms, raw_payload, analysis_payload
+		FROM measurement_windows WHERE %s
+		ORDER BY captured_at_ms DESC, id DESC LIMIT ?
+	`, where), args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	windows := make([]domain.MeasurementWindow, 0)
+	for rows.Next() {
+		var window domain.MeasurementWindow
+		var rawPayload, analysisPayload string
+		if err := rows.Scan(&window.ID, &window.ProfileID, &window.Source, &window.DeviceID, &window.Sequence, &window.CapturedAtMS, &window.IngestedAtMS, &rawPayload, &analysisPayload); err != nil {
+			return nil, err
+		}
+		if err := json.Unmarshal([]byte(rawPayload), &window.Raw); err != nil {
+			return nil, err
+		}
+		if err := json.Unmarshal([]byte(analysisPayload), &window.Analysis); err != nil {
+			return nil, err
+		}
+		windows = append(windows, window)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	if query.Probe == "" {
+		return windows, nil
+	}
+	filtered := make([]domain.MeasurementWindow, 0, limit)
+	for _, window := range windows {
+		for _, sample := range window.Raw.Samples {
+			if sample.Probe == query.Probe {
+				filtered = append(filtered, window)
+				break
+			}
+		}
+		if len(filtered) >= limit {
+			break
+		}
+	}
+	return filtered, nil
 }
 
 func (store *SQLiteStore) SaveProfile(profile domain.ProjectProfile) error {

@@ -9,6 +9,7 @@ import { signOut } from "next-auth/react";
 import { BarChart3, ChevronDown, FolderGit2, LogOut, Moon, Plus, Settings, Sun, Waves } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { useAccountActivity } from "@/lib/account-activity";
 import { useAppState } from "@/lib/app-state";
 import { DEMO_PROJECT_ID } from "@/lib/project-routes";
 import { useUser } from "@/lib/auth";
@@ -55,6 +56,12 @@ function AccountMenu({ onLoadDemo }: { onLoadDemo: () => void }) {
     return () => { document.removeEventListener("mousedown", close); document.removeEventListener("keydown", escape); };
   }, [open]);
 
+  const activity = useAccountActivity();
+  const github = activity.status === "ready" ? activity.data.github : null;
+  // Same picture as the profile rail: GitHub's, never the Google photo.
+  const githubLogin = github?.connected ? github.github_user || github.account_login : undefined;
+  const avatar = githubLogin ? `https://github.com/${encodeURIComponent(githubLogin)}.png?size=64` : null;
+
   const itemClass = "flex items-center gap-2.5 rounded-md px-2.5 py-2 text-[13px] text-foreground transition-colors hover:bg-accent [&_svg]:size-4 [&_svg]:text-muted-foreground";
 
   return (
@@ -64,9 +71,10 @@ function AccountMenu({ onLoadDemo }: { onLoadDemo: () => void }) {
         aria-haspopup="menu"
         aria-expanded={open}
         aria-label="Account menu"
-        className="grid size-8 place-items-center rounded-full border border-border bg-surface-3 font-mono text-[11px] font-medium text-foreground transition-transform active:scale-95"
+        className="grid size-8 place-items-center overflow-hidden rounded-full border border-border bg-surface-3 font-mono text-[11px] font-medium text-foreground transition-transform active:scale-95"
       >
-        RW
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        {avatar ? <img src={avatar} alt="" className="size-full object-cover" /> : "RW"}
       </button>
       <AnimatePresence>
         {open && (
@@ -109,8 +117,8 @@ export function GlobalNav() {
 
   // The public landing page (/) and the legacy single-page workbench (/app)
   // own their own header/chrome; this global nav is only for the routed
-  // dashboard/projects app.
-  if (pathname === "/" || pathname.startsWith("/app")) return null;
+  // dashboard/projects app. The /demo chooser and /try judge demo own their own shell too.
+  if (pathname === "/" || pathname.startsWith("/app") || pathname.startsWith("/try") || pathname === "/demo") return null;
 
   return (
     <header data-tw className="sticky top-0 z-40 border-b border-border bg-chrome/95 backdrop-blur supports-[backdrop-filter]:bg-chrome/80">

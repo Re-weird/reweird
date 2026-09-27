@@ -1,4 +1,4 @@
-import type { DemoSession, ProbeInstruction, ProbePlan, ProbeReading, ProfileComponent, ProfileConnection, ProjectProfile, RuleResult } from "@reweird/shared-types";
+import type { DemoSession, DiagnosticWorkflow, ProbeInstruction, ProbePlan, ProbeReading, ProfileComponent, ProfileConnection, ProjectProfile, RuleResult } from "@reweird/shared-types";
 
 export interface CircuitMapConnection {
   connection: ProfileConnection;
@@ -19,6 +19,20 @@ export interface CircuitMapModel {
   hasMatchingCapture: boolean;
   captureKind?: "serial" | "simulator";
   planConnected: boolean;
+}
+
+export type CircuitDisplayState = "waiting" | "normal" | "suspect" | "testing" | "recovered";
+
+export function circuitDisplayState(item: CircuitMapConnection, hasMatchingCapture: boolean, session: DemoSession | null, workflow: DiagnosticWorkflow | null): CircuitDisplayState {
+  if (!hasMatchingCapture || !item.reading || !item.instruction) return "waiting";
+  const probe = item.instruction.probe;
+  const matchingWorkflow = Boolean(workflow && workflow.profile_id === session?.profile_id && workflow.plan?.recommendation.target_probes.includes(probe));
+  if (matchingWorkflow && workflow && workflow.verification?.status === "RESOLVED" && workflow.status === "RESOLVED" &&
+      workflow.verification.after_window_id === session?.measurement_id && workflow.verification.changes.some((change) => change.probe === probe) &&
+      !item.rules.some((rule) => rule.status !== "pass") && item.reading.status !== "intermittent") return "recovered";
+  if (matchingWorkflow && workflow && ["PLANNED", "READY", "WAITING_FOR_USER", "CAPTURING_BASELINE", "CAPTURING_TEST", "ANALYZING"].includes(workflow.status)) return "testing";
+  if (item.rules.some((rule) => rule.status === "fail" || rule.status === "warn") || item.reading.status === "intermittent") return "suspect";
+  return "normal";
 }
 
 function normalized(value: string): string {

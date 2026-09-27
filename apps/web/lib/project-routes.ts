@@ -1,11 +1,11 @@
-export type ProjectTabID = "workbench" | "overview" | "probe-setup" | "passport" | "simulator" | "diagnosis" | "physical-history" | "next-test" | "verify" | "history" | "reports" | "computer";
+export type ProjectTabID = "workbench" | "overview" | "probe-setup" | "health" | "simulator" | "diagnosis" | "physical-history" | "next-test" | "verify" | "history" | "reports" | "computer";
 
 export const projectTabs: { id: ProjectTabID; label: string; segment: string }[] = [
   { id: "workbench", label: "Workbench", segment: "" },
   { id: "overview", label: "Overview", segment: "overview" },
   { id: "probe-setup", label: "Probe setup", segment: "probe-setup" },
-  { id: "passport", label: "Device passport", segment: "passport" },
-  { id: "simulator", label: "Simulator", segment: "simulator" },
+  { id: "health", label: "Device health", segment: "health" },
+  { id: "simulator", label: "Practice simulator", segment: "simulator" },
   { id: "diagnosis", label: "Diagnosis", segment: "diagnosis" },
   { id: "physical-history", label: "Physical History", segment: "physical-history" },
   { id: "next-test", label: "Next test", segment: "next-test" },
@@ -28,7 +28,7 @@ export const DEMO_PROJECT_ID = "demo";
 // Demo-mode guided tests are recorded under the demo profile's project id.
 export const DEMO_HISTORY_PROJECT_ID = "ultrasonic-demo";
 
-// Components merged from main (circuit map, device passport) navigate with the
+// Components merged from main (circuit map) navigate with the
 // old single-page view names; map them onto this app's project tabs. "live"
 // lands on Workbench, which now hosts the live signal view.
 export type LegacyView = "profile" | "connect" | "live" | "diagnosis" | "guided" | "history";

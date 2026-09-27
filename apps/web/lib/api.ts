@@ -4,6 +4,8 @@ import type {
   DemoSession,
   DiagnosticWorkflow,
   DetailedReport,
+  GitHubRepoList,
+  GitHubStatus,
   DevicePassport,
   HistoryDetail,
   HistoryStatus,
@@ -17,6 +19,7 @@ import type {
   ProbePlan,
   Project,
   ProjectProfile,
+  RepositorySyncResponse,
   SimulatorScenarioList,
   TestRecommendation,
 } from "@reweird/shared-types";
@@ -111,6 +114,8 @@ export interface CreateProjectInput {
   description?: string;
   controller: string;
   logic_voltage: number;
+  /** "owner/name" from the user's connected GitHub account. */
+  repository?: string;
 }
 
 function uploadFile(path: string, file: File): Promise<Project> {
@@ -133,6 +138,9 @@ export const projectApi = {
   analyzeProject: (projectID: string) =>
     requestJSON<AnalyzeProjectResponse>(`/api/v1/projects/${projectID}/analyze`, { method: "POST" }, 35_000),
   getProject: (projectID: string) => requestJSON<Project>(`/api/v1/projects/${projectID}`),
+  /** Reads the linked repo's default branch now and analyzes it if it changed. */
+  syncRepository: (projectID: string) =>
+    requestJSON<RepositorySyncResponse>(`/api/v1/projects/${projectID}/sync`, { method: "POST" }, 95_000),
   setVisibility: (projectID: string, visibility: Project["visibility"]) =>
     requestJSON<Project>(`/api/v1/projects/${projectID}/visibility`, { method: "PUT", body: JSON.stringify({ visibility }) }),
   getDraftProfile: (projectID: string) => requestJSON<ProjectProfile>(`/api/v1/projects/${projectID}/profile`),
@@ -143,6 +151,14 @@ export const projectApi = {
   getProbePlan: (projectID: string) => requestJSON<ProbePlan>(`/api/v1/projects/${projectID}/probe-plan`),
   confirmProbeConnections: (projectID: string) =>
     requestJSON<ProbePlan>(`/api/v1/projects/${projectID}/probe-plan/confirm`, { method: "POST" }),
+};
+
+export const githubApi = {
+  status: () => requestJSON<GitHubStatus>("/api/v1/github/status"),
+  connect: (input: { installation_id: number; code: string; state: string }) =>
+    requestJSON<GitHubStatus>("/api/v1/github/connect", { method: "POST", body: JSON.stringify(input) }, 20_000),
+  disconnect: () => requestJSON<GitHubStatus>("/api/v1/github/disconnect", { method: "POST" }),
+  repos: () => requestJSON<GitHubRepoList>("/api/v1/github/repos", undefined, 20_000),
 };
 
 export const physicalGitApi = {

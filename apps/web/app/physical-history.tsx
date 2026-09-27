@@ -1,8 +1,12 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { AlertTriangle, CheckCircle2, Circle, Cpu, GitCommitHorizontal, Image as ImageIcon, RefreshCw, ShieldCheck, Upload, Zap, X } from "lucide-react";
+import { AlertTriangle, Camera, CheckCircle2, Circle, Cpu, GitCommitHorizontal, Image as ImageIcon, RefreshCw, Save, ShieldCheck, Upload, Zap, X } from "lucide-react";
 import type {
+  CameraConfig,
+  CameraStatus,
+  CameraTestFrame,
+  CameraTestResult,
   ComponentChange,
   ConnectionChange,
   EvidenceState,
@@ -19,7 +23,7 @@ import type {
   SemanticVisionComponentChange,
   VerifyCategoryResult,
 } from "@reweird/shared-types";
-import { ApiError, PHYSICAL_GIT_DEMO_PROJECT_ID, physicalGitApi, physicalGitDemoApi } from "@/lib/api";
+import { ApiError, cameraApi, PHYSICAL_GIT_DEMO_PROJECT_ID, physicalGitApi, physicalGitDemoApi } from "@/lib/api";
 
 function errorMessage(error: unknown): string {
   return error instanceof ApiError ? error.message : "The request failed. Check the backend and try again.";
@@ -182,6 +186,100 @@ function DemoStateControls() {
   );
 }
 
+const cameraStatusLabel: Record<CameraStatus, string> = {
+  CONNECTED: "Connected",
+  UNREACHABLE: "Unreachable",
+  INVALID_STREAM: "Invalid stream",
+  TIMEOUT: "Timed out",
+  NOT_CONFIGURED: "Not configured",
+};
+
+// VisionCameraPanel configures a project's real MJPEG camera source. It
+// never creates a Physical Commit and never calls Gemini -- Test Connection
+// and Capture Test Frame only confirm connectivity/positioning. The camera
+// itself is used automatically the next time COMMIT PHYSICAL STATE runs
+// with no manually attached photo (see the backend's createPhysicalCommit).
+function VisionCameraPanel({ projectID, cameraConfig, onChange }: { projectID: string; cameraConfig: CameraConfig | null; onChange: (config: CameraConfig | null) => void }) {
+  const [url, setUrl] = useState(cameraConfig?.url ?? "");
+  const [busy, setBusy] = useState<"save" | "test" | "capture" | "clear" | null>(null);
+  const [error, setError] = useState("");
+  const [testResult, setTestResult] = useState<CameraTestResult | null>(null);
+  const [frame, setFrame] = useState<CameraTestFrame | null>(null);
+
+  useEffect(() => { setUrl(cameraConfig?.url ?? ""); }, [cameraConfig?.url]);
+
+  const trimmedURL = url.trim();
+  const override = trimmedURL ? { source_type: "mjpeg" as const, url: trimmedURL } : undefined;
+
+  async function save() {
+    setBusy("save"); setError("");
+    try {
+      const updated = await cameraApi.saveConfig(projectID, { source_type: "mjpeg", url: trimmedURL });
+      onChange(updated.camera_config ?? null);
+    } catch (caught) { setError(errorMessage(caught)); }
+    finally { setBusy(null); }
+  }
+  async function clear() {
+    setBusy("clear"); setError(""); setTestResult(null); setFrame(null);
+    try {
+      const updated = await cameraApi.clearConfig(projectID);
+      onChange(updated.camera_config ?? null);
+      setUrl("");
+    } catch (caught) { setError(errorMessage(caught)); }
+    finally { setBusy(null); }
+  }
+  async function test() {
+    setBusy("test"); setError(""); setFrame(null);
+    try { setTestResult(await cameraApi.test(projectID, override)); }
+    catch (caught) { setError(errorMessage(caught)); }
+    finally { setBusy(null); }
+  }
+  async function captureFrame() {
+    setBusy("capture"); setError(""); setTestResult(null);
+    try { setFrame(await cameraApi.captureTestFrame(projectID, override)); }
+    catch (caught) { setError(errorMessage(caught)); }
+    finally { setBusy(null); }
+  }
+
+  return (
+    <section className="panel" style={{ marginBottom: 16 }}>
+      <div className="panel-heading"><div><span className="eyebrow">Real hardware evidence</span><h2 style={{ fontSize: 13, margin: "3px 0" }}><Camera size={14} style={{ verticalAlign: "-2px", marginRight: 4 }} />Vision camera</h2></div></div>
+      <p className="inline-empty" style={{ textAlign: "left" }}>
+        Configure an MJPEG camera (e.g. an Android phone running an &quot;IP Webcam&quot;-style app on the same Wi-Fi as this backend) to capture a real raw frame automatically each time you commit physical state with no photo attached.
+      </p>
+      <div className="upload-grid" style={{ gridTemplateColumns: "minmax(0,1fr) auto auto auto", alignItems: "center", gap: 8 }}>
+        <input
+          aria-label="Camera MJPEG URL"
+          placeholder="http://10.110.194.207:4444"
+          value={url}
+          disabled={busy !== null}
+          onChange={(event) => setUrl(event.target.value)}
+          style={{ height: 36, borderRadius: 8, background: "var(--surface-2)", border: "1px solid var(--line)", color: "var(--text)", padding: "0 10px", fontSize: 12 }}
+        />
+        <button type="button" className="secondary" disabled={busy !== null || !trimmedURL} onClick={() => void save()}>{busy === "save" ? <RefreshCw className="spin" size={14} /> : <Save size={14} />} Save</button>
+        <button type="button" className="secondary" disabled={busy !== null} onClick={() => void test()}>{busy === "test" ? <RefreshCw className="spin" size={14} /> : <Zap size={14} />} Test Connection</button>
+        <button type="button" className="text-button" disabled={busy !== null} onClick={() => void captureFrame()}>{busy === "capture" ? <RefreshCw className="spin" size={14} /> : <ImageIcon size={14} />} Capture Test Frame</button>
+      </div>
+      {cameraConfig && <button type="button" className="text-button" disabled={busy !== null} onClick={() => void clear()} style={{ marginTop: 6 }}>Clear camera</button>}
+      {error && <div className="form-error" role="alert"><AlertTriangle size={15} />{error}</div>}
+      {testResult && (
+        <p className="inline-empty" style={{ textAlign: "left" }}>
+          Status: <strong>{cameraStatusLabel[testResult.status]}</strong>
+          {testResult.frame_available && ` · frame available · ${testResult.content_type} · ${testResult.latency_ms}ms`}
+          {testResult.message && ` · ${testResult.message}`}
+        </p>
+      )}
+      {frame && (
+        <div style={{ marginTop: 8 }}>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={`data:${frame.content_type};base64,${frame.image_base64}`} alt="Captured test frame" style={{ maxWidth: 240, borderRadius: 8, border: "1px solid var(--line-soft)" }} />
+          <p className="inline-empty" style={{ textAlign: "left" }}>{frame.width}&times;{frame.height} &middot; {(frame.size_bytes / 1024).toFixed(0)} KB &middot; this test frame was not saved or sent to Gemini.</p>
+        </div>
+      )}
+    </section>
+  );
+}
+
 function formatFieldValue(value: unknown): string {
   if (value === null || value === undefined) return "—";
   if (typeof value === "boolean") return value ? "Yes" : "No";
@@ -299,11 +397,13 @@ function CommitPhysicalStateModal({
   onClose,
   onCommitted,
   defaultNote,
+  cameraConfigured,
 }: {
   projectID: string;
   onClose: () => void;
   onCommitted: (commit: PhysicalCommit) => void;
   defaultNote?: string;
+  cameraConfigured?: boolean;
 }) {
   const [note, setNote] = useState(defaultNote ?? "");
   const [image, setImage] = useState<File | null>(null);
@@ -362,6 +462,11 @@ function CommitPhysicalStateModal({
         <div className="upload-grid">
           <label className={image ? "has-file" : ""}><ImageIcon size={20} /><span>{image?.name ?? "Photo"}</span><small>PNG/JPG · optional · max 5 MB</small><input type="file" accept="image/png,image/jpeg,.png,.jpg,.jpeg" disabled={busy} onChange={(event) => setImage(event.target.files?.[0] ?? null)} /></label>
         </div>
+        {cameraConfigured && !image && (
+          <p className="inline-empty" style={{ textAlign: "left" }}>
+            A frame will be captured automatically from your configured camera since no photo is attached above.
+          </p>
+        )}
         {error && <div className="form-error" role="alert"><AlertTriangle size={15} />{error}</div>}
         <div className="modal-actions">
           <button type="button" className="secondary" onClick={onClose} disabled={busy}>Cancel</button>
@@ -603,6 +708,9 @@ export function PhysicalHistoryView({ project }: { project: Project | null }) {
   const [verifyResult, setVerifyResult] = useState<PhysicalVerifyResult | null>(null);
   const [paneBusy, setPaneBusy] = useState(false);
   const [paneError, setPaneError] = useState("");
+  const [cameraConfig, setCameraConfig] = useState<CameraConfig | null>(project?.camera_config ?? null);
+
+  useEffect(() => { setCameraConfig(project?.camera_config ?? null); }, [project?.id, project?.camera_config]);
 
   useEffect(() => {
     if (!project) return;
@@ -652,6 +760,8 @@ export function PhysicalHistoryView({ project }: { project: Project | null }) {
           <button className="primary" onClick={() => setModalOpen(true)}><GitCommitHorizontal size={16} /> Commit Physical State</button>
         </div>
       </section>
+
+      {!isDemoProject && <VisionCameraPanel projectID={project.id} cameraConfig={cameraConfig} onChange={setCameraConfig} />}
 
       {lastCommitted && (
         <div className="input-security" role="status">
@@ -745,6 +855,7 @@ export function PhysicalHistoryView({ project }: { project: Project | null }) {
         <CommitPhysicalStateModal
           projectID={project.id}
           defaultNote={modalDefaultNote}
+          cameraConfigured={cameraConfig != null}
           onClose={() => { setModalOpen(false); setModalDefaultNote(undefined); }}
           onCommitted={(commit) => {
             setModalOpen(false);

@@ -116,7 +116,7 @@ func (planner *Planner) Plan(profile domain.ProjectProfile, recommendation domai
 		RequiresPatch: recommendation.RequiresPatch,
 	}
 	if recommendation.RequiresPatch {
-		plan.Unavailable = "PATCH REQUIRED — Unavailable until hardware safety validation is complete."
+		plan.Unavailable = "PATCH REQUIRED — Use the separate PATCH validation and approval flow. This passive measurement plan never drives hardware. Unprovisioned hardware remains locked."
 	}
 	base := []string{
 		"Keep the project powered in its normal operating condition.",

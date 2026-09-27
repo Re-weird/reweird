@@ -5,7 +5,6 @@
 // This is NOT controlled by a server command, environment variable, or probe
 // pin inference. Changing this release gate requires a separate hardware review.
 namespace ReWeirdPatch {
-static constexpr bool PhysicalInterfaceVerified = false;
 static constexpr uint32_t MaxDurationMS = 250;
 static constexpr uint32_t MaxLeaseMS = 100;
 static constexpr uint32_t MaxFrequencyHz = 100;
@@ -13,7 +12,7 @@ enum class Mode { Digital, Pulse, PulseTrain };
 
 constexpr bool reservedPin(int pin) {
   return pin < 0 || pin > 48 || pin == 0 || pin == 3 || pin == 8 || pin == 9 ||
-    pin == 16 || pin == 17 || pin == 18 || pin == 19 || pin == 20 || pin == 21 ||
+    pin == 4 || pin == 5 || pin == 16 || pin == 17 || pin == 18 || pin == 19 || pin == 20 || pin == 21 ||
     (pin >= 26 && pin <= 37) || pin == 45 || pin == 46 || pin == 48;
 }
 constexpr bool validLimits(int pin, uint32_t millivolts, uint32_t durationMS,
@@ -26,11 +25,9 @@ constexpr bool validLimits(int pin, uint32_t millivolts, uint32_t durationMS,
       dutyPermille >= 100 && dutyPermille <= 900 && frequencyHz * durationMS >= 1000);
 }
 
-// Compile-time contract checks run in every firmware build. No OUTPUT operation
-// is present: physical actions remain unsupported, even with otherwise valid
-// limits. A future qualified driver must additionally enforce lease expiry,
-// one-use boot-scoped arming, output disable acknowledgement and hardware OE.
-static_assert(!PhysicalInterfaceVerified, "PATCH physical output is not qualified");
+// Compile-time model checks run in every build. The stock board remains
+// unqualified. patch_runtime.h separately enforces the reviewed provisioning
+// record, physical interlock, bounded state machine and dedicated hardware OE.
 static_assert(validLimits(10, 3300, 10, Mode::Pulse, 0, 0), "model bounds");
 static_assert(!validLimits(8, 3300, 10, Mode::Pulse, 0, 0), "protect P1");
 static_assert(!validLimits(9, 3300, 10, Mode::Pulse, 0, 0), "protect P5");

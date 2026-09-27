@@ -2,8 +2,11 @@
 
 This firmware runs on the **ReWeird diagnostic device**, not the target project.
 It samples six passive probe inputs and emits newline-delimited telemetry v2 JSON
-over USB serial. PATCH is deliberately configured as an input and has no output
-code path.
+over USB serial. The stock board has no provisioned PATCH output and stays LOCKED.
+The bounded command/state-machine implementation is available only after a
+dedicated protected interface is physically qualified and recorded in
+`include/patch_provision.h`; a runtime flag cannot provision it. See
+[PATCH safety and provisioning](../../docs/patch-safety.md).
 
 ## Default probe map
 

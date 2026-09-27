@@ -2,10 +2,11 @@
 
 import { SimulatorView } from "../../../project-views";
 import { useAppState } from "@/lib/app-state";
+import { SimulatedPatch } from "../../../simulated-patch";
 
 export default function SimulatorPage() {
   const { practiceSession, source, scenarios, selectedScenario, setSelectedScenario, scenarioError, mysteryPending, revealMystery, runScenario, runOriginalDemo, busy } = useAppState();
-  return <SimulatorView
+  return <><SimulatorView
     session={practiceSession}
     source={source}
     scenarios={scenarios}
@@ -18,5 +19,5 @@ export default function SimulatorPage() {
     onDemoTest={() => runOriginalDemo("wiggle")}
     onDemoRepair={() => runOriginalDemo("repair")}
     busy={busy}
-  />;
+  /><SimulatedPatch /></>;
 }

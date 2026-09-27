@@ -259,7 +259,7 @@ func TestRestartInvalidatesApproval(t *testing.T) {
 		t.Fatal("restart resumed output")
 	}
 }
-func TestPhysicalAlwaysLocked(t *testing.T) {
+func TestUnprovisionedPhysicalLocked(t *testing.T) {
 	c, _, p, d := fixture(t)
 	p.Source = "REAL_SERIAL"
 	a, err := c.Propose(p, "human")

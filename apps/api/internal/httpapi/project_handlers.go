@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"reflect"
@@ -21,15 +22,31 @@ func (controller *Controller) createProject(ctx *fiber.Ctx) error {
 		Description  string  `json:"description"`
 		Controller   string  `json:"controller"`
 		LogicVoltage float64 `json:"logic_voltage"`
+		// Repository is an optional "owner/name" from the caller's GitHub
+		// installation; pushes to its default branch drive code analysis.
+		Repository string `json:"repository"`
 	}
 	if err := ctx.BodyParser(&input); err != nil {
 		return apiError(ctx, fiber.StatusBadRequest, "INVALID_JSON", "Project details must be valid JSON.")
+	}
+	var linked *domain.LinkedRepository
+	if fullName := strings.TrimSpace(input.Repository); fullName != "" {
+		if strings.Count(fullName, "/") != 1 {
+			return apiError(ctx, fiber.StatusUnprocessableEntity, "INVALID_REPOSITORY", "Repository must look like owner/name.")
+		}
+		var err error
+		if linked, err = controller.linkRepository(ctx, fullName); linked == nil {
+			if err != nil {
+				return internalError(ctx, err)
+			}
+			return nil
+		}
 	}
 	id, err := projects.NewID(input.Name)
 	if err != nil {
 		return internalError(ctx, err)
 	}
-	project := domain.Project{ID: id, OwnerID: ownerID(ctx), Name: strings.TrimSpace(input.Name), Description: strings.TrimSpace(input.Description), Controller: strings.TrimSpace(input.Controller), LogicVoltage: input.LogicVoltage, AnalysisStatus: domain.AnalysisPending, Visibility: domain.VisibilityPrivate}
+	project := domain.Project{ID: id, OwnerID: ownerID(ctx), Name: strings.TrimSpace(input.Name), Description: strings.TrimSpace(input.Description), Controller: strings.TrimSpace(input.Controller), LogicVoltage: input.LogicVoltage, AnalysisStatus: domain.AnalysisPending, Visibility: domain.VisibilityPrivate, Repository: linked}
 	if err := projects.Validate(project); err != nil {
 		return apiError(ctx, fiber.StatusUnprocessableEntity, "INVALID_PROJECT", err.Error())
 	}
@@ -241,39 +258,60 @@ func (controller *Controller) analyzeProject(ctx *fiber.Ctx) error {
 	if project.Image == nil && project.Code == nil {
 		return apiError(ctx, fiber.StatusUnprocessableEntity, "EMPTY_PROJECT", "Upload an image or provide project code before analysis.")
 	}
-	project.AnalysisStatus = domain.AnalysisProcessing
-	project.AnalysisError = ""
-	if err := controller.repository.SaveProject(*project); err != nil {
+	analysis, profile, failure, err := controller.analyzeLocked(ctx.Context(), project)
+	if err != nil {
 		return internalError(ctx, err)
 	}
-	imagePath := ""
-	if project.Image != nil {
-		imagePath, err = projects.ResolveImage(controller.uploadRoot, project.Image.StorageRef)
-		if err != nil {
-			project.AnalysisStatus = domain.AnalysisFailed
-			project.AnalysisError = "The stored image reference is invalid."
-			_ = controller.repository.SaveProject(*project)
-			return apiError(ctx, fiber.StatusUnprocessableEntity, "INVALID_IMAGE_REFERENCE", project.AnalysisError)
-		}
-	}
-	analysis, profile := controller.understanding.Analyze(ctx.Context(), *project, imagePath)
-	project.Analysis = &analysis
-	project.AnalysisStatus = domain.AnalysisDraftReady
-	project.ProbePlan = nil
-	if err := profiles.Validate(profile); err != nil {
-		project.AnalysisStatus = domain.AnalysisFailed
-		project.AnalysisError = err.Error()
-		_ = controller.repository.SaveProject(*project)
-		return apiError(ctx, fiber.StatusUnprocessableEntity, "DRAFT_PROFILE_INVALID", err.Error())
-	}
-	if err := controller.repository.SaveProjectProfile(*project, profile); err != nil {
-		return internalError(ctx, err)
+	if failure != nil {
+		return apiError(ctx, fiber.StatusUnprocessableEntity, failure.code, failure.message)
 	}
 	stored, err := controller.repository.GetProject(project.ID)
 	if err != nil {
 		return internalError(ctx, err)
 	}
 	return ctx.JSON(fiber.Map{"project": stored, "analysis": analysis, "profile": profile})
+}
+
+// analysisFailure is an input problem that left the project FAILED, as
+// opposed to a storage error.
+type analysisFailure struct {
+	code    string
+	message string
+}
+
+// analyzeLocked turns the project's stored image and code into a draft
+// Project Profile and saves both. The caller holds profileMu and has
+// checked the profile isn't confirmed.
+func (controller *Controller) analyzeLocked(ctx context.Context, project *domain.Project) (domain.ProjectAnalysis, domain.ProjectProfile, *analysisFailure, error) {
+	project.AnalysisStatus = domain.AnalysisProcessing
+	project.AnalysisError = ""
+	if err := controller.repository.SaveProject(*project); err != nil {
+		return domain.ProjectAnalysis{}, domain.ProjectProfile{}, nil, err
+	}
+	fail := func(code, message string) (domain.ProjectAnalysis, domain.ProjectProfile, *analysisFailure, error) {
+		project.AnalysisStatus = domain.AnalysisFailed
+		project.AnalysisError = message
+		return domain.ProjectAnalysis{}, domain.ProjectProfile{}, &analysisFailure{code: code, message: message}, controller.repository.SaveProject(*project)
+	}
+	imagePath := ""
+	if project.Image != nil {
+		var err error
+		imagePath, err = projects.ResolveImage(controller.uploadRoot, project.Image.StorageRef)
+		if err != nil {
+			return fail("INVALID_IMAGE_REFERENCE", "The stored image reference is invalid.")
+		}
+	}
+	analysis, profile := controller.understanding.Analyze(ctx, *project, imagePath)
+	project.Analysis = &analysis
+	project.AnalysisStatus = domain.AnalysisDraftReady
+	project.ProbePlan = nil
+	if err := profiles.Validate(profile); err != nil {
+		return fail("DRAFT_PROFILE_INVALID", err.Error())
+	}
+	if err := controller.repository.SaveProjectProfile(*project, profile); err != nil {
+		return domain.ProjectAnalysis{}, domain.ProjectProfile{}, nil, err
+	}
+	return analysis, profile, nil, nil
 }
 
 func (controller *Controller) getProjectProfile(ctx *fiber.Ctx) error {

@@ -34,7 +34,10 @@ func main() {
 	loadLocalDotEnv()
 
 	databasePath := environment("DATABASE_PATH", "./reweird.db")
-	port := environment("API_PORT", "8080")
+	// Railway (and most PaaS hosts) assign a dynamic port via $PORT and expect
+	// the app to bind it directly; API_PORT remains the override for local/
+	// self-hosted runs that don't set PORT.
+	port := environment("PORT", environment("API_PORT", "8080"))
 	host := environment("API_HOST", "127.0.0.1")
 	address := net.ParseIP(host)
 	if address == nil {

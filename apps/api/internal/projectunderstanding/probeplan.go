@@ -3,6 +3,8 @@ package projectunderstanding
 import (
 	"errors"
 	"fmt"
+	"regexp"
+	"sort"
 	"strings"
 	"time"
 
@@ -15,13 +17,51 @@ func GenerateProbePlan(profile domain.ProjectProfile) (domain.ProbePlan, []domai
 	}
 	now := time.Now().UTC().UnixMilli()
 	plan := domain.ProbePlan{ProjectID: profile.ProjectID, ProfileID: profile.ID, GeneratedAtMS: now, Instructions: []domain.ProbeInstruction{{Probe: "GND", Role: "reference", Target: "Target circuit ground", Expected: "common reference", SignalType: "ground", SafeWarning: "Connect ReWeird GND only to the target circuit ground after power and polarity are verified.", Explanation: "Every passive measurement needs the same reference as the target circuit."}}}
-	configurations := make([]domain.ProbeConfiguration, 0, 6)
-	probeNumber := 1
+	// Connections pinned to a physical probe keep that probe; the rest fill
+	// the lowest free probes in profile order.
+	assigned := map[string]bool{}
 	for _, connection := range profile.Connections {
-		if probeNumber > 6 || strings.EqualFold(connection.Role, "GND") || strings.Contains(strings.ToLower(connection.Behavior), "ground") {
+		if connection.Probe == "" {
 			continue
 		}
-		probe := fmt.Sprintf("P%d", probeNumber)
+		if !probeNamePattern.MatchString(connection.Probe) {
+			return domain.ProbePlan{}, nil, fmt.Errorf("connection %s is pinned to invalid probe %q", connection.ID, connection.Probe)
+		}
+		if assigned[connection.Probe] {
+			return domain.ProbePlan{}, nil, fmt.Errorf("probe %s is pinned to more than one connection", connection.Probe)
+		}
+		assigned[connection.Probe] = true
+	}
+	// A spare probe stays disconnected unless the user explicitly pins a
+	// connection to it. Do not consume P6 just because code has extra GPIOs.
+	for _, probe := range profile.ReservedProbes {
+		if !probeNamePattern.MatchString(probe) {
+			return domain.ProbePlan{}, nil, fmt.Errorf("invalid reserved probe %q", probe)
+		}
+		assigned[probe] = true
+	}
+	byProbe := map[string]domain.ProbeConfiguration{}
+	nextFree := func() string {
+		for number := 1; number <= 6; number++ {
+			name := fmt.Sprintf("P%d", number)
+			if !assigned[name] {
+				assigned[name] = true
+				return name
+			}
+		}
+		return ""
+	}
+	for _, connection := range profile.Connections {
+		if strings.EqualFold(connection.Role, "GND") || strings.Contains(strings.ToLower(connection.Behavior), "ground") {
+			continue
+		}
+		probe := connection.Probe
+		if probe == "" {
+			probe = nextFree()
+			if probe == "" {
+				continue
+			}
+		}
 		mode := probeMode(connection.Behavior)
 		scale := 1.0
 		warning := "Passive input only. Verify the node never exceeds 3.3 V at the ESP32 input."
@@ -30,22 +70,36 @@ func GenerateProbePlan(profile domain.ProjectProfile) (domain.ProbePlan, []domai
 			warning = "This node may exceed 3.3 V. Use a verified divider or level shifter before connecting the ReWeird input."
 		}
 		plan.Instructions = append(plan.Instructions, domain.ProbeInstruction{Probe: probe, Role: connection.Role, Target: connection.Target, Expected: expectedDescription(connection.Expected), SignalType: connection.Expected.SignalType, SafeWarning: warning, Explanation: "Generated from the confirmed " + connection.ComponentName + " connection."})
-		configurations = append(configurations, domain.ProbeConfiguration{Probe: probe, Role: connection.Role, Mode: mode, IsPowerRail: strings.Contains(strings.ToLower(connection.Behavior), "voltage") || strings.Contains(strings.ToLower(connection.Role), "vcc") || strings.Contains(strings.ToLower(connection.Role), "power"), Expected: connection.Expected, SafeMeasurement: domain.SafeMeasurementConfig{MaxPinVoltage: 3.3, InputScale: scale, Notes: warning}})
-		probeNumber++
+		byProbe[probe] = domain.ProbeConfiguration{Probe: probe, Role: connection.Role, Mode: mode, IsPowerRail: strings.Contains(strings.ToLower(connection.Behavior), "voltage") || strings.Contains(strings.ToLower(connection.Role), "vcc") || strings.Contains(strings.ToLower(connection.Role), "power"), Expected: connection.Expected, SafeMeasurement: domain.SafeMeasurementConfig{MaxPinVoltage: 3.3, InputScale: scale, Notes: warning}}
+	}
+	configurations := make([]domain.ProbeConfiguration, 0, 6)
+	for number := 1; number <= 6; number++ {
+		name := fmt.Sprintf("P%d", number)
+		if configuration, ok := byProbe[name]; ok {
+			configurations = append(configurations, configuration)
+		}
 	}
 	if len(configurations) == 0 {
 		return domain.ProbePlan{}, nil, errors.New("no profile connection can be mapped to P1-P6")
 	}
-	for probeNumber <= 6 {
-		configurations = append(configurations, domain.ProbeConfiguration{
-			Probe: fmt.Sprintf("P%d", probeNumber), Role: "UNASSIGNED", Mode: domain.ProbeModeDigital,
+	complete := make([]domain.ProbeConfiguration, 0, 6)
+	for number := 1; number <= 6; number++ {
+		name := fmt.Sprintf("P%d", number)
+		if configuration, ok := byProbe[name]; ok {
+			complete = append(complete, configuration)
+			continue
+		}
+		complete = append(complete, domain.ProbeConfiguration{
+			Probe: name, Role: "UNASSIGNED", Mode: domain.ProbeModeDigital,
 			Expected:        domain.ExpectedSignal{SignalType: "unassigned", Required: false},
 			SafeMeasurement: domain.SafeMeasurementConfig{MaxPinVoltage: 3.3, InputScale: 1, Notes: "No target node assigned; leave this probe disconnected."},
 		})
-		probeNumber++
 	}
-	return plan, configurations, nil
+	sort.SliceStable(plan.Instructions, func(i, j int) bool { return plan.Instructions[i].Probe < plan.Instructions[j].Probe })
+	return plan, complete, nil
 }
+
+var probeNamePattern = regexp.MustCompile(`^P[1-6]$`)
 
 func probeMode(behavior string) domain.ProbeMode {
 	lower := strings.ToLower(behavior)

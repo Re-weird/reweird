@@ -135,12 +135,20 @@ export interface DerivedSignalFacts {
   failure_buckets?: number[];
   activity_counts?: number[];
   baseline_deviation_percent?: number;
+  /** A captured HIGH time violated the configured pulse-width expectation. */
+  pulse_width_out_of_range?: boolean;
+  /** The raw capture is internally inconsistent; raw values are unchanged. */
+  capture_unreliable?: boolean;
+  capture_issues?: string[];
+  /** Metrics outside a learned physical Known Good envelope. */
+  known_good_deviations?: string[];
 }
 
 export interface SignalAnalysis {
   schema_version: number;
   device_id: string;
   profile_id: string;
+  profile_version?: number;
   captured_at_ms: number;
   window_ms: number;
   probes: DerivedSignalFacts[];
@@ -172,7 +180,38 @@ export interface MeasurementWindow {
 }
 
 export type BaselineSource = "PHYSICAL" | "SIMULATED";
-export type PassportStatus = "NO_PHYSICAL_BASELINE" | "NEEDS_VERIFICATION" | "HEALTHY" | "DEVIATION_DETECTED" | "SIMULATED_BASELINE" | "SIMULATED_MATCH" | "SIMULATED_DEVIATION";
+export type PassportStatus = "NO_PHYSICAL_BASELINE" | "NEEDS_VERIFICATION" | "HEALTHY" | "DEVIATION_DETECTED" | "SIMULATED_BASELINE" | "SIMULATED_MATCH" | "SIMULATED_DEVIATION" | "BASELINE_INCOMPATIBLE";
+export type MeasurementProvenance = "REAL_SERIAL" | "SIMULATED";
+
+/** Recorded physical behavior. Never a configured expectation. */
+export interface TrustedBaseline {
+  status: "USER_CONFIRMED_HEALTHY" | "KNOWN_GOOD_CAPTURE" | "MANUFACTURER_SPEC" | "UNKNOWN";
+  captured_at_ms?: number;
+  average_voltage?: number;
+  frequency_hz?: number;
+  dropouts_per_window?: number;
+  voltage_variation?: number;
+  frequency_tolerance_pct?: number;
+  voltage_tolerance_pct?: number;
+  window_count?: number;
+  min_voltage?: number;
+  max_voltage?: number;
+  min_frequency_hz?: number;
+  max_frequency_hz?: number;
+  pulse_width_us?: number;
+  min_pulse_width_us?: number;
+  max_pulse_width_us?: number;
+  pulse_width_tolerance_pct?: number;
+  compare_pulse_width?: boolean;
+}
+
+export interface ProbeMappingEntry {
+  probe: string;
+  role: string;
+  mode: "analog" | "digital" | "pulse";
+  input_scale: number;
+  required: boolean;
+}
 
 export interface KnownGoodBaseline {
   id: number;
@@ -190,8 +229,71 @@ export interface KnownGoodBaseline {
     probe: string;
     role: string;
     facts: DerivedSignalFacts;
-    trusted: Record<string, unknown>;
+    trusted: TrustedBaseline;
   }>;
+  provenance?: MeasurementProvenance;
+  probe_mapping?: ProbeMappingEntry[];
+  probe_mapping_hash?: string;
+  window_count?: number;
+  first_measurement_id?: number;
+  last_measurement_id?: number;
+}
+
+export type CalibrationStatus =
+  | "NOT_CALIBRATED"
+  | "OBSERVING"
+  | "ATTENTION_REQUIRED"
+  | "REVIEW_REQUIRED"
+  | "CALIBRATED"
+  | "BASELINE_INCOMPATIBLE"
+  | "SIMULATED_SOURCE";
+
+export interface ObservedSummary {
+  windows: number;
+  stable_windows: number;
+  unreliable_windows: number;
+  max_dropouts: number;
+  active_windows: number;
+  min_voltage?: number;
+  average_voltage?: number;
+  max_voltage?: number;
+  max_voltage_variation?: number;
+  min_frequency_hz?: number;
+  average_frequency_hz?: number;
+  max_frequency_hz?: number;
+  min_pulse_width_us?: number;
+  average_pulse_width_us?: number;
+  max_pulse_width_us?: number;
+  capture_issues?: string[];
+}
+
+export interface CalibrationProbe {
+  probe: string;
+  role: string;
+  mode: "analog" | "digital" | "pulse";
+  required: boolean;
+  expected: ExpectedSignal;
+  observed: ObservedSummary;
+  known_good?: TrustedBaseline;
+  issues?: string[];
+}
+
+export interface CalibrationState {
+  status: CalibrationStatus;
+  detail: string;
+  profile_id: string;
+  profile_version: number;
+  device_id?: string;
+  provenance?: MeasurementProvenance;
+  windows_observed: number;
+  windows_required: number;
+  candidate_measurement_id?: number;
+  first_measurement_id?: number;
+  can_save_known_good: boolean;
+  blockers?: string[];
+  probes: CalibrationProbe[];
+  known_good?: KnownGoodBaseline;
+  probe_mapping_hash: string;
 }
 
 export interface PassportCapture {
@@ -231,6 +333,7 @@ export interface ProjectProfile {
   expected_behavior: string;
   components: ProfileComponent[];
   connections?: ProfileConnection[];
+  reserved_probes?: string[];
   conflicts?: ProfileConflict[];
   unresolved_questions?: string[];
   operating_conditions?: string[];
@@ -257,7 +360,9 @@ export type ProjectFactSource =
   | "VISION_AI"
   | "CATALOG"
   | "USER"
-  | "INFERRED";
+  | "INFERRED"
+  | "REAL_SERIAL_OBSERVATION"
+  | "HARDWARE_CONTRACT";
 
 export interface ProfileComponent {
   id: string;
@@ -284,6 +389,8 @@ export interface ExpectedSignal {
   min_frequency_hz?: number;
   max_frequency_hz?: number;
   nominal_frequency_hz?: number;
+  min_pulse_width_us?: number;
+  max_pulse_width_us?: number;
   max_dropouts: number;
 }
 
@@ -299,6 +406,8 @@ export interface ProfileConnection {
   component_name: string;
   role: string;
   gpio?: number;
+  /** Pins this connection to a physical ReWeird probe (P1-P6). */
+  probe?: string;
   target: string;
   direction: string;
   behavior: string;

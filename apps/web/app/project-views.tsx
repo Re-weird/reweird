@@ -26,7 +26,7 @@ export function DiagnosisView({ session, source, onPlan, busy }: { session: Demo
             <div className="observed"><span>Observed</span><strong>{focus?.dropouts ?? 0} detected dropouts</strong>{renderFacts(observed)}</div>
             <div><span>Baseline</span><strong>{String(session.evidence.baseline.status ?? "Unknown")}</strong>{renderFacts(baseline)}</div>
           </div>
-          <div className="rules-list">{session.evidence.rule_results.map((rule) => <RuleRow rule={rule} key={rule.id} />)}</div>
+          <div className="rules-list">{session.evidence.rule_results.map((rule, index) => <RuleRow rule={rule} key={`${rule.probe ?? ""}-${rule.id}-${index}`} />)}</div>
         </div>
         <div className="panel interpretation-card">
           <div className="interpretation-label"><Microscope size={16} /> PROBE interpretation <span>{telemetryLabel(session, source)}</span></div>
@@ -78,7 +78,7 @@ export function SimulatorView({
   const activeScenario = scenarios.find((scenario) => scenario.id === session.scenario_id);
   return (
     <>
-      <section className="page-heading"><div><p className="kicker">{telemetryLabel(session, source)} · simulated project</p><h1>Make it weird</h1><p>Choose a fault, see which signal changed, then follow the evidence to a test. This page uses simulated samples, not your physical circuit.</p></div><div className="live-badge"><span /> PATCH locked</div></section>
+      <section className="page-heading"><div><p className="kicker">{telemetryLabel(session, source)} · simulated project</p><h1>Practice simulator</h1><p>For the team: choose a fault and the real diagnosis engine analyzes simulated samples. Not your physical circuit, and not the judge game at /try.</p></div><div className="live-badge"><span /> PATCH locked</div></section>
       <details className="simulator-details"><summary>How the sample becomes a diagnosis</summary><p>The eight steps below describe the software pipeline. They are not actions you need to perform.</p><div className="pipeline-strip" aria-label="Telemetry processing pipeline">{["Capture", "Check format", "Read signals", "Match project", "Save sample", "Calculate changes", "Check rules", "Explain result"].map((step, index) => <div key={step}><span>{index + 1}</span>{step}</div>)}</div></details>
       <section className="simulator-layout">
         <div className="panel scenario-panel">

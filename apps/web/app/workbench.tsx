@@ -67,7 +67,7 @@ export function Workbench({ session, project, profile, source, onNavigate, histo
           <div className="probe-grid">{session.probes.map((probe) => <ProbeCard reading={probe} key={probe.probe} />)}</div>
           <div className="two-column wide-left">
             <div className="panel"><div className="panel-heading"><div><span className="eyebrow">Raw activity buckets</span><h2>Signal activity</h2></div><div className="chart-legend">{charted.map((probe) => <span key={probe.probe}>{probe.probe} {probe.role}</span>)}</div></div><SignalChart session={session} /></div>
-            <div className="panel"><div className="panel-heading"><div><span className="eyebrow">Analysis</span><h2>Rule engine</h2></div></div><div className="rules-list">{session.evidence.rule_results.map((rule) => <RuleRow rule={rule} key={rule.id} />)}</div><div className="engine-note"><Bolt size={16} /><span>Deterministic checks run before any AI interpretation.</span></div></div>
+            <div className="panel"><div className="panel-heading"><div><span className="eyebrow">Analysis</span><h2>Rule engine</h2></div></div><div className="rules-list">{session.evidence.rule_results.map((rule, index) => <RuleRow rule={rule} key={`${rule.probe ?? ""}-${rule.id}-${index}`} />)}</div><div className="engine-note"><Bolt size={16} /><span>Deterministic checks run before any AI interpretation.</span></div></div>
           </div>
         </> : <div className="bench-empty"><Radio size={24} /><h3>Waiting for this project’s signals</h3><p>Complete probe setup and connect a matching telemetry source.</p><button className="secondary" onClick={() => onNavigate("probe-setup")}>Open probe setup <ChevronRight size={15} /></button></div>}
       </section>

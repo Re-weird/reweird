@@ -5,7 +5,7 @@ export const projectTabs: { id: ProjectTabID; label: string; segment: string }[]
   { id: "overview", label: "Overview", segment: "overview" },
   { id: "probe-setup", label: "Probe setup", segment: "probe-setup" },
   { id: "passport", label: "Device passport", segment: "passport" },
-  { id: "simulator", label: "Simulator", segment: "simulator" },
+  { id: "simulator", label: "Practice simulator", segment: "simulator" },
   { id: "diagnosis", label: "Diagnosis", segment: "diagnosis" },
   { id: "next-test", label: "Next test", segment: "next-test" },
   { id: "verify", label: "Verify result", segment: "verify" },

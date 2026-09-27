@@ -74,13 +74,16 @@ export function ScrollStory() {
               <Link href="/app?mode=demo" className={styles.primaryCta}>
                 Try Live Demo <ArrowUpRight size={16} />
               </Link>
+              <Link href="/projects/physical-git-demo/physical-history" className={styles.secondaryCta}>
+                Physical Git demo <ArrowUpRight size={16} />
+              </Link>
               {isSignedIn ? (
                 <Link href="/app" className={styles.secondaryCta}>Open your workspace</Link>
               ) : (
                 <ContinueWithGoogle className={styles.secondaryCta} />
               )}
             </div>
-            <p className={styles.fineprint}>No hardware required for demo.</p>
+            <p className={styles.fineprint}>No hardware, camera, GitHub, or Gemini key required for either demo.</p>
           </div>
         </div>
       </div>

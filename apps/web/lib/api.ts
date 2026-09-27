@@ -200,6 +200,17 @@ export const physicalGitApi = {
     requestJSON<PhysicalVerifyResult>(`/api/v1/projects/${projectID}/physical-commits/${encodeURIComponent(commitID)}/verify${observedID ? `?observed=${encodeURIComponent(observedID)}` : ""}`),
 };
 
+// PHYSICAL_GIT_DEMO_PROJECT_ID is the stable, well-known id of the seeded
+// Physical Git demo project (see apps/api/internal/demodata). These two
+// actions only ever affect that one anonymous demo project's simulated
+// current state -- the backend hard-gates on this exact id, so they can
+// never touch a real project.
+export const PHYSICAL_GIT_DEMO_PROJECT_ID = "physical-git-demo";
+export const physicalGitDemoApi = {
+  applyRestoration: () => requestJSON<{ status: string; state: string }>(`/api/v1/projects/${PHYSICAL_GIT_DEMO_PROJECT_ID}/demo/apply-restoration`, { method: "POST" }),
+  applyBreak: () => requestJSON<{ status: string; state: string }>(`/api/v1/projects/${PHYSICAL_GIT_DEMO_PROJECT_ID}/demo/apply-break`, { method: "POST" }),
+};
+
 export const testApi = {
   recommendation: () => requestJSON<TestRecommendation>("/api/v1/tests/recommendation"),
   current: () => requestJSON<DiagnosticWorkflow>("/api/v1/tests/current"),

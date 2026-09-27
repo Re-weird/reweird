@@ -19,7 +19,7 @@ import type {
   SemanticVisionComponentChange,
   VerifyCategoryResult,
 } from "@reweird/shared-types";
-import { ApiError, physicalGitApi } from "@/lib/api";
+import { ApiError, PHYSICAL_GIT_DEMO_PROJECT_ID, physicalGitApi, physicalGitDemoApi } from "@/lib/api";
 
 function errorMessage(error: unknown): string {
   return error instanceof ApiError ? error.message : "The request failed. Check the backend and try again.";
@@ -160,6 +160,25 @@ function VerifyPanel({ result, targetLabel, onCommitRestored }: { result: Physic
         <button type="button" className="primary" onClick={onCommitRestored}><GitCommitHorizontal size={16} /> Commit restored state</button>
       </div>
     </section>
+  );
+}
+
+// DemoStateControls is only ever rendered for the canonical Physical Git
+// demo project. It flips ONLY that project's simulated live state between
+// broken and working so a judge can watch the real Verify engine react --
+// the backend hard-gates both actions to this one project id, and there is
+// no equivalent action for a real project.
+function DemoStateControls() {
+  const [busy, setBusy] = useState(false);
+  async function run(action: () => Promise<unknown>) {
+    setBusy(true);
+    try { await action(); window.location.reload(); } finally { setBusy(false); }
+  }
+  return (
+    <div style={{ display: "flex", gap: 8 }}>
+      <button type="button" className="secondary" disabled={busy} onClick={() => run(physicalGitDemoApi.applyRestoration)}>{busy ? <RefreshCw className="spin" size={14} /> : <ShieldCheck size={14} />} Apply simulated restoration</button>
+      <button type="button" className="text-button" disabled={busy} onClick={() => run(physicalGitDemoApi.applyBreak)}><RefreshCw size={14} /> Reset demo</button>
+    </div>
   );
 }
 
@@ -618,11 +637,18 @@ export function PhysicalHistoryView({ project }: { project: Project | null }) {
     );
   }
 
+  const isDemoProject = project.id === PHYSICAL_GIT_DEMO_PROJECT_ID;
+
   return (
     <>
       <section className="page-heading">
-        <div><p className="kicker">Physical Git · Commit</p><h1>Physical History</h1><p>Capture what ReWeird currently knows about this project&apos;s hardware &mdash; the Circuit Map, the latest measurement, and an optional photo &mdash; as a point-in-time commit.</p></div>
+        <div>
+          <p className="kicker">Physical Git · Commit</p>
+          <h1>Physical History{isDemoProject && <span className="confirmed" style={{ marginLeft: 10, background: "var(--amber-soft, rgba(230,160,40,.18))", color: "var(--amber)" }}>DEMO MODE · SIMULATED</span>}</h1>
+          <p>{isDemoProject ? "Simulated evidence, real Physical Git behavior. No ESP32, camera, GitHub, or Gemini call is required to see this history." : "Capture what ReWeird currently knows about this project's hardware — the Circuit Map, the latest measurement, and an optional photo — as a point-in-time commit."}</p>
+        </div>
         <div className="heading-actions">
+          {isDemoProject && <DemoStateControls />}
           <button className="primary" onClick={() => setModalOpen(true)}><GitCommitHorizontal size={16} /> Commit Physical State</button>
         </div>
       </section>

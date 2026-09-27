@@ -128,6 +128,10 @@ type Project struct {
 	LogicVoltage float64       `json:"logic_voltage"`
 	Image        *ProjectMedia `json:"image,omitempty"`
 	Code         *ProjectCode  `json:"code,omitempty"`
+	// CameraConfig is this project's optional vision camera source (an MJPEG
+	// stream). Nil means no camera is configured; Physical Commit creation
+	// then behaves exactly as it did before this feature existed.
+	CameraConfig *CameraConfig `json:"camera_config,omitempty"`
 	// Repository is the linked GitHub repo; its default branch supplies Code.
 	Repository     *LinkedRepository `json:"repository,omitempty"`
 	Analysis       *ProjectAnalysis  `json:"analysis,omitempty"`
@@ -527,6 +531,10 @@ type Repository interface {
 	// SetProjectVisibility changes only visibility; it is not a content
 	// update, so it leaves updated_at alone.
 	SetProjectVisibility(id string, visibility ProjectVisibility) error
+	// SetProjectCameraConfig changes only the vision camera configuration,
+	// the same non-content-update convention as SetProjectVisibility. A nil
+	// config clears it.
+	SetProjectCameraConfig(id string, config *CameraConfig) error
 	GetProject(id string) (*Project, error)
 	ListProjects() ([]Project, error)
 }

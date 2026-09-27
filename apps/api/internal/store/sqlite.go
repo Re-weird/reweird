@@ -548,6 +548,36 @@ func (store *SQLiteStore) SetProjectVisibility(id string, visibility domain.Proj
 	return nil
 }
 
+// SetProjectCameraConfig updates only the camera_config field, the same
+// single-statement convention as SetProjectVisibility -- a read-modify-write
+// of the whole payload could otherwise be overwritten by, or overwrite, a
+// concurrent SaveProject. A nil config removes the field entirely rather
+// than storing a JSON null, so GetProject's omitempty round-trips cleanly.
+func (store *SQLiteStore) SetProjectCameraConfig(id string, config *domain.CameraConfig) error {
+	var result sql.Result
+	var err error
+	if config == nil {
+		result, err = store.db.Exec("UPDATE projects SET payload = json_remove(payload, '$.camera_config') WHERE id = ?", id)
+	} else {
+		payload, marshalErr := json.Marshal(config)
+		if marshalErr != nil {
+			return marshalErr
+		}
+		result, err = store.db.Exec("UPDATE projects SET payload = json_set(payload, '$.camera_config', json(?)) WHERE id = ?", string(payload), id)
+	}
+	if err != nil {
+		return err
+	}
+	affected, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if affected == 0 {
+		return sql.ErrNoRows
+	}
+	return nil
+}
+
 func (store *SQLiteStore) GetProject(id string) (*domain.Project, error) {
 	var payload string
 	err := store.db.QueryRow("SELECT payload FROM projects WHERE id = ?", id).Scan(&payload)

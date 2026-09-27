@@ -8,28 +8,29 @@ Evidence-first diagnostics for physical electronics projects.
 
 ## Judges: open the interactive demo
 
-No sign-in, API keys, installation, backend, or hardware needed. The public app
-opens straight into our interactive simulation. All readings are explicitly
-simulated in your browser; no data is sent to a server.
+No sign-in, API keys, installation, backend, or hardware needed.
+The original landing page gives judges two choices:
 
-1. **Take a case.** Choose a mystery or practice a known fault.
-2. **Investigate.** Inspect P1 (power), P2 (trigger), and P3 (echo). Run a test
-   and follow the evidence. Hints are available.
-3. **Name the cause.** A wrong answer lets you try again.
-4. **Fix and verify.** Try a repair. ReWeird only declares the circuit fixed
-   when all four checks pass.
-5. **Download the record.** Save the simulated Device Passport as JSON, or try
-   another case.
+- **[Project demo](https://re-weird.github.io/reweird/software/)**: the actual
+  ReWeird workbench and project views, using simulated values. Explore the
+  circuit map, signal monitor, diagnosis, guided tests, VERIFY, Device Passport,
+  history, and downloadable reports. Choose a fault and load new readings from
+  the input selector. All state stays in the browser session.
+- **[Try it yourself](https://re-weird.github.io/reweird/try/)**: the separate
+  interactive circuit game. Find a fault, choose tests and repairs, and score
+  your investigation.
 
-For a quick walkthrough: choose **Or practice a known fault**, pick the loose
-ECHO connection, inspect P3, run the wiggle test, identify the loose connection,
-and reseat the connector. Wrong tests and repairs also work: they leave the
-circuit unresolved until you find the right fix.
+The project demo reuses the actual app's Workbench, Project Overview, Circuit
+Map, Probe Setup, Diagnosis, Simulator, and Guided Test components. Its browser
+adapter supplies deterministic sample values instead of a hardware/API
+connection. It does not call a live LLM or claim physical measurements.
+The workflow is **Detect → Diagnose → Test → Verify**.
 
-The simulation covers four faults: a loose ECHO connection, unstable power,
-a disconnected ECHO signal, and incorrect trigger timing. It demonstrates
-**Detect → Diagnose → Test → Verify** using deterministic simulated evidence.
-It does not claim to run live hardware measurements or an LLM in the browser.
+For a quick walkthrough, open **Project demo**, select **Loose connection**,
+click **Load simulated values**, and choose **Run guided diagnosis**. Capture
+the before and during windows, then **Simulate correction & VERIFY**. The
+workbench and reports reflect the updated values. Try another fault or download
+the report from the Reports tab.
 
 ## Run locally
 
@@ -40,8 +41,8 @@ npm ci
 npm run dev
 ```
 
-Open [localhost:3000](http://localhost:3000). The root page, `/demo`, and `/try`
-all open the simulation. There is no environment-file setup.
+Open [localhost:3000](http://localhost:3000). The root page shows the original landing design, `/demo` shows both choices,
+`/software` opens the project demo, and `/try` opens the game. There is no environment-file setup.
 
 For a production build:
 

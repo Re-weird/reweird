@@ -1,11 +1,33 @@
 package httpapi
 
 import (
+	"context"
+	"errors"
 	"net/http"
+	"path/filepath"
 	"testing"
 
 	"github.com/gofiber/fiber/v2"
+	"github.com/re-weird/reweird/apps/api/internal/diagnostics"
+	"github.com/re-weird/reweird/apps/api/internal/domain"
+	"github.com/re-weird/reweird/apps/api/internal/profiles"
+	"github.com/re-weird/reweird/apps/api/internal/signalanalysis"
+	"github.com/re-weird/reweird/apps/api/internal/simulator"
+	"github.com/re-weird/reweird/apps/api/internal/store"
 )
+
+// failingTelemetrySink always errors, so tests can prove a Tiger Data
+// failure never breaks the request that triggered it -- SQLite has already
+// durably saved the measurement by the time Insert is attempted.
+type failingTelemetrySink struct{}
+
+func (failingTelemetrySink) Insert(context.Context, domain.MeasurementWindow) error {
+	return errors.New("simulated tiger data outage")
+}
+
+func (failingTelemetrySink) Query(context.Context, domain.TelemetryQuery) ([]domain.TelemetryRecord, error) {
+	return nil, errors.New("simulated tiger data outage")
+}
 
 func TestTelemetryUnavailableWhenTigerNotConfigured(t *testing.T) {
 	// testOwnedApp (ownership_test.go) wires ProjectServices{} -- no
@@ -50,6 +72,36 @@ func TestTelemetryDualWriteAlongsideSQLiteMeasurements(t *testing.T) {
 	decodeBody(t, telemetryResponse, &records)
 	if len(records) == 0 {
 		t.Fatalf("expected Tiger Data to also have received the dual-written measurement")
+	}
+}
+
+// TestTelemetryInsertFailureDoesNotBreakTheRequest proves the documented
+// dual-write failure semantics: a Tiger Data write error is logged, never
+// surfaced to the caller, and never treated as though the measurement
+// itself was lost -- SQLite's own SaveMeasurement already succeeded first.
+func TestTelemetryInsertFailureDoesNotBreakTheRequest(t *testing.T) {
+	root := t.TempDir()
+	repository, err := store.Open(filepath.Join(root, "test.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = repository.Close() })
+	demo := profiles.UltrasonicDemo()
+	if err := repository.SaveProfile(demo); err != nil {
+		t.Fatal(err)
+	}
+	app := newApp(diagnostics.NewEngine(signalanalysis.New()), repository, simulator.NewUltrasonicSource(), demo.ID,
+		ProjectServices{Telemetry: failingTelemetrySink{}}, func(ctx *fiber.Ctx) error { return ctx.Next() })
+
+	response := doJSON(t, app, http.MethodGet, "/api/v1/session", nil)
+	if response.StatusCode != http.StatusOK {
+		t.Fatalf("GET /session with a failing Tiger sink status = %d body=%s", response.StatusCode, readBody(t, response))
+	}
+	measurementsResponse := doJSON(t, app, http.MethodGet, "/api/v1/measurements?limit=10", nil)
+	var windows []map[string]any
+	decodeBody(t, measurementsResponse, &windows)
+	if len(windows) == 0 {
+		t.Fatalf("expected SQLite to still have saved the measurement despite the Tiger Data failure")
 	}
 }
 

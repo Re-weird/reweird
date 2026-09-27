@@ -123,6 +123,9 @@ func newApp(engine *diagnostics.Engine, repository domain.Repository, source dom
 	api.Put("/projects/:id/visibility", controller.updateProjectVisibility)
 	api.Get("/projects/:id/probe-plan", controller.getProbePlan)
 	api.Post("/projects/:id/probe-plan/confirm", controller.confirmProbePlan)
+	api.Post("/projects/:id/physical-commits", controller.createPhysicalCommit)
+	api.Get("/projects/:id/physical-commits", controller.listPhysicalCommits)
+	api.Get("/projects/:id/physical-commits/:commitId", controller.getPhysicalCommit)
 	api.Get("/profiles/:id/passport", controller.devicePassport)
 	api.Post("/profiles/:id/known-good", controller.saveKnownGood)
 

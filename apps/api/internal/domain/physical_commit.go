@@ -26,8 +26,10 @@ type PhysicalCommit struct {
 	ProfileSnapshot *ProjectProfile `json:"profile_snapshot,omitempty"`
 
 	// PassportBaselineIDs reference the KnownGoodBaseline rows (already
-	// immutable) that were the active physical/simulated baseline at commit
-	// time. Not copied, since those rows never change once saved.
+	// immutable) that were the active baseline at commit time. Only the
+	// physical baseline is ever auto-attached here -- a simulated baseline
+	// belongs to the synthetic/game-demo workflow, never to real Physical
+	// Git history. Not copied, since these rows never change once saved.
 	PassportBaselineIDs []int64 `json:"passport_baseline_ids,omitempty"`
 
 	// MeasurementID references the most recent valid MeasurementWindow for

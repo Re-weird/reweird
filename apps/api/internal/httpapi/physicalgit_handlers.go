@@ -84,11 +84,11 @@ func (controller *Controller) createPhysicalCommit(ctx *fiber.Ctx) error {
 	commit.ProfileSnapshot = profile
 
 	if passportRepository, measurementsRepository, err := controller.passportStorage(ctx); err == nil {
+		// Only the physical baseline is auto-attached. A simulated baseline
+		// belongs to the synthetic/game-demo workflow, never to a real
+		// Physical Commit's history.
 		if physical, err := passportRepository.LatestKnownGoodOfSource(project.ID, domain.BaselinePhysical); err == nil && physical != nil {
 			commit.PassportBaselineIDs = append(commit.PassportBaselineIDs, physical.ID)
-		}
-		if simulated, err := passportRepository.LatestKnownGoodOfSource(project.ID, domain.BaselineSimulated); err == nil && simulated != nil {
-			commit.PassportBaselineIDs = append(commit.PassportBaselineIDs, simulated.ID)
 		}
 		if latest, err := measurementsRepository.ListMeasurements(project.ID, 1); err == nil && len(latest) > 0 {
 			commit.MeasurementID = &latest[0].ID

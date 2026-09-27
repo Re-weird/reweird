@@ -39,15 +39,23 @@ type Controller struct {
 	// clearly (productUnavailable) rather than panic or silently no-op.
 	product domain.ProductRepository
 	catalog []componentcatalog.Entry
+	// telemetry is nil when this deployment has no Tiger Data configured.
+	// Unlike product, no handler needs to reject a nil telemetry sink with
+	// an error: dual-write in analyzeAt already no-ops when nil, and the
+	// telemetry query handler reports a clear, honest empty/unavailable
+	// response instead.
+	telemetry domain.TelemetrySink
 }
 
 type ProjectServices struct {
 	Understanding *projectunderstanding.Service
 	UploadRoot    string
-	// Product and Catalog are optional: nil/empty when MongoDB is not
-	// configured for this deployment. See Controller.product's comment.
-	Product domain.ProductRepository
-	Catalog []componentcatalog.Entry
+	// Product, Catalog, and Telemetry are optional: nil/empty when MongoDB/
+	// Tiger Data are not configured for this deployment. See the matching
+	// Controller fields' comments.
+	Product   domain.ProductRepository
+	Catalog   []componentcatalog.Entry
+	Telemetry domain.TelemetrySink
 }
 
 func NewApp(engine *diagnostics.Engine, repository domain.Repository, source domain.TelemetrySource, profileID string, projectServices ProjectServices, authConfigured bool) *fiber.App {
@@ -82,6 +90,7 @@ func newApp(engine *diagnostics.Engine, repository domain.Repository, source dom
 		uploadRoot:    projectServices.UploadRoot,
 		product:       projectServices.Product,
 		catalog:       projectServices.Catalog,
+		telemetry:     projectServices.Telemetry,
 	}
 	if scenario, ok := source.(domain.ScenarioTelemetrySource); ok {
 		scenario.SetStage(domain.StageDiagnose)
@@ -98,6 +107,7 @@ func newApp(engine *diagnostics.Engine, repository domain.Repository, source dom
 	api.Get("/report", controller.report)
 	api.Get("/telemetry/status", controller.telemetryStatus)
 	api.Get("/measurements", controller.listMeasurements)
+	api.Get("/telemetry", controller.queryTelemetry)
 	api.Get("/computer/status", controller.computerStatus)
 	api.Get("/computer/scenarios", controller.computerScenarios)
 	api.Post("/computer/simulate", controller.computerSimulate)
@@ -285,14 +295,26 @@ func (controller *Controller) analyzeAt(ctx context.Context, stage domain.Stage,
 		session.ScenarioID = scenario.CurrentScenario()
 	}
 	if measurements, ok := controller.repository.(domain.MeasurementRepository); ok {
-		stored, err := measurements.SaveMeasurement(domain.MeasurementWindow{
+		window := domain.MeasurementWindow{
 			ProfileID: envelope.ProfileID, Source: controller.source.Name(), DeviceID: envelope.DeviceID,
 			Sequence: envelope.Sequence, CapturedAtMS: envelope.CapturedAtMS, Raw: envelope, Analysis: session.Analysis,
-		})
+		}
+		stored, err := measurements.SaveMeasurement(window)
 		if err != nil {
 			return domain.Session{}, err
 		}
 		session.MeasurementID = stored.ID
+		// Tiger Data telemetry is always a best-effort dual-write alongside
+		// SQLite, which has already durably saved this measurement above.
+		// A Tiger failure (unconfigured, unreachable, or a write error) is
+		// logged and never propagated -- it must never be able to fail or
+		// slow down the core diagnostic loop, and a measurement is never
+		// reported lost because SQLite already has it.
+		if controller.telemetry != nil {
+			if err := controller.telemetry.Insert(ctx, window); err != nil {
+				log.Printf("tiger telemetry insert failed (measurement already saved to sqlite): %v", err)
+			}
+		}
 	}
 	return session, nil
 }

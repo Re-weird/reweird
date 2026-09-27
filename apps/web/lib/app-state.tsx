@@ -42,6 +42,8 @@ interface AppState {
   completeProjectAnalysis: (result: AnalyzeProjectResponse) => void;
   loadDemoProject: () => Promise<void>;
   saveProfile: (nextProfile: ProjectProfile) => Promise<ProjectProfile>;
+  /** Re-reads the linked GitHub repo's default branch; throws with the reason when it can't be analyzed. */
+  syncRepository: () => Promise<void>;
   confirmProfile: (nextProfile: ProjectProfile) => Promise<void>;
   confirmConnections: () => Promise<void>;
 }
@@ -288,6 +290,28 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
     return stored;
   }, [project]);
 
+  const syncRepository = useCallback(async () => {
+    if (!project) return;
+    const projectID = project.id;
+    try {
+      const result = await projectApi.syncRepository(projectID);
+      if (requestedProjectRef.current !== projectID) return;
+      setProject(result.project);
+      if (result.profile) {
+        setProfile(result.profile);
+        setProbePlan(null);
+        setToast(`Analyzed ${result.project.repository?.last_commit?.sha.slice(0, 7) ?? "the latest commit"}`);
+      } else {
+        setToast("Already up to date with the default branch");
+      }
+    } catch (cause) {
+      // The failed sync is recorded on the project; reload it so the page shows why.
+      const fresh = await projectApi.getProject(projectID).catch(() => null);
+      if (fresh && requestedProjectRef.current === projectID) setProject(fresh);
+      throw cause;
+    }
+  }, [project]);
+
   const confirmProfile = useCallback(async (nextProfile: ProjectProfile) => {
     if (!project) return;
     const stored = await projectApi.saveProfileCorrections(project.id, nextProfile);
@@ -313,7 +337,7 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
     session, source, busy, toast, project, profile, probePlan, scenarios, selectedScenario, setSelectedScenario, mysteryPending, revealMystery: () => setMysteryPending(false),
     recommendation, workflow: scopedWorkflow, testError, legacyVerify, showNewProject, setShowNewProject, currentProjectID, historyProjectID, sessionReady,
     runTestAction, runOriginalDemo, recordUserAction, runScenario, loadProject, completeProjectAnalysis,
-    loadDemoProject, saveProfile, confirmProfile, confirmConnections,
+    loadDemoProject, saveProfile, syncRepository, confirmProfile, confirmConnections,
   };
 
   return <AppStateContext.Provider value={value}>{children}</AppStateContext.Provider>;

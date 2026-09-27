@@ -13,7 +13,7 @@ import { historyApi } from "@/lib/api";
 import type { ProjectTabID } from "@/lib/project-routes";
 import { cn } from "@/lib/utils";
 import { realBreakReady, telemetryLabel } from "@/lib/weird-demo";
-import { MakeItWeird } from "./make-it-weird";
+import { JudgeCircuit } from "./judge-circuit";
 
 type Props = {
   session: DemoSession;
@@ -278,7 +278,7 @@ function SignalMonitor({ session, live, plan, failures, currentStep, onNavigate 
                 <h3 className="text-sm font-semibold text-foreground">Rule checks</h3>
                 <p className="flex gap-2.5 font-mono text-[11px]">{counts.map(([status, count]) => <span key={status} className={status === "fail" ? "text-fail" : status === "warn" ? "text-warn" : "text-pass"}>{count} {status}</span>)}</p>
               </div>
-              <ul className="mt-2 divide-y divide-line-soft">{ordered.map((rule) => <RuleLine key={rule.id} rule={rule} />)}</ul>
+              <ul className="mt-2 divide-y divide-line-soft">{ordered.map((rule, index) => <RuleLine key={`${rule.probe ?? ""}-${rule.id}-${index}`} rule={rule} />)}</ul>
               <p className="mt-3 text-xs text-subtle">Deterministic checks run on raw readings before any AI interpretation.</p>
             </div>
           </div>
@@ -389,7 +389,7 @@ function RecentSessions({ projectID, onNavigate }: { projectID: string; onNaviga
   );
 }
 
-export function Workbench({ session, project, profile, source, onNavigate, historyProjectID, plan, scenarios, busy, onRunScenario, onBrowserDemo }: Props) {
+export function Workbench({ session, project, profile, source, onNavigate, historyProjectID, plan }: Props) {
   const reduce = useReducedMotion();
   // Live data belongs to this project only when the session is running its profile.
   const matchesProject = !project || (Boolean(profile) && session.profile_id === profile?.id);
@@ -400,7 +400,6 @@ export function Workbench({ session, project, profile, source, onNavigate, histo
   const failures = session.evidence.rule_results.filter((rule) => rule.status === "fail").length;
   const name = project?.name ?? profile?.project_name ?? session.project_name;
   const canBreakPhysical = realBreakReady(session, source, profile, plan);
-  const demoStep = { detect: 0, diagnose: 1, test: 2, repair: 2, verify: 3 }[session.stage];
 
   return (
     <div>
@@ -411,15 +410,7 @@ export function Workbench({ session, project, profile, source, onNavigate, histo
         </AnimatePresence>
       </motion.div>
 
-      {/* Demo tools, unchanged for now. */}
-      <div className="mt-8">
-        <MakeItWeird scenarios={scenarios} busy={busy} onRun={onRunScenario} onBrowserDemo={onBrowserDemo} />
-        <nav className="weird-journey" aria-label="Optional demo journey"><span className="bench-label">Demo journey</span>{([
-          ["Understand", "overview"], ["Map", "overview"], ["Make it weird", "simulator"], ["Detect", "workbench"],
-          ["Diagnose", "diagnosis"], ["Test", "next-test"], ["VERIFY", "verify"], ["Health", "health"],
-        ] as [string, ProjectTabID][]).map(([label, tab], index) => <button key={`${label}-${index}`} onClick={() => onNavigate(tab)} className={index === demoStep + 3 && matchesProject ? "current" : ""}>{label}</button>)}</nav>
-        {canBreakPhysical && <section className="weird-physical"><span className="bench-label">Optional serial demo · passive monitoring only</span><h2>YOUR TURN. Make the project act weird.</h2><p>Only use a pre-designated, low-voltage safe demo interaction documented for this build while ReWeird watches. Never disconnect arbitrary power, ground, or unknown connections.</p><button className="secondary" onClick={() => onNavigate("diagnosis")}>I’ve broken it · inspect evidence <ArrowUpRight size={15} /></button><small>This opens the latest evidence; it neither records nor verifies that a physical change occurred.</small></section>}
-      </div>
+      {canBreakPhysical && <div className="mt-8"><JudgeCircuit key={`${profile?.id}-${session.raw_telemetry?.device_id}`} session={session} onDiagnose={() => onNavigate("diagnosis")} onTest={() => onNavigate("next-test")} onVerify={() => onNavigate("verify")} /></div>}
 
       <motion.div data-tw initial={reduce ? false : "hidden"} animate="show" variants={{ show: { transition: { staggerChildren: 0.08, delayChildren: 0.1 } } }}
         className="mt-8 grid grid-cols-1 gap-10 lg:grid-cols-[minmax(0,1fr)_340px] lg:gap-12">

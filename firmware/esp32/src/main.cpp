@@ -8,6 +8,9 @@
 #include "patch_safety.h"
 
 #include "esp_timer.h"
+#if defined(ESP_PLATFORM)
+#include "patch_runtime.h"
+#endif
 
 #if defined(REWEIRD_HW_CAPTURE)
 #include "driver/mcpwm.h"
@@ -471,11 +474,16 @@ static void emitTelemetry(uint32_t windowMS, uint32_t windowEndUS) {
   document["profile_id"] = REWEIRD_PROFILE_ID;
   // Measurement capability never implies electrical-output capability.
   JsonObject patch = document["patch"].to<JsonObject>();
-  patch["capable"] = ReWeirdPatch::PhysicalInterfaceVerified;
+  patch["capable"] = false; // stock/host builds have no qualified output stage
   patch["state"] = "LOCKED";
   patch["reason"] = "NO_VERIFIED_DEDICATED_OUTPUT_STAGE";
   patch["boot_id"] = static_cast<uint32_t>(sequenceNumber >> 32);
   patch["max_duration_ms"] = 0; // no physical commands are supported
+#if defined(ESP_PLATFORM)
+  patch["capable"] = PatchRuntime::provisioned && PatchRuntime::timerReady && PatchRuntime::pins.interlock() && strcmp(REWEIRD_PROFILE_ID, PatchProvision::ProfileID)==0;
+  patch["state"] = patch["capable"].as<bool>() ? PatchRuntime::stateLabel() : "LOCKED";
+  if (patch["capable"].as<bool>()) { patch["max_duration_ms"] = ReWeirdPatch::MaxDurationMS; patch["reason"] = "QUALIFIED_INTERFACE_REQUIRES_HUMAN_APPROVAL"; }
+#endif
   document["captured_at_ms"] = 0;  // No trusted wall clock on the device.
   document["uptime_ms"] = millis();
   document["window_ms"] = windowMS;
@@ -569,6 +577,9 @@ void setup() {
   snprintf(deviceID, sizeof(deviceID), "reweird-%04X%08X",
            static_cast<uint16_t>(chipID >> 32), static_cast<uint32_t>(chipID));
   sequenceNumber = firstSequenceForThisBoot();
+#if defined(ESP_PLATFORM)
+  PatchRuntime::begin(deviceID, REWEIRD_PROFILE_ID, static_cast<uint32_t>(sequenceNumber >> 32));
+#endif
 #if defined(REWEIRD_HAS_OLED)
   startDisplay();
 #endif
@@ -612,6 +623,9 @@ void setup() {
 }
 
 void loop() {
+#if defined(ESP_PLATFORM)
+  PatchRuntime::tick();
+#endif
   const uint32_t nowMS = millis();
   if (static_cast<int32_t>(nowMS - nextAnalogSampleMS) >= 0) {
     sampleAnalogInputs();

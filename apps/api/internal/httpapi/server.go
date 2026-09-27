@@ -15,6 +15,7 @@ import (
 	"github.com/gofiber/fiber/v2/middleware/logger"
 	"github.com/re-weird/reweird/apps/api/internal/diagnostics"
 	"github.com/re-weird/reweird/apps/api/internal/domain"
+	"github.com/re-weird/reweird/apps/api/internal/githubapp"
 	"github.com/re-weird/reweird/apps/api/internal/passport"
 	"github.com/re-weird/reweird/apps/api/internal/profiles"
 	"github.com/re-weird/reweird/apps/api/internal/projectunderstanding"
@@ -26,6 +27,7 @@ type Controller struct {
 	mu            sync.RWMutex
 	testMu        sync.Mutex
 	profileMu     sync.Mutex
+	syncMu        sync.Mutex
 	stage         domain.Stage
 	reference     *domain.AnalysisResult
 	engine        *diagnostics.Engine
@@ -34,6 +36,7 @@ type Controller struct {
 	profileID     string
 	understanding *projectunderstanding.Service
 	uploadRoot    string
+	github        *githubapp.Client
 	// product is nil when this deployment has no MongoDB configured;
 	// every equipment/me/product-data handler must check for nil and fail
 	// clearly (productUnavailable) rather than panic or silently no-op.
@@ -44,6 +47,10 @@ type Controller struct {
 type ProjectServices struct {
 	Understanding *projectunderstanding.Service
 	UploadRoot    string
+	// GitHub is nil when no GitHub App is configured.
+	GitHub *githubapp.Client
+	// PollInterval re-checks linked repos for new commits; 0 disables it.
+	PollInterval time.Duration
 	// Product and Catalog are optional: nil/empty when MongoDB is not
 	// configured for this deployment. See Controller.product's comment.
 	Product domain.ProductRepository
@@ -80,8 +87,12 @@ func newApp(engine *diagnostics.Engine, repository domain.Repository, source dom
 		profileID:     profileID,
 		understanding: projectServices.Understanding,
 		uploadRoot:    projectServices.UploadRoot,
+		github:        projectServices.GitHub,
 		product:       projectServices.Product,
 		catalog:       projectServices.Catalog,
+	}
+	if projectServices.GitHub != nil && projectServices.PollInterval > 0 {
+		go controller.PollRepositories(context.Background(), projectServices.PollInterval)
 	}
 	if scenario, ok := source.(domain.ScenarioTelemetrySource); ok {
 		scenario.SetStage(domain.StageDiagnose)
@@ -90,6 +101,9 @@ func newApp(engine *diagnostics.Engine, repository domain.Repository, source dom
 	app.Get("/health", func(ctx *fiber.Ctx) error {
 		return controller.systemStatus(ctx)
 	})
+	// Outside /api/v1: GitHub can't present the API bearer token, so the
+	// webhook's HMAC signature is its only credential.
+	app.Post("/webhooks/github", controller.githubWebhook)
 
 	api := app.Group("/api/v1", apiAccessControl(os.Getenv("REWEIRD_API_TOKEN")))
 	api.Get("/ws/telemetry", telemetryWebSocketUpgrade, controller.telemetryWebSocket())
@@ -133,6 +147,11 @@ func newApp(engine *diagnostics.Engine, repository domain.Repository, source dom
 	api.Put("/projects/:id/profile", controller.updateProjectProfile)
 	api.Post("/projects/:id/profile/confirm", controller.confirmProjectProfile)
 	api.Put("/projects/:id/visibility", controller.updateProjectVisibility)
+	api.Post("/projects/:id/sync", controller.syncProjectRepository)
+	api.Get("/github/status", controller.githubStatus)
+	api.Post("/github/connect", controller.githubConnect)
+	api.Post("/github/disconnect", controller.githubDisconnect)
+	api.Get("/github/repos", controller.githubRepositories)
 	api.Get("/projects/:id/probe-plan", controller.getProbePlan)
 	api.Post("/projects/:id/probe-plan/confirm", controller.confirmProbePlan)
 	api.Get("/profiles/:id/passport", controller.devicePassport)

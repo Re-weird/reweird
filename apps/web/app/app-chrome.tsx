@@ -1,8 +1,9 @@
 "use client";
 
-import { usePathname, useParams } from "next/navigation";
+import { usePathname, useParams, useRouter } from "next/navigation";
 import { CheckCircle2 } from "lucide-react";
 import { useAppState } from "@/lib/app-state";
+import { projectPath } from "@/lib/project-routes";
 import { NewProjectModal } from "./project-workflow";
 import { ProfileRail } from "./profile-rail";
 import { SectionNav } from "./section-nav";
@@ -14,6 +15,7 @@ import { SectionNav } from "./section-nav";
 // reset must not reach them.
 export function AppChrome({ children }: { children: React.ReactNode }) {
   const { showNewProject, setShowNewProject, completeProjectAnalysis, loadDemoProject, toast } = useAppState();
+  const router = useRouter();
   // Inside a project the page takes the full width: no profile rail.
   const inProject = Boolean(useParams<{ id?: string }>()?.id);
   // The public landing page and the legacy single-page workbench render
@@ -31,7 +33,7 @@ export function AppChrome({ children }: { children: React.ReactNode }) {
           </div>
         </div>
       </div>
-      {showNewProject && <NewProjectModal onClose={() => setShowNewProject(false)} onComplete={completeProjectAnalysis} onLoadDemo={loadDemoProject} />}
+      {showNewProject && <NewProjectModal onClose={() => setShowNewProject(false)} onComplete={completeProjectAnalysis} onLoadDemo={loadDemoProject} onOpenProject={(id) => { setShowNewProject(false); router.push(projectPath(id, "overview")); }} />}
       {toast && <div className="toast" role="status"><CheckCircle2 size={18} />{toast}</div>}
     </main>
   );

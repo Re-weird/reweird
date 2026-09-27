@@ -37,12 +37,22 @@ func (store *SQLiteStore) MeasurementWindowCount() (int, error) {
 }
 
 func Open(path string) (*SQLiteStore, error) {
-	database, err := sql.Open("sqlite", path)
+	// Without a busy timeout, a write that overlaps a read on another pooled
+	// connection fails at once with SQLITE_BUSY; wait up to 5s instead.
+	separator := "?"
+	if strings.Contains(path, "?") {
+		separator = "&"
+	}
+	database, err := sql.Open("sqlite", path+separator+"_pragma=busy_timeout(5000)")
 	if err != nil {
 		return nil, err
 	}
 	store := &SQLiteStore{db: database}
 	if err := store.migrate(); err != nil {
+		_ = database.Close()
+		return nil, err
+	}
+	if err := store.migrateGitHub(); err != nil {
 		_ = database.Close()
 		return nil, err
 	}

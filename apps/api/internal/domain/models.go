@@ -117,21 +117,23 @@ const (
 )
 
 type Project struct {
-	ID             string           `json:"id"`
+	ID string `json:"id"`
 	// OwnerID is the verified Google account id that created this project,
 	// or empty for anonymous/Demo Mode projects. Never trust a client-supplied
 	// value for this — it is only ever set server-side from a verified token.
-	OwnerID        string           `json:"owner_id,omitempty"`
-	Name           string           `json:"name"`
-	Description    string           `json:"description,omitempty"`
-	Controller     string           `json:"controller"`
-	LogicVoltage   float64          `json:"logic_voltage"`
-	Image          *ProjectMedia    `json:"image,omitempty"`
-	Code           *ProjectCode     `json:"code,omitempty"`
-	Analysis       *ProjectAnalysis `json:"analysis,omitempty"`
-	AnalysisStatus AnalysisStatus   `json:"analysis_status"`
-	AnalysisError  string           `json:"analysis_error,omitempty"`
-	ProbePlan      *ProbePlan       `json:"probe_plan,omitempty"`
+	OwnerID      string        `json:"owner_id,omitempty"`
+	Name         string        `json:"name"`
+	Description  string        `json:"description,omitempty"`
+	Controller   string        `json:"controller"`
+	LogicVoltage float64       `json:"logic_voltage"`
+	Image        *ProjectMedia `json:"image,omitempty"`
+	Code         *ProjectCode  `json:"code,omitempty"`
+	// Repository is the linked GitHub repo; its default branch supplies Code.
+	Repository     *LinkedRepository `json:"repository,omitempty"`
+	Analysis       *ProjectAnalysis  `json:"analysis,omitempty"`
+	AnalysisStatus AnalysisStatus    `json:"analysis_status"`
+	AnalysisError  string            `json:"analysis_error,omitempty"`
+	ProbePlan      *ProbePlan        `json:"probe_plan,omitempty"`
 	// Visibility is stored and displayed but not enforced yet: there is no
 	// user auth, so every project is reachable by anyone who can reach the API.
 	Visibility  ProjectVisibility `json:"visibility"`

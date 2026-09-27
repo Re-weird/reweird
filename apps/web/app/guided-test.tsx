@@ -16,7 +16,7 @@ type Props = {
   onRemeasure: () => void;
   onCancel: () => void;
   onRecordAction: (description: string) => Promise<void>;
-  onPassport?: () => void;
+  onHealth?: () => void;
 };
 
 function value(value: unknown) {
@@ -25,7 +25,7 @@ function value(value: unknown) {
   return value == null ? "—" : String(value);
 }
 
-export function GuidedTestView({ workflow, recommendation, busy, error, onPlan, onStart, onCapture, onRemeasure, onCancel, onRecordAction, onPassport }: Props) {
+export function GuidedTestView({ workflow, recommendation, busy, error, onPlan, onStart, onCapture, onRemeasure, onCancel, onRecordAction, onHealth }: Props) {
   const [actionNote, setActionNote] = useState("");
   const plan = workflow?.plan;
   const status = workflow?.status;
@@ -51,7 +51,7 @@ export function GuidedTestView({ workflow, recommendation, busy, error, onPlan, 
       </section>
       {(status === "WAITING_FOR_USER" || status === "COMPLETED" || status === "UNRESOLVED") && <section className="panel guided-panel"><span className="eyebrow">User-reported action</span><h2>Record what you did</h2><p>This is your report, not sensor-verified execution. Do not include credentials.</p><div className="guided-action-note"><input value={actionNote} maxLength={500} onChange={(event) => setActionNote(event.target.value)} placeholder="e.g. Reseated the connector before re-measurement" aria-label="User action note" /><button className="secondary" disabled={busy || !actionNote.trim()} onClick={async () => { await onRecordAction(actionNote.trim()); setActionNote(""); }}>Save action</button></div>{workflow.user_actions?.map((action) => <p key={action.id}>User reported action · {action.description}</p>)}</section>}
       {result && <section className="panel guided-panel"><span className="eyebrow">Test result · {result.test_type.replaceAll("_", " ")}</span><h2>{result.result.replaceAll("_", " ")}</h2><p>{result.interpretation}</p><div className="guided-observations">{result.observations.map((observation, index) => <div key={`${observation.probe}-${observation.metric}-${index}`}><strong>{observation.probe} {observation.metric.replaceAll("_", " ")}</strong><span>{value(observation.value)} {observation.unit}</span><small>{observation.provenance}</small></div>)}</div><small>Evidence: {result.evidence_provenance.join(" · ")} · Confidence {Math.round(result.confidence * 100)}%</small></section>}
-      {verification && <section className="panel guided-panel"><span className="eyebrow">Generic VERIFY · windows #{verification.before_window_id} → #{verification.after_window_id}</span><h2><CheckCircle2 size={19} /> {verification.status}</h2><p>{verification.summary}</p><div className="guided-observations">{verification.changes.map((change, index) => <div key={`${change.probe}-${change.metric}-${index}`}><strong>{change.probe} {change.metric.replaceAll("_", " ")}</strong><span>{value(change.before)} → {value(change.after)} {change.unit}</span></div>)}</div>{verification.remaining_issues.length > 0 && <><h3>Remaining issues</h3><ul>{verification.remaining_issues.map((issue) => <li key={issue}>{issue}</li>)}</ul></>}{verifyHeadline(workflow) === "NOT WEIRD ANYMORE." && onPassport && <button className="primary" onClick={onPassport}>View Device Passport</button>}</section>}
+      {verification && <section className="panel guided-panel"><span className="eyebrow">Generic VERIFY · windows #{verification.before_window_id} → #{verification.after_window_id}</span><h2><CheckCircle2 size={19} /> {verification.status}</h2><p>{verification.summary}</p><div className="guided-observations">{verification.changes.map((change, index) => <div key={`${change.probe}-${change.metric}-${index}`}><strong>{change.probe} {change.metric.replaceAll("_", " ")}</strong><span>{value(change.before)} → {value(change.after)} {change.unit}</span></div>)}</div>{verification.remaining_issues.length > 0 && <><h3>Remaining issues</h3><ul>{verification.remaining_issues.map((issue) => <li key={issue}>{issue}</li>)}</ul></>}{verifyHeadline(workflow) === "NOT WEIRD ANYMORE." && onHealth && <button className="primary" onClick={onHealth}>View device health</button>}</section>}
       <section className="security-note"><ShieldCheck size={20} /><div><strong>PATCH remains locked</strong><span>This workflow only reads passive probe measurements. A recommendation requiring active output is shown as unavailable.</span></div></section>
     </>}
   </>;

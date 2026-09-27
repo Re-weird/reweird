@@ -1,5 +1,8 @@
 import type {
   AnalyzeProjectResponse,
+  CameraConfig,
+  CameraTestFrame,
+  CameraTestResult,
   ConfirmProfileResponse,
   DemoSession,
   DiagnosticWorkflow,
@@ -17,6 +20,8 @@ import type {
   PhysicalCommitDetail,
   PhysicalCommitDiff,
   PhysicalCommitVisionAnalysis,
+  PhysicalRestorePlan,
+  PhysicalVerifyResult,
   ProbePlan,
   Project,
   ProjectProfile,
@@ -185,6 +190,20 @@ export const projectApi = {
     requestJSON<ProjectProfile>(`/api/v1/projects/${projectID}/profile/revise`, { method: "POST" }),
 };
 
+// A camera source can be tested/captured either from the project's already
+// saved config (no override) or from a not-yet-saved URL the user just
+// typed, so every call here takes an optional override.
+export const cameraApi = {
+  saveConfig: (projectID: string, config: CameraConfig) =>
+    requestJSON<Project>(`/api/v1/projects/${projectID}/camera-config`, { method: "PUT", body: JSON.stringify(config) }),
+  clearConfig: (projectID: string) =>
+    requestJSON<Project>(`/api/v1/projects/${projectID}/camera-config`, { method: "DELETE" }),
+  test: (projectID: string, override?: Partial<CameraConfig>) =>
+    requestJSON<CameraTestResult>(`/api/v1/projects/${projectID}/camera/test`, { method: "POST", body: JSON.stringify(override ?? {}) }, 12_000),
+  captureTestFrame: (projectID: string, override?: Partial<CameraConfig>) =>
+    requestJSON<CameraTestFrame>(`/api/v1/projects/${projectID}/camera/capture-test-frame`, { method: "POST", body: JSON.stringify(override ?? {}) }, 12_000),
+};
+
 export const githubApi = {
   status: () => requestJSON<GitHubStatus>("/api/v1/github/status"),
   connect: (input: { installation_id: number; code: string; state: string }) =>
@@ -224,6 +243,21 @@ export const physicalGitApi = {
       throw error;
     }
   },
+  restore: (projectID: string, commitID: string, sourceID?: string) =>
+    requestJSON<PhysicalRestorePlan>(`/api/v1/projects/${projectID}/physical-commits/${encodeURIComponent(commitID)}/restore${sourceID ? `?source=${encodeURIComponent(sourceID)}` : ""}`),
+  verify: (projectID: string, commitID: string, observedID?: string) =>
+    requestJSON<PhysicalVerifyResult>(`/api/v1/projects/${projectID}/physical-commits/${encodeURIComponent(commitID)}/verify${observedID ? `?observed=${encodeURIComponent(observedID)}` : ""}`),
+};
+
+// PHYSICAL_GIT_DEMO_PROJECT_ID is the stable, well-known id of the seeded
+// Physical Git demo project (see apps/api/internal/demodata). These two
+// actions only ever affect that one anonymous demo project's simulated
+// current state -- the backend hard-gates on this exact id, so they can
+// never touch a real project.
+export const PHYSICAL_GIT_DEMO_PROJECT_ID = "physical-git-demo";
+export const physicalGitDemoApi = {
+  applyRestoration: () => requestJSON<{ status: string; state: string }>(`/api/v1/projects/${PHYSICAL_GIT_DEMO_PROJECT_ID}/demo/apply-restoration`, { method: "POST" }),
+  applyBreak: () => requestJSON<{ status: string; state: string }>(`/api/v1/projects/${PHYSICAL_GIT_DEMO_PROJECT_ID}/demo/apply-break`, { method: "POST" }),
 };
 
 export const testApi = {

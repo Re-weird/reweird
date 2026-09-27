@@ -169,6 +169,10 @@ func newApp(engine *diagnostics.Engine, repository domain.Repository, source dom
 	api.Post("/projects/:id/profile/confirm", controller.confirmProjectProfile)
 	api.Post("/projects/:id/profile/revise", controller.reviseProjectProfile)
 	api.Put("/projects/:id/visibility", controller.updateProjectVisibility)
+	api.Put("/projects/:id/camera-config", controller.saveCameraConfig)
+	api.Delete("/projects/:id/camera-config", controller.clearCameraConfig)
+	api.Post("/projects/:id/camera/test", controller.testCameraConnection)
+	api.Post("/projects/:id/camera/capture-test-frame", controller.captureCameraTestFrame)
 	api.Post("/projects/:id/sync", controller.syncProjectRepository)
 	api.Get("/github/status", controller.githubStatus)
 	api.Post("/github/connect", controller.githubConnect)
@@ -187,6 +191,12 @@ func newApp(engine *diagnostics.Engine, repository domain.Repository, source dom
 	api.Get("/projects/:id/physical-commits/:commitId/detail", controller.getPhysicalCommitDetail)
 	api.Post("/projects/:id/physical-commits/:commitId/analyze-hardware", controller.analyzePhysicalCommitHardware)
 	api.Get("/projects/:id/physical-commits/:commitId/vision-analysis", controller.getPhysicalCommitVisionAnalysis)
+	api.Get("/projects/:id/physical-commits/:commitId/restore", controller.restorePhysicalCommit)
+	api.Get("/projects/:id/physical-commits/:commitId/verify", controller.verifyPhysicalCommitRestoration)
+	// Demo-only, hard-gated to the canonical Physical Git demo project id --
+	// see demo_physicalgit_handlers.go. No equivalent exists for real projects.
+	api.Post("/projects/:id/demo/apply-restoration", controller.applyPhysicalGitDemoRestoration)
+	api.Post("/projects/:id/demo/apply-break", controller.applyPhysicalGitDemoBreak)
 	api.Get("/profiles/:id/passport", controller.devicePassport)
 	api.Post("/profiles/:id/known-good", controller.saveKnownGood)
 	api.Get("/profiles/:id/calibration", controller.calibration)

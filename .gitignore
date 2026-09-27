@@ -15,4 +15,6 @@ __pycache__/
 *.pyc
 .pytest_cache/
 data/uploads/
+apps/api/data/
 .vercel
+

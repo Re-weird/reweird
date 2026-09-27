@@ -1,3 +1,5 @@
+## [Open the ReWeird demo →](https://re-weird.github.io/reweird/)
+
 # ReWeird
 
 ![ReWeird logo](apps/web/public/images/reweird-logo.png)
@@ -5,8 +7,6 @@
 Evidence-first diagnostics for physical electronics projects.
 
 ## Judges: open the interactive demo
-
-### [Launch ReWeird →](https://re-weird.github.io/reweird/)
 
 No sign-in, API keys, installation, backend, or hardware needed. The public app
 opens straight into our interactive simulation. All readings are explicitly

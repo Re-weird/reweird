@@ -41,9 +41,18 @@ func diagnosisTestProfile(projectID string) domain.ProjectProfile {
 // collision (see TestCreateProjectMeasurementIsIdempotentOnRetry for the
 // matching-content case, which that same guard treats as a safe retry).
 func pulseEnvelopeJSON(sequence uint64, rising uint32, activity []float64) map[string]any {
+	// periods_us/high_pulse_widths_us must both be empty when there are no
+	// edges at all -- signalanalysis's capture-consistency check correctly
+	// flags "more pulse timings than captured edges" (CaptureUnreliable) if
+	// pulse-width samples are present with zero rising/falling edges, and a
+	// CaptureUnreliable reading takes diagnostic priority over a plain
+	// missing-signal reading (see internal/diagnostics/engine.go's
+	// "capture-unreliable" rule).
 	periods := []float64{}
+	widths := []float64{}
 	if rising > 0 {
 		periods = []float64{100_000, 100_000, 100_000}
+		widths = []float64{50_000, 50_000, 50_000}
 	}
 	return map[string]any{
 		"schema_version": 2,
@@ -52,7 +61,7 @@ func pulseEnvelopeJSON(sequence uint64, rising uint32, activity []float64) map[s
 		"window_ms":      1000,
 		"samples": []map[string]any{{
 			"probe": "P2", "mode": "pulse", "edge_count": rising * 2, "rising_edges": rising, "falling_edges": rising,
-			"periods_us": periods, "high_pulse_widths_us": []float64{50_000, 50_000, 50_000}, "activity_counts": activity,
+			"periods_us": periods, "high_pulse_widths_us": widths, "activity_counts": activity,
 		}},
 	}
 }

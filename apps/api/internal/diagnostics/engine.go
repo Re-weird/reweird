@@ -90,7 +90,16 @@ func (engine *Engine) AnalyzeEnvelopeWithContext(
 	if err != nil {
 		return domain.Session{}, fmt.Errorf("analyze telemetry: %w", err)
 	}
-	return engine.DiagnoseAnalysis(ctx, profile, stage, telemetryMode, analysis, reference, physicalContext)
+	session, err := engine.DiagnoseAnalysis(ctx, profile, stage, telemetryMode, analysis, reference, physicalContext)
+	if err != nil {
+		return domain.Session{}, err
+	}
+	// DiagnoseAnalysis itself never requires a raw envelope (that's the
+	// point of it -- see its own comment), so it never sets RawTelemetry.
+	// This caller has one, so it audits it here: unchanged raw edges stay
+	// available separately from the validated derived facts in Evidence.
+	session.RawTelemetry = envelope
+	return session, nil
 }
 
 // DiagnoseAnalysis is AnalyzeEnvelopeWithContext for a caller that already
@@ -143,7 +152,6 @@ func (engine *Engine) DiagnoseAnalysis(
 		HardwareConnected: true,
 		TelemetryMode:     telemetryMode,
 		ProfileID:         profile.ID,
-		RawTelemetry:      envelope, // audit unchanged raw edges separately from validated derived facts
 		Probes:            probeReadings(profile, analysis, focus.Probe, stage),
 		Analysis:          analysis,
 		Evidence:          evidence,

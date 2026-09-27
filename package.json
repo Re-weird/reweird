@@ -9,6 +9,7 @@
   "scripts": {
     "dev": "npm run dev --workspace @reweird/web",
     "build": "npm run build --workspace @reweird/web",
+    "start": "npm run start --workspace @reweird/web",
     "typecheck": "npm run typecheck --workspace @reweird/web"
   },
   "engines": {

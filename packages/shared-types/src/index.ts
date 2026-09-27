@@ -555,7 +555,51 @@ export interface PhysicalCommit {
   software_repository?: string;
   software_revision?: string;
 }
-export type HistoryStatus = "OPEN" | "TESTING" | "WAITING_FOR_USER" | "VERIFYING" | "RESOLVED" | "IMPROVED" | "UNRESOLVED" | "CANCELLED" | "INCONCLUSIVE";
+
+// PhysicalCommitDetail is the read-time-enriched view from
+// GET .../physical-commits/:commitId/detail. It resolves the commit's
+// referenced measurement for display; the stored commit itself is
+// unchanged, and a resolution failure simply omits `measurement` rather
+// than fabricating one.
+export interface PhysicalCommitDetail {
+  commit: PhysicalCommit;
+  measurement?: MeasurementWindow;
+}
+
+// Six distinct outcomes -- "not captured" and "unavailable" must never
+// collapse into "unchanged".
+export type EvidenceState = "UNCHANGED" | "CHANGED" | "ADDED" | "REMOVED" | "NOT_CAPTURED" | "UNAVAILABLE";
+
+export interface FieldChange {
+  field: string;
+  before?: unknown;
+  after?: unknown;
+}
+export interface ComponentChange { component_id: string; name?: string; status: EvidenceState; fields?: FieldChange[] }
+export interface ConnectionChange { connection_id: string; summary?: string; status: EvidenceState; fields?: FieldChange[] }
+export interface ProbeElectricalChange { probe: string; status: EvidenceState; fields?: FieldChange[] }
+export interface VisualDiff { status: EvidenceState; before_image?: ProjectMedia; after_image?: ProjectMedia }
+export interface ComponentsDiff { status: EvidenceState; changes?: ComponentChange[] }
+export interface CircuitDiff { status: EvidenceState; changes?: ConnectionChange[] }
+export interface ElectricalDiff { status: EvidenceState; before_measurement_id?: number; after_measurement_id?: number; probes?: ProbeElectricalChange[] }
+export interface SoftwareDiff { status: EvidenceState; fields?: FieldChange[] }
+
+// PhysicalCommitDiff is a deterministic, structured comparison of two
+// commits in the same project -- computed by the backend, never generated
+// as prose. The frontend renders fixed labels off `status`, it does not
+// draw its own conclusions from raw fields.
+export interface PhysicalCommitDiff {
+  project_id: string;
+  from_commit: string;
+  to_commit: string;
+  visual: VisualDiff;
+  components: ComponentsDiff;
+  circuit: CircuitDiff;
+  electrical: ElectricalDiff;
+  software: SoftwareDiff;
+}
+
+export type HistoryStatus ="OPEN" | "TESTING" | "WAITING_FOR_USER" | "VERIFYING" | "RESOLVED" | "IMPROVED" | "UNRESOLVED" | "CANCELLED" | "INCONCLUSIVE";
 export interface HistorySummary {
   id: string;
   project_id: string;

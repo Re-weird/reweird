@@ -11,6 +11,8 @@ import type {
   KnownGoodBaseline,
   MeasurementWindow,
   PhysicalCommit,
+  PhysicalCommitDetail,
+  PhysicalCommitDiff,
   ProbePlan,
   Project,
   ProjectProfile,
@@ -159,6 +161,10 @@ export const physicalGitApi = {
     requestJSON<{ items: PhysicalCommit[]; count: number }>(`/api/v1/projects/${projectID}/physical-commits`),
   get: (projectID: string, commitID: string) =>
     requestJSON<PhysicalCommit>(`/api/v1/projects/${projectID}/physical-commits/${encodeURIComponent(commitID)}`),
+  getDetail: (projectID: string, commitID: string) =>
+    requestJSON<PhysicalCommitDetail>(`/api/v1/projects/${projectID}/physical-commits/${encodeURIComponent(commitID)}/detail`),
+  diff: (projectID: string, fromID: string, toID: string) =>
+    requestJSON<PhysicalCommitDiff>(`/api/v1/projects/${projectID}/physical-commits/diff?from=${encodeURIComponent(fromID)}&to=${encodeURIComponent(toID)}`),
 };
 
 export const testApi = {

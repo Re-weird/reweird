@@ -8,7 +8,7 @@ import { projectPath } from "@/lib/project-routes";
 
 export default function ProbeSetupPage() {
   const router = useRouter();
-  const { project, probePlan, confirmConnections, currentProjectID } = useAppState();
-  if (project) return <ProbePlanView project={project} plan={probePlan ?? project.probe_plan ?? null} onConnected={confirmConnections} />;
+  const { project, profile, session, probePlan, confirmConnections, currentProjectID } = useAppState();
+  if (project) return <ProbePlanView project={project} profile={profile} session={session} plan={probePlan ?? project.probe_plan ?? null} onConnected={confirmConnections} />;
   return <DemoProbePlanView plan={probePlan} onContinue={() => router.push(projectPath(currentProjectID, "simulator"))} />;
 }

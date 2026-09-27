@@ -165,6 +165,7 @@ function Intro({ onStart, file }: { onStart: () => void; file: CaseFile }) {
     <div className="jd-hero-copy">
       <span className="bench-label">Try it yourself · no hardware needed</span>
       <h1 id="jd-stage-title" tabIndex={-1}>Find the fault.</h1>
+      <p className="jd-catchphrase">When hardware gets weird, <em>ReWeird it.</em></p>
       <p className="jd-lead">Something inside this ultrasonic sensor project is broken. Read the scope, run tests, name the cause, and prove your fix before your points run out.</p>
       <ul className="jd-rules" aria-label="Scoring">
         <li><Search size={15} /><span>Inspect a probe</span><b className="free">free</b></li>
@@ -225,6 +226,7 @@ function Investigate({ state, running, onInspect, onTest, onHint, onCall }: {
     <section className="bench-panel jd-panel" aria-labelledby="jd-stage-title">
       <div className="jd-panel-top"><span className="bench-label">Step 3 · the bench <Sim /></span><span className="jd-case-tag">{revealed(state) ? FAULTS[state.fault!].label : "Mystery case"}</span></div>
       <h1 id="jd-stage-title" tabIndex={-1}>SOMETHING’S WEIRD.</h1>
+      <p className="jd-catchphrase">Time to <em>ReWeird it.</em></p>
       <p className="jd-lead">The distance readings are unreliable. Click a probe to inspect it (free), or read the scope yourself.</p>
       <Bench selected={selected} inspected={state.inspected} active={running ? TEST_WIRE[running] : null} onProbe={pick} />
       <Scope snapshot={snapshot} selected={selected} onSelect={pick} capturing={Boolean(running)} />
@@ -262,7 +264,7 @@ function Investigate({ state, running, onInspect, onTest, onHint, onCall }: {
       </div>
       <div className="jd-toolkit-actions">
         {state.hints < 2 && <button className="text-button jd-hint-button" onClick={onHint} disabled={running !== null}><Lightbulb size={14} /> {state.hints === 0 ? "Hint" : "Another hint"} <span className="jd-cost-inline">−{SCORE.hint}</span></button>}
-        <button className="primary jd-big" onClick={onCall} disabled={running !== null}>I know what’s wrong <ArrowRight size={16} /></button>
+        <button className="primary jd-big" onClick={onCall} disabled={running !== null} aria-label="ReWeird it: name the root cause">ReWeird it <ArrowRight size={16} /></button>
       </div>
     </section>
   </div>;
@@ -327,7 +329,12 @@ function Result({ state, file, onNext }: { state: DemoState; file: CaseFile; onN
     let frame = 0; const start = performance.now();
     const tick = (now: number) => { const t = Math.min(1, (now - start) / 900); setShown(Math.round(state.score * (1 - Math.pow(1 - t, 3)))); if (t < 1) frame = requestAnimationFrame(tick); };
     frame = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(frame);
+    // Hidden tabs freeze animation frames and timers; never leave the count stuck.
+    const settle = () => setShown(state.score);
+    if (document.hidden) settle();
+    const timeout = window.setTimeout(settle, 1000);
+    document.addEventListener("visibilitychange", settle);
+    return () => { cancelAnimationFrame(frame); window.clearTimeout(timeout); document.removeEventListener("visibilitychange", settle); };
   }, [state.score]);
   function download() {
     const blob = new Blob([JSON.stringify(record, null, 2)], { type: "application/json" });
@@ -342,6 +349,7 @@ function Result({ state, file, onNext }: { state: DemoState; file: CaseFile; onN
   return <section className="bench-panel jd-panel jd-narrow jd-result-card" aria-labelledby="jd-stage-title">
     <span className="bench-label">Case closed · Device Passport <Sim /></span>
     <h1 id="jd-stage-title" tabIndex={-1}>NOT WEIRD ANYMORE.</h1>
+    <p className="jd-catchphrase">You <em>ReWeirded it.</em></p>
     <div className="jd-scoreboard">
       <div className="jd-score-big"><strong>{shown}</strong><small>/ {SCORE.start} points</small></div>
       <div className="jd-rank"><Stars count={stars} /><b>{title}</b><small>{state.mystery ? "Mystery" : "Practice"} case: {FAULTS[fault].label.toLowerCase()}</small></div>

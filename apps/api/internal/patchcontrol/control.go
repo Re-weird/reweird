@@ -107,10 +107,10 @@ type Driver interface {
 }
 
 type Controller struct {
-	mu               sync.Mutex
-	store            Store
-	now              func() time.Time
-	qualified        func(Parameters) bool
+	mu        sync.Mutex
+	store     Store
+	now       func() time.Time
+	qualified func(Parameters) bool
 }
 
 // SetQualification installs a trusted hardware adapter, not an HTTP flag.

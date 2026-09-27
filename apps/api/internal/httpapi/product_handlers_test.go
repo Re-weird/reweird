@@ -13,7 +13,6 @@ import (
 	"github.com/re-weird/reweird/apps/api/internal/signalanalysis"
 	"github.com/re-weird/reweird/apps/api/internal/simulator"
 	"github.com/re-weird/reweird/apps/api/internal/store"
-	"github.com/re-weird/reweird/apps/api/internal/telemetrystore"
 	componentcatalog "github.com/re-weird/reweird/packages/component-catalog"
 )
 
@@ -52,7 +51,7 @@ func testProductApp(t *testing.T) *fiber.App {
 		}
 		return ctx.Next()
 	}
-	services := ProjectServices{Product: productdata.NewMemoryStore(), Catalog: catalog, Telemetry: telemetrystore.NewMemoryStore()}
+	services := ProjectServices{Product: productdata.NewMemoryStore(), Catalog: catalog}
 	return newApp(diagnostics.NewEngine(signalanalysis.New()), repository, simulator.NewUltrasonicSource(), demo.ID, services, fakeOwnerMiddleware)
 }
 

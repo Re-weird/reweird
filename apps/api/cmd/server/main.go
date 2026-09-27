@@ -23,7 +23,6 @@ import (
 	"github.com/re-weird/reweird/apps/api/internal/signalanalysis"
 	"github.com/re-weird/reweird/apps/api/internal/simulator"
 	"github.com/re-weird/reweird/apps/api/internal/store"
-	"github.com/re-weird/reweird/apps/api/internal/telemetrystore"
 	"github.com/re-weird/reweird/apps/api/internal/transport/serialsource"
 	"github.com/re-weird/reweird/apps/api/internal/vision"
 	componentcatalog "github.com/re-weird/reweird/packages/component-catalog"
@@ -97,15 +96,12 @@ func main() {
 	product, closeProduct := connectProductData(ctx)
 	defer closeProduct()
 
-	tigerTelemetry, closeTiger := connectTigerTelemetry(ctx)
-	defer closeTiger()
-
 	app := httpapi.NewApp(engine, repository, source, profileID, httpapi.ProjectServices{
 		Understanding: understanding, UploadRoot: uploadRoot,
-		Product: product, Catalog: catalog, Telemetry: tigerTelemetry,
+		Product: product, Catalog: catalog,
 	}, authTokenSecret != "")
 
-	log.Printf("ReWeird API listening on %s (telemetry=%s, profile=%s, auth=%s, product_data=%s, tiger_telemetry=%s, PATCH=locked)", net.JoinHostPort(host, port), source.Name(), profileID, authStatus(authTokenSecret != ""), productDataStatus(product != nil), tigerTelemetryStatus(tigerTelemetry != nil))
+	log.Printf("ReWeird API listening on %s (telemetry=%s, profile=%s, auth=%s, product_data=%s, PATCH=locked)", net.JoinHostPort(host, port), source.Name(), profileID, authStatus(authTokenSecret != ""), productDataStatus(product != nil))
 	if err := app.Listen(net.JoinHostPort(host, port)); err != nil {
 		log.Fatal(err)
 	}
@@ -181,41 +177,6 @@ func connectProductData(ctx context.Context) (domain.ProductRepository, func()) 
 			log.Printf("error closing product data store: %v", err)
 		}
 	}
-}
-
-// connectTigerTelemetry connects to Tiger Data (PostgreSQL/Timescale-
-// compatible) when TIGER_DATABASE_URL is configured, and returns a no-op
-// closer plus a nil domain.TelemetrySink otherwise. Unconfigured or
-// unreachable Tiger Data must never take down the rest of the API: the
-// existing SQLite measurement path (and Demo Mode/the simulator) keeps
-// working unchanged either way, and every telemetry-dependent code path
-// already checks for nil.
-func connectTigerTelemetry(ctx context.Context) (domain.TelemetrySink, func()) {
-	config := telemetrystore.Config{DatabaseURL: os.Getenv("TIGER_DATABASE_URL")}
-	if !config.Configured() {
-		log.Printf("TIGER_DATABASE_URL not set; Tiger Data telemetry is disabled for this run (SQLite measurements are unaffected)")
-		return nil, func() {}
-	}
-	tigerStore, err := telemetrystore.Connect(ctx, config)
-	if err != nil {
-		log.Printf("tiger telemetry unavailable: %v (measurements still save to sqlite; GET /api/v1/telemetry will return 503)", err)
-		return nil, func() {}
-	}
-	schemaCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
-	defer cancel()
-	if err := tigerStore.EnsureSchema(schemaCtx); err != nil {
-		log.Printf("tiger telemetry schema setup failed: %v (measurements still save to sqlite; GET /api/v1/telemetry will return 503)", err)
-		tigerStore.Close()
-		return nil, func() {}
-	}
-	return tigerStore, tigerStore.Close
-}
-
-func tigerTelemetryStatus(configured bool) string {
-	if configured {
-		return "tiger"
-	}
-	return "disabled"
 }
 
 func productDataStatus(configured bool) string {

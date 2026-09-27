@@ -3,7 +3,8 @@
 // It is deliberately separate from apps/api/internal/store (SQLite), which
 // remains authoritative for projects/diagnostics/sessions/workflows -- this
 // package answers "what does this user own?", not "what happened
-// electrically?" (that is Tiger Data, in apps/api/internal/telemetrystore).
+// electrically?" (that remains SQLite's measurement_windows table, in
+// apps/api/internal/store).
 package productdata
 
 import (

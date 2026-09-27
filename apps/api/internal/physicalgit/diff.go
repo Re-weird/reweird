@@ -17,7 +17,7 @@ import (
 // Vision interpretation records for each commit -- this function never
 // fetches them and never calls Gemini; it only compares stored values.
 func Diff(from, to domain.PhysicalCommit, fromMeasurement, toMeasurement *domain.MeasurementWindow, fromVision, toVision *domain.PhysicalCommitVisionAnalysis) domain.PhysicalCommitDiff {
-	return domain.PhysicalCommitDiff{
+	result := domain.PhysicalCommitDiff{
 		ProjectID:      from.ProjectID,
 		FromCommit:     from.ID,
 		ToCommit:       to.ID,
@@ -28,6 +28,39 @@ func Diff(from, to domain.PhysicalCommit, fromMeasurement, toMeasurement *domain
 		Software:       softwareDiff(from, to),
 		SemanticVisual: DiffVisionAnalyses(fromVision, toVision),
 	}
+	result.DiagnosticContext = diagnosticContext(result, from.DisplayID, to.DisplayID)
+	return result
+}
+
+// diagnosticContext turns a computed diff into a small, bounded list of
+// plain factual observations -- never a causal claim -- so PROBE can later
+// cite a few relevant Physical Git facts without receiving full history.
+// Capped at maxDiagnosticContextLines so prompt/token usage stays bounded.
+const maxDiagnosticContextLines = 8
+
+func diagnosticContext(diff domain.PhysicalCommitDiff, fromLabel, toLabel string) []string {
+	lines := make([]string, 0, maxDiagnosticContextLines)
+	add := func(line string) {
+		if len(lines) < maxDiagnosticContextLines {
+			lines = append(lines, line)
+		}
+	}
+	if diff.Components.Status == domain.EvidenceChanged {
+		add(fmt.Sprintf("%s -> %s: hardware components changed (%d difference(s)).", fromLabel, toLabel, len(diff.Components.Changes)))
+	}
+	for _, change := range diff.Circuit.Changes {
+		add(fmt.Sprintf("%s -> %s: %s connection changed (%s).", fromLabel, toLabel, change.Summary, change.Status))
+	}
+	for _, change := range diff.Electrical.Probes {
+		add(fmt.Sprintf("%s -> %s: %s electrical reading changed.", fromLabel, toLabel, change.Probe))
+	}
+	if diff.SemanticVisual.Status == domain.EvidenceChanged {
+		add(fmt.Sprintf("%s -> %s: AI-detected hardware differs (unconfirmed interpretation).", fromLabel, toLabel))
+	}
+	if diff.Software.Status == domain.EvidenceChanged {
+		add(fmt.Sprintf("%s -> %s: software revision reference changed.", fromLabel, toLabel))
+	}
+	return lines
 }
 
 func visualDiff(before, after *domain.ProjectMedia) domain.VisualDiff {

@@ -13,6 +13,7 @@ import { useAccountActivity } from "@/lib/account-activity";
 import { useAppState } from "@/lib/app-state";
 import { DEMO_PROJECT_ID } from "@/lib/project-routes";
 import { useUser } from "@/lib/auth";
+import { userInitials } from "@/lib/user-display";
 import { cn } from "@/lib/utils";
 
 type Theme = "light" | "dark";
@@ -61,6 +62,7 @@ function AccountMenu({ onLoadDemo }: { onLoadDemo: () => void }) {
   // Same picture as the profile rail: GitHub's, never the Google photo.
   const githubLogin = github?.connected ? github.github_user || github.account_login : undefined;
   const avatar = githubLogin ? `https://github.com/${encodeURIComponent(githubLogin)}.png?size=64` : null;
+  const displayName = isSignedIn ? name ?? email ?? "" : githubLogin ?? "";
 
   const itemClass = "flex items-center gap-2.5 rounded-md px-2.5 py-2 text-[13px] text-foreground transition-colors hover:bg-accent [&_svg]:size-4 [&_svg]:text-muted-foreground";
 
@@ -74,7 +76,7 @@ function AccountMenu({ onLoadDemo }: { onLoadDemo: () => void }) {
         className="grid size-8 place-items-center overflow-hidden rounded-full border border-border bg-surface-3 font-mono text-[11px] font-medium text-foreground transition-transform active:scale-95"
       >
         {/* eslint-disable-next-line @next/next/no-img-element */}
-        {avatar ? <img src={avatar} alt="" className="size-full object-cover" /> : "RW"}
+        {avatar ? <img src={avatar} alt="" className="size-full object-cover" /> : userInitials(displayName)}
       </button>
       <AnimatePresence>
         {open && (

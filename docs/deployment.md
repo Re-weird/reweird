@@ -8,19 +8,12 @@ The Next.js app (`apps/web`) is hosted on Vercel as project `web`
 package.
 
 Vercel's own GitHub integration is **not** connected to this repo (it
-failed to auto-link during setup). Instead, `.github/workflows/deploy-web.yml`
-drives the same `vercel` CLI commands the integration would run, gated on
-`.github/workflows/ci.yml` passing on `main` first.
-
-### Required repo secrets
-
-Set these under **Settings → Secrets and variables → Actions**:
-
-| Secret | Where to get it |
-|---|---|
-| `VERCEL_TOKEN` | [vercel.com/account/tokens](https://vercel.com/account/tokens) — create one scoped to this project if possible. |
-| `VERCEL_ORG_ID` | `team_PpqYquP1GLCMYCZZrtweVmCB` (this org). Also in `.vercel/project.json` after running `vercel link` locally. |
-| `VERCEL_PROJECT_ID` | `prj_H3RGnzFRv1dv79VsXfQX7qoxJ4tU` (the `web` project). Same file. |
+failed to auto-link during setup). A GitHub Actions-driven auto-deploy
+(`deploy-web.yml`, mirroring `deploy-api.yml`) was tried and dropped: every
+`VERCEL_TOKEN` created for it failed Vercel's own `whoami`/`v2/user` lookup
+("User not found") regardless of how it was scoped, which pointed at an
+account-side issue with that token rather than anything in this repo.
+Production is deployed manually instead (see below) until that's resolved.
 
 ### Environment variables (on Vercel, not GitHub)
 

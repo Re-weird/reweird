@@ -87,8 +87,21 @@ async function demoRequest(path: string, init?: RequestInit): Promise<DemoSessio
   }
 }
 
+export interface PatchAction {
+  id: string; digest: string; state: string; result?: string;
+  parameters: { target_node: string; patch_pin: number; mode: string; logic_level: string; max_voltage: number; duration_ms: number; source: string; expires_at_ms: number; profile_id: string; profile_revision: number; device_id: string; boot_id: string; probe_map_hash: string };
+  events: { state: string; at_ms: number; detail: string }[];
+  before?: { measurement_id: number; source: string }; after?: { measurement_id: number; source: string };
+}
+export interface PatchStatusResponse { state: string; physical_enabled: boolean; master_enabled: boolean; detail: string; capability?: { profile_id: string; target_node: string; pin: number } }
+const patchPath = (id: string) => `/api/v1/projects/${encodeURIComponent(id)}/patch`;
 export const patchApi = {
-  status: () => requestJSON<{ state: string; physical_enabled: boolean; master_enabled: boolean; detail: string }>("/api/v1/patch/status"),
+  status: () => requestJSON<PatchStatusResponse>("/api/v1/patch/status"),
+  history: (id: string) => requestJSON<PatchAction[]>(`${patchPath(id)}/actions`),
+  master: (id: string, enabled: boolean) => requestJSON(`${patchPath(id)}/master`, { method: "POST", body: JSON.stringify({ enabled, confirm: enabled }) }),
+  prepare: (id: string, level: string, duration_ms: number) => requestJSON<PatchAction>(`${patchPath(id)}/prepare`, { method: "POST", body: JSON.stringify({ level, duration_ms }) }),
+  approve: (id: string, action: PatchAction) => requestJSON<PatchAction>(`${patchPath(id)}/actions/${encodeURIComponent(action.id)}/approve`, { method: "POST", body: JSON.stringify({ digest: action.digest, confirm: true }) }, 10_000),
+  cancel: (id: string, action: PatchAction) => requestJSON<PatchAction>(`${patchPath(id)}/actions/${encodeURIComponent(action.id)}/cancel`, { method: "POST", body: "{}" }),
 };
 
 export const demoApi = {

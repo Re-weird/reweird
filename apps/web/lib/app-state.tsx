@@ -4,7 +4,7 @@ import { createContext, useCallback, useContext, useEffect, useRef, useState } f
 import { usePathname, useRouter } from "next/navigation";
 import type { AnalyzeProjectResponse, DemoSession, DiagnosticWorkflow, ProbePlan, Project, ProjectProfile, SimulatorScenario, TestRecommendation } from "@reweird/shared-types";
 import { refreshAccountActivity } from "@/lib/account-activity";
-import { ApiError, demoApi, projectApi, testApi } from "@/lib/api";
+import { ApiError, demoApi, historyApi, passportApi, projectApi, testApi } from "@/lib/api";
 import { makeDemoProfile, makeDemoSession } from "@/lib/demo";
 import { DEMO_HISTORY_PROJECT_ID, DEMO_PROJECT_ID, projectPath } from "@/lib/project-routes";
 import { isCompatibleSerialSession, serialRecommendationMatches, serialWorkflowMatches, sessionForView, type TelemetryStatus } from "@/lib/weird-demo";
@@ -348,6 +348,31 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
     setToast("Draft Project Profile generated from real input");
   }, [router]);
 
+  // Drives one real guided-test cycle against the API simulator - the same
+  // calls the Practice simulator and Next test/Verify pages already make -
+  // so History/Reports/Device passport show a real completed example
+  // instead of staying empty until a person clicks through it by hand.
+  // Best-effort: any failure is swallowed, the demo still loads fine either way.
+  const seedDemoHistory = useCallback(async () => {
+    try {
+      const existing = await historyApi.list({ projectID: DEMO_HISTORY_PROJECT_ID });
+      if (existing.items.length > 0) return; // already seeded by an earlier load
+      await demoApi.selectScenario("intermittent-connection");
+      const recommendation = await testApi.recommendation();
+      let workflow = await testApi.create(recommendation);
+      workflow = await testApi.start(workflow.id);
+      workflow = await testApi.capture(workflow.id);
+      await demoApi.selectScenario("healthy");
+      workflow = await testApi.remeasure(workflow.id);
+      const afterID = workflow.after?.id;
+      if (afterID) {
+        await passportApi.saveKnownGood(workflow.profile_id, afterID, "Seeded by Load demo").catch(() => undefined);
+      }
+    } catch {
+      // Best-effort seeding; the demo session/profile were already reset above.
+    }
+  }, []);
+
   const loadDemoProject = useCallback(async () => {
     setShowNewProject(false);
     setProject(null);
@@ -361,7 +386,11 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
     try { setProbePlan(await demoApi.probePlan()); } catch { setProbePlan(null); }
     router.push(projectPath(DEMO_PROJECT_ID, "overview"));
     setToast("Built-in ultrasonic demo loaded");
-  }, [router, telemetryStatus?.mode]);
+    // Fill in the tabs that only show data once a guided test has run at
+    // least once (History, Reports, Device passport's known-good baseline).
+    // Only touches the shared demo session/profile - never a real project.
+    if (remote) void seedDemoHistory();
+  }, [router, seedDemoHistory, telemetryStatus?.mode]);
 
   const saveProfile = useCallback(async (nextProfile: ProjectProfile) => {
     if (!project) return nextProfile;

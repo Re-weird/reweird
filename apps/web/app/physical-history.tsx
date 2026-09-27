@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { motion } from "framer-motion";
 import { AlertTriangle, Camera, CheckCircle2, Circle, Cpu, GitCommitHorizontal, Image as ImageIcon, RefreshCw, Save, ShieldCheck, Upload, Zap, X } from "lucide-react";
 import type {
   CameraConfig,
@@ -779,12 +780,12 @@ export function PhysicalHistoryView({ project }: { project: Project | null }) {
         </section>
       ) : (
         <section className="history-layout">
-          <div className="panel history-list">
+          <motion.div className="panel history-list" initial="hidden" animate="show" variants={{ hidden: {}, show: { transition: { staggerChildren: 0.05 } } }}>
             {commits.map((commit, index) => {
               const previous = commits[index + 1];
               const selected = selection?.kind === "view" && selection.commitID === commit.id;
               return (
-                <div key={commit.id} className={`history-item ${selected ? "selected" : ""}`}>
+                <motion.div key={commit.id} variants={{ hidden: { opacity: 0, x: -8 }, show: { opacity: 1, x: 0, transition: { duration: 0.25, ease: [0.16, 1, 0.3, 1] } } }} className={`history-item ${selected ? "selected" : ""}`}>
                   <button
                     type="button"
                     onClick={() => setSelection({ kind: "view", commitID: commit.id })}
@@ -803,10 +804,10 @@ export function PhysicalHistoryView({ project }: { project: Project | null }) {
                       <Zap size={12} /> Compare
                     </button>
                   )}
-                </div>
+                </motion.div>
               );
             })}
-          </div>
+          </motion.div>
 
           <div className="history-main">
             {paneBusy && <div className="analysis-progress"><RefreshCw className="spin" size={15} /><span>Loading&hellip;</span></div>}

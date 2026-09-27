@@ -10,7 +10,6 @@ import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useAccountActivity } from "@/lib/account-activity";
 import { useAppState } from "@/lib/app-state";
-import { AUTH_ENABLED, useUser } from "@/lib/auth";
 import { DEMO_PROJECT_ID } from "@/lib/project-routes";
 import { cn } from "@/lib/utils";
 
@@ -54,11 +53,10 @@ function AccountMenu({ onLoadDemo }: { onLoadDemo: () => void }) {
     return () => { document.removeEventListener("mousedown", close); document.removeEventListener("keydown", escape); };
   }, [open]);
 
-  const user = useUser();
   const activity = useAccountActivity();
   const github = activity.status === "ready" ? activity.data.github : null;
-  const avatar = AUTH_ENABLED && user.isSignedIn && user.imageUrl ? user.imageUrl
-    : github?.connected && github.account_login ? `https://github.com/${encodeURIComponent(github.account_login)}.png?size=64` : null;
+  // Same picture as the profile rail: GitHub's, never the Google photo.
+  const avatar = github?.connected && github.account_login ? `https://github.com/${encodeURIComponent(github.account_login)}.png?size=64` : null;
 
   const itemClass = "flex items-center gap-2.5 rounded-md px-2.5 py-2 text-[13px] text-foreground transition-colors hover:bg-accent [&_svg]:size-4 [&_svg]:text-muted-foreground";
 

@@ -7,6 +7,7 @@ import { AlertTriangle, ArrowLeft, Clock, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { githubApi } from "@/lib/api";
 import { useAppState } from "@/lib/app-state";
+import { refreshAccountActivity } from "@/lib/account-activity";
 import { takeGitHubReturn } from "@/lib/github-return";
 
 // GitHub's App "Setup URL" points here. It arrives with installation_id,
@@ -35,6 +36,7 @@ function GitHubCallback() {
     }
     githubApi.connect({ installation_id: installationID, code: params.get("code") ?? "", state: params.get("state") ?? "" })
       .then(() => {
+        refreshAccountActivity();
         const destination = takeGitHubReturn();
         router.replace(destination.path);
         if (destination.reopenNewProject) setShowNewProject(true);

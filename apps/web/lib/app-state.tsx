@@ -3,6 +3,7 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { AnalyzeProjectResponse, DemoSession, DiagnosticWorkflow, ProbePlan, Project, ProjectProfile, SimulatorScenario, TestRecommendation } from "@reweird/shared-types";
+import { refreshAccountActivity } from "@/lib/account-activity";
 import { ApiError, demoApi, projectApi, testApi } from "@/lib/api";
 import { makeDemoProfile, makeDemoSession } from "@/lib/demo";
 import { DEMO_HISTORY_PROJECT_ID, DEMO_PROJECT_ID, projectPath } from "@/lib/project-routes";
@@ -258,6 +259,7 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
   }, [project]);
 
   const completeProjectAnalysis = useCallback((result: AnalyzeProjectResponse) => {
+    refreshAccountActivity();
     setProject(result.project);
     setProfile(result.profile);
     setProbePlan(null);

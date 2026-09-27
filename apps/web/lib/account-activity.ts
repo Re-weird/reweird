@@ -31,6 +31,14 @@ async function loadActivity(): Promise<AccountActivity> {
 // and reuse it briefly so navigating back and forth doesn't refetch.
 let cached: { at: number; promise: Promise<AccountActivity> } | null = null;
 
+const CHANGED = "reweird:account-activity-changed";
+
+/** Call after anything the dashboard or rail summarizes changes (GitHub connection, projects). */
+export function refreshAccountActivity() {
+  cached = null;
+  if (typeof window !== "undefined") window.dispatchEvent(new Event(CHANGED));
+}
+
 export function useAccountActivity(): AccountActivityState & { reload: () => void } {
   const [state, setState] = useState<AccountActivityState>({ status: "loading" });
   const [attempt, setAttempt] = useState(0);
@@ -46,6 +54,11 @@ export function useAccountActivity(): AccountActivityState & { reload: () => voi
       });
     return () => { live = false; };
   }, [attempt]);
+  useEffect(() => {
+    const onChange = () => setAttempt((count) => count + 1);
+    window.addEventListener(CHANGED, onChange);
+    return () => window.removeEventListener(CHANGED, onChange);
+  }, []);
   return { ...state, reload: () => { setState({ status: "loading" }); setAttempt((count) => count + 1); } };
 }
 

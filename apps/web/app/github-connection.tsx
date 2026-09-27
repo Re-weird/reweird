@@ -5,6 +5,7 @@ import { ExternalLink, Github, RefreshCw, Unplug, WifiOff } from "lucide-react";
 import type { GitHubStatus } from "@reweird/shared-types";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import { refreshAccountActivity } from "@/lib/account-activity";
 import { githubApi } from "@/lib/api";
 import { rememberGitHubReturn } from "@/lib/github-return";
 
@@ -41,7 +42,7 @@ export function GitHubSettingsSection() {
 
   async function disconnect() {
     setBusy(true); setActionError("");
-    try { setStatus(await githubApi.disconnect()); }
+    try { setStatus(await githubApi.disconnect()); refreshAccountActivity(); }
     catch (cause) { setActionError(cause instanceof Error ? cause.message : "Couldn't disconnect GitHub."); }
     finally { setBusy(false); }
   }
